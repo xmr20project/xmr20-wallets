@@ -6,14 +6,15 @@
 //   holder.wasm, parameters-manifest.json                the holder engine and its mainnet parameter manifest
 //   native.worker.js and its three helpers, keys.worker.js   the Monero worker, copied from engine/monero/runtime/
 //   monero-0.11.16.js, monero-full-0.11.16.js             the Monero library (npm package monero-ts 0.11.16)
-// It then compares every file with the one installed in XMR20 Wallet 0.1.118 and writes dist/HASHES.json.
+// It then compares every file with the one installed in XMR20 Wallet 0.1.119 and writes dist/HASHES.json.
 import {readFile,writeFile,mkdir,copyFile,rm} from 'node:fs/promises';import {createHash} from 'node:crypto';import {join,dirname} from 'node:path';
 import {createRequire} from 'node:module';
 const here=import.meta.dirname,dist=join(here,'dist'),require=createRequire(join(here,'package.json'));
 const sha=b=>createHash('sha256').update(b).digest('hex');
-// The files installed in XMR20 Wallet 0.1.118 (extension folder vendor/; unchanged since 0.1.117), 28 Oct 2026.
+// The files installed in XMR20 Wallet 0.1.119 (extension folder vendor/), 28 Oct 2026: private-holder.worker.js is new in 0.1.119
+// (kept output distribution, warm-up, quiet proving-key load); the others are unchanged since 0.1.117.
 export const INSTALLED={
- 'private-holder.worker.js':'0cafee2f369cb77811e84340635de87c82590c3967d51f1dd680204d89ed4093',
+ 'private-holder.worker.js':'d1d4cb37b96075a251122c257534879e9de6d0ee2f00bc0e9abb05a8e51cbb6f',
  'private-claim.worker.js':'d896b51fe12fa19612c6b95377ebf9a497de3e458a4c2637ac50c126a78ead79',
  'holder.wasm':'dab8720b19e5e5a1c7ea62f1bb6e76cefc152090c165e1cb9fbd373e629c111e',
  'parameters-manifest.json':'1b1a27dcb1c4b3d93e4b38963c0b32595e44362a86296aa9445f468a51f1841b',
@@ -26,7 +27,7 @@ export const INSTALLED={
  'monero-full-0.11.16.js':'2e53c27e4518c5e59ae9f6378550cd00c68bb0221d8ee751bd0a12cc39263c3e',
  'LICENSE.txt':'1ff271e3025cb8284c3ae3091ba19ee1dd1610cd984fddb98b582776de960127',
  'monero.worker.js.LICENSE.txt':'b56b6cbccbd5a0370d840ea4000f0267499febfdf00897d50e948aceb71d5d87'};
-// The worker build settings of the 0.1.112–0.1.118 release recipe.
+// The worker build settings of the 0.1.112–0.1.119 release recipe.
 export const workerOptions={bundle:true,format:'iife',platform:'browser',target:'chrome120',minify:true,logLevel:'warning'};
 export async function holderDefine(){const manifest=await readFile(join(here,'token/parameters-manifest.json'));
  return {__PARAMS_MANIFEST_SHA256__:JSON.stringify(sha(manifest)),__XMR20_MAINNET_PILOT__:'true',__XMR20_SCAN_LOOKAHEAD__:'12'};}
@@ -45,7 +46,7 @@ export async function buildEngine({out=dist,quiet=false}={}){
  const files={},differs=[];
  for(const f of Object.keys(INSTALLED)){files[f]=sha(await readFile(join(out,f)));if(files[f]!==INSTALLED[f])differs.push(f);}
  await writeFile(join(out,'HASHES.json'),JSON.stringify({sameAsInstalled0117:differs.length===0,differs,files},null,1)+'\n');
- if(!quiet)console.log(differs.length?`Engine built in ${out}. These files differ from XMR20 Wallet 0.1.118: ${differs.join(', ')}`:`Engine built in ${out}. All ${Object.keys(files).length} files are byte-identical to XMR20 Wallet 0.1.118.`);
+ if(!quiet)console.log(differs.length?`Engine built in ${out}. These files differ from XMR20 Wallet 0.1.119: ${differs.join(', ')}`:`Engine built in ${out}. All ${Object.keys(files).length} files are byte-identical to XMR20 Wallet 0.1.119.`);
  return {files,differs};
 }
 if(process.argv[1]===import.meta.filename)await buildEngine();

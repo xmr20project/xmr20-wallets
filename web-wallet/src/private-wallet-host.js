@@ -61,7 +61,21 @@ export function createWebsitePrivateWallet({account:fixed,signSol,onChange=()=>{
  function toast(text){toastEl.textContent=text;toastEl.classList.add('visible');clearTimeout(toastTimer);toastTimer=setTimeout(()=>toastEl.classList.remove('visible'),3200);}
  function close(){modal.close();modal.innerHTML='';}
  function show(title,body){modal.innerHTML=`<div class="modal-head"><h2 id="modal-title">${esc(title)}</h2><button id="close" aria-label="Close">×</button></div><div class="modal-body">${body}</div><div class="modal-foot"><p class="error" id="error" role="alert"></p></div>`;
-  if(!modal.open)modal.showModal();on('close',()=>{if(!busy){close();onChange();}});}
+  layoutModal();if(!modal.open)modal.showModal();on('close',()=>{if(!busy){close();onChange();}});}
+ // 28 Oct 2026 (owner: "when I click the private tab … it doesn't do anything … I can't click submit"): as the extension's popup
+ // does (app.js layoutModal), the body scrolls while progress, the trailing action buttons and errors stay in view; on a
+ // laptop-height window Review, Back and the progress line were below the fold. Elements keep their ids and handlers.
+ function layoutModal(){
+  const body=modal.querySelector(':scope > .modal-body'),foot=modal.querySelector(':scope > .modal-foot');if(!body||!foot)return;
+  const moved=[];let seenButton=false;
+  for(let el=body.lastElementChild;el;el=el.previousElementSibling){
+   const button=el.matches('button.wide,button.text-btn,button.primary,button.secondary'),status=el.matches('p#progress,p.busy'),note=el.matches('p.subtle,p.notice')&&seenButton;
+   if(!button&&!status&&!note)break;
+   if(button)seenButton=true;moved.unshift(el);
+  }
+  if(!seenButton)return;
+  foot.prepend(...moved);foot.classList.add('has-actions');
+ }
  async function run(fn){if(busy)return;busy=true;const e=epoch,task=++runSequence;const buttons=[...modal.querySelectorAll('button:not([data-keep]),input,textarea,select')];buttons.forEach(b=>b.disabled=true);if($('#error'))$('#error').textContent='';
   try{await fn(e);}catch(error){if(e===epoch){if($('#progress'))$('#progress').textContent='';if($('#error'))$('#error').textContent=error.message||'Could not complete. Try again.';else toast(error.message);}}
   finally{if(task===runSequence){busy=false;buttons.forEach(b=>b.disabled=b.dataset.disabled==='true');}}}
@@ -83,7 +97,7 @@ export function createWebsitePrivateWallet({account:fixed,signSol,onChange=()=>{
   pf,account,
   // A container that shows the token rows: its shadow root gets the extension's styles and is searched by the module.
   attach(root){roots.add(root);return()=>roots.delete(root);},
-  rowsHTML:()=>pf.rowsHTML(),bind:()=>pf.bind(),refresh:()=>pf.refresh(),syncStatus:()=>pf.syncStatus(),
+  rowsHTML:()=>pf.rowsHTML(),bind:()=>pf.bind(),refresh:()=>pf.refresh(),syncStatus:()=>pf.syncStatus(),receiveInfo:()=>pf.receiveInfo(),
   openBridge:(...a)=>pf.openBridge(...a),openSend:(...a)=>pf.openSend(...a),heldTokens:()=>pf.heldTokens(),portfolioRows:()=>pf.portfolioRows(),
   // Lock or disconnect: ends running tasks, closes the dialog, stops the workers and forgets the phrase.
   dispose(){closed=true;epoch++;busy=false;close();pf.reset();host.remove();fixed={...fixed,xmrSeed:''};}
