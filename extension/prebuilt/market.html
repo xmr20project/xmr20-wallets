@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Monero Market — XMR20 Wallet</title>
+  <meta name="description" content="Fixed-price XMR20 token listings priced in XMR.">
+  <link rel="stylesheet" href="/site-theme.css">
+  <link rel="stylesheet" href="/inscriptions/site-shell.css">
+  <link rel="stylesheet" href="/rewards/site-header.css">
+  <link rel="stylesheet" href="/market/navigation.css">
+  <link rel="stylesheet" href="/market/market.css">
+  <script type="module" src="/market-entry.js"></script>
+<link rel="stylesheet" href="/market-entry.css"></head>
+<body>
+  <a class="skip" href="#main">Skip to market</a>
+  <header>
+    <a class="wordmark" href="https://xmr20.org/" target="_blank" rel="noopener noreferrer" aria-label="XMR20 home">XMR<span>20</span><sup>alpha</sup></a>
+    <nav aria-label="Main navigation"><a href="https://xmr20.org/" target="_blank" rel="noopener noreferrer">index</a><a href="https://xmr20.org/market/" target="_blank" rel="noopener noreferrer" aria-current="page">market</a><a href="https://xmr20.org/flywheel/" target="_blank" rel="noopener noreferrer">flywheel</a><a href="https://xmr20.org/genesis/" target="_blank" rel="noopener noreferrer">genesis</a><a href="https://xmr20.org/rewards/" target="_blank" rel="noopener noreferrer">rewards</a><a href="https://xmr20.org/launch/" target="_blank" rel="noopener noreferrer">launch</a></nav>
+    <div class="header-actions"><a class="header-docs" href="https://xmr20.org/docs/" target="_blank" rel="noopener noreferrer">docs</a><span>XMR20 Wallet</span></div>
+  </header>
+  <main id="main">
+    <div class="page-heading">
+      <div><h1>Monero Market<span class="accent">.</span></h1><p>Fixed-price token listings. Pay in XMR.</p></div>
+      <a class="quiet-link" href="https://xmr20.org/#inscription/52f787ff-fe1d-4067-a492-0586d0d44010" target="_blank" rel="noopener noreferrer">Open Solana market <span aria-hidden="true">↗</span></a>
+    </div>
+    <div class="account-toolbar"><label for="sandbox-actor" hidden>Account <select id="sandbox-actor"><option value="buyer">Buyer</option><option value="seller">Seller</option></select></label><p id="account-balance">Loading wallet…</p><button type="button" id="refresh-market" disabled>Refresh</button></div>
+    <div id="market-error" class="connection-error" role="alert" hidden></div>
+    <div id="pending-recovery" class="recovery-notice" hidden><p>A request needs reconciliation. Retry the same request safely before starting another action.</p><button type="button" id="retry-request" class="secondary">Retry saved request</button></div>
+    <div class="market-layout">
+      <section class="market-overview" aria-labelledby="token-name">
+        <div class="token-heading">
+          <div class="token-identity"><span class="token-mark" aria-hidden="true">X<span>20</span></span><div><h2 id="token-name">XMR20 <span class="token-pair">/ XMR</span></h2><p>XMR20 token · Inscription #1</p></div></div>
+          <a class="text-link" href="https://xmr20.org/#inscription/52f787ff-fe1d-4067-a492-0586d0d44010" target="_blank" rel="noopener noreferrer">View inscription <span aria-hidden="true">↗</span></a>
+        </div>
+        <dl class="market-stats"><div><dt>Lowest ask</dt><dd><span id="lowest-ask">—</span> <small>XMR</small></dd></div><div><dt>Open listings</dt><dd id="listing-count">—</dd></div><div><dt>Listed tokens</dt><dd><span id="listed-amount">—</span> <small>XMR20</small></dd></div></dl>
+        <section class="price-history" aria-labelledby="price-title">
+          <div class="section-heading"><h3 id="price-title">Price history</h3><span class="muted">XMR per XMR20</span></div>
+          <div class="chart-empty"><svg width="48" height="36" viewBox="0 0 48 36" fill="none" aria-hidden="true"><path d="M5 3v28h39M14 23v-7m9 7V9m9 14v-4m9 4V5" stroke="currentColor" stroke-width="1.5"/></svg><strong>Price history coming soon</strong><p>Completed trades appear below.</p></div>
+        </section>
+        <section class="activity" aria-labelledby="activity-title"><div class="section-heading"><h3 id="activity-title">Activity</h3><span class="muted">Completed trades</span></div><div class="activity-columns" aria-hidden="true"><span>Time</span><span>Quantity</span><span>Price / token</span><span>Total XMR</span></div><div id="activity-rows"><p class="activity-empty">Loading activity…</p></div></section>
+        <details class="how-it-works"><summary>How settlement works</summary><ol><li>The seller publishes a listing for one confirmed token lot.</li><li>Buyer and seller review the same Monero transaction: tokens to the buyer and XMR to the seller.</li><li>Both wallets approve it. After publication, the wallets verify ten Monero confirmations before the new token balance is spendable.</li></ol><p>Buyers take the whole lot at the listed price. Both wallets must participate. No Solana wallet or link is needed.</p><a href="https://xmr20.org/docs/" target="_blank" rel="noopener noreferrer">Read about XMR20 <span aria-hidden="true">↗</span></a></details>
+      </section>
+      <aside class="order-panel" aria-label="Token orders">
+        <div class="order-tabs" role="group" aria-label="Trade direction"><button id="buy-tab" aria-pressed="true">Buy</button><button id="sell-tab" aria-pressed="false">Sell</button></div>
+        <section id="buy-panel" aria-labelledby="listings-heading">
+          <div class="order-heading"><h3 id="listings-heading">XMR20 listings</h3><label class="sort-label"><span class="sr-only">Sort listings</span><select id="sort"><option value="price">Lowest price</option><option value="total">Lowest total</option><option value="quantity">Smallest lot</option></select></label></div>
+          <p class="order-help">Select a whole lot to reserve.</p>
+          <div class="lot-columns" aria-hidden="true"><span>Quantity</span><span>Price / token</span><span>Total XMR</span></div>
+          <fieldset id="lots"><legend class="sr-only">Choose a listing</legend><p>Loading listings…</p></fieldset>
+          <div class="purchase-summary" aria-live="polite"><div><span>You receive</span><strong id="receive-amount">— XMR20</strong></div><div class="subtotal"><span>Listing subtotal</span><strong id="buy-total">— XMR</strong></div><p>Marketplace fee: 0 XMR.</p></div>
+          <button class="primary" id="review-buy" disabled>Choose a listing</button>
+          <div class="review-result" id="buy-review" hidden tabindex="-1" aria-live="polite"></div>
+        </section>
+        <section id="sell-panel" aria-labelledby="sell-heading" hidden>
+          <h3 id="sell-heading">Create a listing</h3><p class="order-help">Set a quantity and a price in XMR. Publishing reserves the tokens for this lot.</p>
+          <form id="sell-form" novalidate>
+            <label for="sell-quantity">Quantity <span>XMR20</span></label><input id="sell-quantity" name="quantity" inputmode="decimal" placeholder="e.g. 100000" autocomplete="off" aria-describedby="quantity-note sell-error"><p class="field-note" id="quantity-note">Up to 6 decimal places.</p>
+            <label for="sell-price">Price per token <span>XMR</span></label><input id="sell-price" name="price" inputmode="decimal" placeholder="e.g. 0.0000012" autocomplete="off" aria-describedby="price-note sell-error"><p class="field-note" id="price-note">Up to 12 decimal places.</p>
+            <div class="sell-subtotal"><span>Listing subtotal</span><strong id="sell-total">— XMR</strong></div><p class="order-help">Cancelling an unreserved listing returns its tokens to your available balance.</p>
+            <p class="form-error" id="sell-error" role="alert" hidden></p>
+            <button class="primary" type="submit">Publish listing</button>
+          </form>
+          <section class="seller-listings"><h4>Your listings</h4><div id="seller-listings"><p class="muted">Connecting…</p></div></section>
+        </section>
+        <p id="sell-status" class="form-status" role="status"></p>
+      </aside>
+    </div>
+    <footer><span>Public records. Private payments.</span><span>Monero Market</span></footer>
+  </main>
+  <noscript><p class="preview-notice">Enable JavaScript to use the market.</p></noscript>
+</body>
+</html>

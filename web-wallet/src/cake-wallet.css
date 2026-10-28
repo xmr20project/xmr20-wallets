@@ -1,0 +1,21 @@
+/* Cake connection stays within the existing wallet dialog. */
+.wallet-dialog .cake-connect{padding:0 4px 12px;text-align:left}
+.wallet-dialog .cake-back{border:0;background:transparent;color:#aeb4bd;margin:0 0 16px;padding:6px 0;font-size:12px}
+.cake-heading{display:flex;gap:12px;align-items:center;margin-bottom:16px}.cake-heading img{width:38px;height:38px;border-radius:11px;flex:none}
+.wallet-dialog .cake-heading h3{margin:0 0 3px;font:700 20px/1.2 var(--font-display)}.wallet-dialog .cake-heading p{margin:0;color:#aeb4bd;font-size:12px}
+.wallet-dialog .cake-intro{font-size:13px;line-height:1.6;color:#c1c5cb;margin:0 0 16px}
+.wallet-dialog .cake-status{display:inline-block;margin:0 0 12px;padding:6px 9px;border:1px solid #434950;border-radius:6px;background:#1d2024;color:#bbc1cb;font:600 12px/1.4 var(--font-display)}
+.wallet-dialog .cake-verified{color:#c0dfac;border-color:#596951;background:#1d271f}
+.wallet-dialog .cake-coverage,.wallet-dialog .cake-source{font:12px/1.6 var(--font-display);color:#aeb4bd;margin:8px 0 14px}
+.wallet-dialog .cake-connect label{font:600 12px/1.5 var(--font-display);margin:16px 0 7px;color:#d5d9df}
+.wallet-dialog .cake-connect textarea{margin:0;padding:11px 12px;border-radius:8px;font:12px/1.6 var(--font-mono);resize:vertical;overflow-wrap:anywhere}
+.wallet-dialog .cake-actions{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 16px}.wallet-dialog .cake-actions button{margin:0}
+.wallet-dialog .cake-connect button{border-radius:8px;font:600 12px/1.4 var(--font-display);min-height:42px}
+.wallet-dialog .cake-connect button.cake-primary{background:#ff914f;color:#141619;border-color:#ff914f}
+.wallet-dialog .cake-message-section,.wallet-dialog .cake-holdings{border:0;border-top:1px solid #343941;margin:20px 0 0;padding:20px 0 0;background:transparent}
+.wallet-dialog .cake-message-section h4{margin:0 0 12px;font:700 15px/1.4 var(--font-display)}
+.cake-holdings-head{display:flex;align-items:center;justify-content:space-between;gap:12px}.wallet-dialog .cake-holdings-head h3{margin:0;font:700 16px/1.3 var(--font-display)}.wallet-dialog .cake-holdings-head button{margin:0;background:transparent;border:0;color:#ff914f}
+.cake-token{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;padding:14px 0;border-top:1px solid #30343b}.cake-token>div{min-width:0}.cake-token strong{font:700 15px/1.5 var(--font-display)}.cake-token>strong{white-space:nowrap;flex:none;font-variant-numeric:tabular-nums}.wallet-dialog .cake-token small{font-size:11px;color:#aeb4bd;line-height:1.5;margin-top:3px;overflow-wrap:anywhere}
+.wallet-dialog .cake-error{font-size:12px;line-height:1.6;color:#ffb0a0;margin:16px 0;overflow-wrap:anywhere}
+.wallet-dialog .cake-footnote{font:11px/1.6 var(--font-display);color:#a5aab3;border-top:1px solid #30343b;padding-top:14px;margin:20px 0 0}
+@media(max-width:420px){.wallet-dialog .cake-actions{flex-direction:column}.wallet-dialog .cake-actions button{width:100%}.wallet-dialog .cake-connect{padding-right:2px}.wallet-dialog .cake-connect textarea{font-size:12px}}

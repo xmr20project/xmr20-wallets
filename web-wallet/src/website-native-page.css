@@ -1,0 +1,27 @@
+/* Website host for the extension's native pages (SOL <-> XMR swap, bridge). The popup's
+   full-window page becomes a panel of the wallet window's visible height
+   (--wallet-panel-height, set by website-native-panel.js); a note shares that height. */
+.website-native-page{margin:10px 0;border:1px solid #343941;border-radius:16px;overflow:hidden}
+.website-native-page.native-popup-root{display:flex;flex-direction:column;height:var(--wallet-panel-height,auto);max-height:var(--wallet-panel-height,min(640px,78dvh))}
+.website-native-page.native-popup-root>div{display:flex;flex-direction:column;flex:1 1 auto;min-height:0}
+.website-native-page.native-popup-root #native-send{flex:1 1 auto;align-self:stretch;box-sizing:border-box;width:auto;margin:0;height:auto;min-height:0;max-height:none;max-width:none;padding:16px;gap:12px;overflow:hidden}
+.website-native-page.native-popup-root main#native-send:not(:has(.native-send-scroll)){overflow:auto}
+/* Same buttons as the rest of the website wallet. */
+.website-native-page #native-send .native-send-actions button,.website-native-page #native-send .native-send-recovery button{min-height:44px;border-radius:8px;font:700 12px/1.4 var(--font-ui,ui-monospace,monospace)}
+.website-native-page #native-send .native-send-head button{min-height:36px;padding:6px 12px;border:1px solid #464b53;border-radius:8px;background:#24272c;color:#e7e8eb;font:600 12px/1.4 var(--font-ui,ui-monospace,monospace)}
+.website-native-page #native-send button.native-primary{background:#ff914f;color:#141619;border:1px solid #ff914f}
+.website-native-page #native-send button.native-secondary{background:#24272c;color:#e7e8eb;border:1px solid #464b53}
+.website-native-page .website-native-note{flex:none;margin:0;padding:8px 16px 10px;border-top:1px solid #30302e;color:#a5aab3;font:11px/1.5 var(--font-ui,ui-monospace,monospace)}
+.website-native-page #native-send #native-start-height{box-sizing:border-box;width:100%;margin:6px 0 0;padding:12px 14px;border:1px solid #464b53;border-radius:8px;background:#1d2024;color:#e7e8eb;font:15px/1.4 var(--font-ui,ui-monospace,monospace)}
+/* While a hosted page is open it takes the whole wallet window, like the extension popup.
+   The wallet title, tabs, balances, token list and footer return when it closes. */
+.wallet-dialog:has(.website-native-page) .wallet-dialog-head,
+.wallet-dialog:has(.website-native-page) .wallet-chain-tabs,
+.wallet-dialog:has(.website-native-page) .wallet-foot,
+.wallet-dialog .wallet-panel-scroll:has(.website-native-page)>:not(:has(.website-native-page)):not(.website-native-page),
+.wallet-dialog .wallet-panel-scroll :has(.website-native-page)>:not(:has(.website-native-page)):not(.website-native-page){display:none}
+.wallet-dialog .website-native-page{margin:0}
+/* SOL ↔ XMR: the wallet's own Solana and Monero logos (website-native-swap.jsx), sized like the SOL row's icon. */
+.website-native-page #native-send .bridge-coin-art[data-site-logo]{overflow:hidden;background:#15140f}
+.website-native-page #native-send .bridge-coin-art[data-site-logo] img{width:100%;height:100%;object-fit:cover;border-radius:50%}
+.website-native-page #native-send .bridge-coin-art[data-site-logo] img[src$=".svg"]{width:68%;height:68%;object-fit:contain;border-radius:0}

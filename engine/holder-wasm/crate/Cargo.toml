@@ -1,0 +1,41 @@
+[package]
+name = "xmr20-holder-wasm-persist"
+version = "0.0.0"
+edition = "2021"
+publish = false
+description = "Holder-side token engine for the unshielded-by-default format: key derivation, local scanning of public and shielded notes, record building for public transfers, shield/unshield, two-part private transfers and burns, holder-funded Monero carriers. Compiled to wasm32 for the extension worker. UNREVIEWED synthetic-test code. 27 Oct 2026 candidate: adds saved scan progress (pool record log replay, native wallet snapshot) and per-block pool/native selection."
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+xmr20-unshielded-core = {path = "../core"}
+anyhow = "1"
+ark-groth16 = "=0.4.0"
+ark-serialize = "=0.4.2"
+decaf377 = {version = "=0.10.1", features = ["r1cs"]}
+decaf377-rdsa = "=0.11.0"
+penumbra-sdk-asset = {version = "=2.1.1", default-features = false}
+penumbra-sdk-keys = {version = "=2.1.1", default-features = false}
+penumbra-sdk-shielded-pool = {version = "=2.1.1", default-features = false}
+penumbra-sdk-sct = {version = "=2.1.1", default-features = false}
+rand_core = {version = "=0.6.4", features = ["getrandom"]}
+getrandom = {version = "=0.2.17", features = ["custom"]}
+serde = {version = "1", features = ["derive"]}
+serde_json = "1"
+hex = "0.4"
+zeroize = "=1.8.2"
+monero-wallet = {path = "../vendor/monero-wallet", default-features = false, features = ["std", "compile-time-generators"]}
+rand_chacha = "=0.3.1"
+curve25519-dalek = "=4.1.3"
+
+[patch.crates-io]
+getrandom = {path = "../vendor/getrandom-0.2.17"}
+penumbra-sdk-shielded-pool = {path = "../vendor/penumbra-sdk-shielded-pool"}
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+
+[workspace]

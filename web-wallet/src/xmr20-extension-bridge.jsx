@@ -1,0 +1,18 @@
+import React,{useEffect,useState} from 'react';
+import {supportedMint} from '../../engine/shared/bridge-sdk/core-next/mint-policy.mjs';
+import {inputAmount} from '../../engine/token/max-amount.js';
+import {extensionBridgeRows} from './bridge-portfolio.js';
+const key=row=>row.network+':'+row.mint;
+export default function ExtensionBridge({provider,owner,pair,row,network='solana',bridgeRows=[],refreshHoldings}){
+ const [value,setValue]=useState('1'),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[error,setError]=useState(''),[selected,setSelected]=useState(null);
+ const scope=owner+':'+pair?.address,explicit=!!row?.mint;
+ const available=extensionBridgeRows([...bridgeRows,...(explicit?[{...row,network}]:[])],explicit?network:undefined);
+ const previous=selected?.scope===scope?selected.row:null;
+ const chosen=explicit?available.find(r=>r.mint===row.mint):previous?(available.find(r=>key(r)===key(previous))||{...previous,stale:true}):(available.find(r=>r.network===network)||available[0]);
+ useEffect(()=>{if(chosen&&!explicit&&selected?.scope!==scope)setSelected({scope,row:chosen});},[scope,explicit,chosen?.mint,chosen?.network,selected?.scope]);
+ const choices=chosen&&!available.some(r=>key(r)===key(chosen))?[...available,chosen]:available;
+ const mint=chosen?.mint,symbol=chosen?.ticker||chosen?.symbol||'Token';
+ async function open(){if(busy||!chosen)return;setSelected({scope,row:chosen});setBusy(true);setError('');setMessage('');try{if(!supportedMint(mint)||!/^(0|[1-9][0-9]*)(\.[0-9]{1,6})?$/.test(value))throw Error('Enter an exact token amount with up to six decimals.');const [w,f='']=value.split('.'),amountRaw=String(BigInt(w)*1000000n+BigInt(f.padEnd(6,'0')));await provider.openBridge({mint,direction:chosen.network==='monero'?'xmr-to-sol':'sol-to-xmr',amountRaw});setMessage('Continue in XMR20 Wallet. Your approvals and recovery receipts stay in the extension.');}catch(e){setError(e.message);}finally{setBusy(false);}}
+ async function refresh(){if(busy)return;setBusy(true);setError('');try{await refreshHoldings?.();}catch{setError('Balances could not refresh. Try again shortly.');}finally{setBusy(false);}}
+ return <section><h3>Bridge with XMR20 Wallet</h3><p>Review and approve in the extension using your connected account.</p>{chosen?<>{!explicit&&<label>Token<select disabled={busy} value={key(chosen)} onChange={e=>{setSelected({scope,row:choices.find(r=>key(r)===e.target.value)});setValue('1');setError('');}}>{choices.map(r=><option key={key(r)} value={key(r)}>{r.ticker||r.symbol||'Token'} · {r.network==='monero'?'Monero':'Solana'}{r.stale?' · last known':''}</option>)}</select></label>}<label>Amount in {symbol}<input inputMode="decimal" autoComplete="off" value={value} disabled={busy} onChange={e=>{setSelected({scope,row:chosen});setValue(e.target.value);}}/></label><button disabled={busy} onClick={()=>{setSelected({scope,row:chosen});setValue(inputAmount(BigInt(chosen.amountRaw)>50000000000000n?'50000000000000':chosen.amountRaw));}}>Max</button><button className="wallet-primary" disabled={busy} onClick={open}>{busy?'Open XMR20 Wallet to continue…':'Open bridge in XMR20 Wallet'}</button></>:<><p role="status">No bridgeable tokens found. Tokens you hold on Solana or in the new Monero bridge will appear here when balances update.</p>{refreshHoldings&&<button disabled={busy} onClick={refresh}>{busy?'Refreshing balances…':'Refresh balances'}</button>}</>}{message&&<p role="status">{message}</p>}{error&&<p role="alert" className="form-error">{error}</p>}<p className="wallet-action-note">Use the latest bridge testing build. Existing legacy balances keep their original withdrawal route in the extension.</p></section>;
+}
