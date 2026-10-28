@@ -4,6 +4,7 @@ import {parse,walletId} from '../src/cli.mjs';
 import {checkAmount,formatUnits} from '../src/amount.mjs';
 import {seal,unseal,saveWallet,loadWallet,SCHEMA,checkWallet} from '../src/store.mjs';
 import {moneroRequest,forwardRequest} from '../src/network.mjs';
+import {startFailure} from '../src/engine.mjs';
 const sample={schema:SCHEMA,id:'cli-'+'0'.repeat(24),xmr:{address:'4'+'1'.repeat(94),seed:Array(25).fill('abbey').join(' '),restoreHeight:3772610},sol:{address:'11111111111111111111111111111111',secret:'sample-not-a-key'}};
 test('commands need their options and never take secrets as arguments',()=>{
  assert.equal(parse(['balance']).command,'balance');
@@ -45,4 +46,12 @@ test('the private browser reaches only the allowed Monero and api.xmr20.org path
  assert.equal(forwardRequest('/api/private-bridge/params/mainnet-v1/spend_pk.bin','GET').kind,'parameters');assert.equal(forwardRequest('/api/private-bridge/../x','GET'),null);
  assert.equal(forwardRequest('/api/private-node/json_rpc','POST').kind,'node');assert.equal(forwardRequest('/api/private-node/stop_daemon','POST'),null);
  assert.equal(forwardRequest('/api/wallet','POST'),null);
+});
+test('a browser that cannot start says why: a blocked Linux sandbox, a busy port, or a missing download',()=>{
+ const blocked=Error('browserType.launchPersistentContext: Target page, context or browser has been closed\nBrowser logs:\n[pid=1][err] [1:1:FATAL:zygote_host_impl_linux.cc(127)] No usable sandbox! If you are running on Ubuntu 23.10+ ...');
+ assert.match(startFailure(blocked,'linux'),/security sandbox.*Linux: Ubuntu 24\.04 and newer/);
+ assert.match(startFailure(blocked,'darwin'),/npm run setup/);
+ assert.match(startFailure(Error("Executable doesn't exist at /x/headless_shell"),'linux'),/npm run setup/);
+ assert.match(startFailure(Object.assign(Error('listen'),{code:'EADDRINUSE'}),'linux'),/engine port/);
+ for(const e of [blocked,Error('x')])assert.ok(startFailure(e,'linux').length<=500,'fits the CLI\'s 500-character error line');
 });
