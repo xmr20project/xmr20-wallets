@@ -117,6 +117,10 @@ npm test
 This runs the engine tests, the extension's unit tests and the CLI's unit tests. More checks are listed in each
 folder's README.
 
+GitHub runs these tests, the CLI's engine test and every build automatically on each pull request and each change to
+`main` ([`.github/workflows/tests.yml`](.github/workflows/tests.yml)). It only reads the repository: nothing is
+published or deployed.
+
 ## Where this came from
 
 The wallets were developed in the main project repository, https://github.com/xmr20project/XMR20. That repository
