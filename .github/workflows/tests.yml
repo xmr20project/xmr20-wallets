@@ -1,0 +1,42 @@
+# Runs the wallets' tests and builds on every pull request and on every change to main.
+# It only reads the repository: nothing is published, uploaded or deployed, and no secrets are used.
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install
+        run: npm ci
+      - name: Install Chromium for the browser tests
+        run: npx playwright install --with-deps chromium
+      - name: Engine, extension and CLI tests
+        run: npm test
+      - name: CLI engine in its private browser (offline)
+        run: npm run test:engine -w cli
+      - name: Build the Chrome extension
+        run: npm run build:extension
+      - name: Build the website wallet
+        run: npm run build:web
+      - name: Build the ready-to-run CLI download
+        run: npm run download:cli
