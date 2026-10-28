@@ -1,0 +1,23 @@
+{
+  "name": "@xmr20/wallet-cli",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "description": "XMR20 terminal wallet on the shared engine (experimental)",
+  "bin": {"xmr20": "bin/xmr20.mjs"},
+  "engines": {"node": ">=22.12"},
+  "scripts": {
+    "setup": "playwright install chromium && node build.mjs",
+    "build": "node build.mjs",
+    "start": "node bin/xmr20.mjs",
+    "test": "node --test test/cli.test.mjs",
+    "test:engine": "node build.mjs && node --test test/engine.test.mjs",
+    "check:readonly": "node test/readonly-scan.mjs"
+  },
+  "dependencies": {
+    "@solana/web3.js": "1.98.4",
+    "bs58": "6.0.0",
+    "playwright": "1.56.1"
+  },
+  "license": "MIT"
+}

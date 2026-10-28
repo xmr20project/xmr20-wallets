@@ -1,0 +1,8 @@
+{
+  "worker.js": "b2e060e67fc7afa2ea661e66fc86ae6e63f3f5c166bb6980c18985edcfa7e28f",
+  "runtime.js": "96b873b3c717b7309a6825724152be589606e6882ef19169b2cdfc4e9ada3aad",
+  "monero-0.11.16.js": "f54e18d60fd582ad4b65d1d17c88a8300e0b3d4f556d43fe23adff67a491a5a2",
+  "xmr20_native_market_signer.js": "9f27ea760eaddaa6d9a7940adee8817a736890e990b4bff632438c2d0d6ec8d6",
+  "xmr20_native_market_signer_bg.wasm": "38716e3a158c5a202acdc2f1f3d79514c0f25fc201e3afff142018a3bc942640",
+  "transport.js": "d1ba2bf1a9ee4d8a329caf13118de243da1ee2d7f6d4cccb5301dddce77ac791"
+}

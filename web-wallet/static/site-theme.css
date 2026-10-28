@@ -1,0 +1,27 @@
+/* XMR20 shared theme tokens. Loaded before every other stylesheet on every page, and
+   bundled into the launch and wallet apps, so page sheets can rely on these names.
+   The site keeps its monospace interface text and Arial headings; these tokens only
+   centralise those choices so a later change is one edit instead of twenty-four. */
+:root{
+ --font-mono:ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace;
+ --font-ui:var(--font-mono);
+ --font-display:Arial,Helvetica,sans-serif;
+ --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;
+ --mono:var(--font-mono);
+ /* Polish tokens shared by every page: one secondary-text grey, one line colour, two radii. */
+ --theme-muted:#aab0ba;
+ --theme-line:#34383f;
+ --radius-control:6px;
+ --radius-card:8px;
+}
+
+/* Hover glow: buttons, pills, tabs, cards and rows light up in orange under the pointer. */
+@media(hover:hover){
+ :where(button,select,textarea,input:not([type=checkbox],[type=radio],[type=file]),.upload-box,#search-form,.chapter-search,.inscription-card,.trend-row,.tile,.detail-actions a,.art-card,.wallet-option,.row.card,.dashboard .panel,.fly-heading~.stats){transition:box-shadow .18s ease,border-color .18s ease,background-color .18s ease,color .18s ease}
+ :where(button,select,.inscription-card,.tile,.detail-actions a,.art-card,.dashboard .panel,.fly-heading~.stats):is(:hover,:focus-visible){border-color:#ff914f;box-shadow:0 0 0 1px rgba(255,145,79,.55),0 0 18px rgba(255,145,79,.28)}
+ /* Form fields and field wrappers: glow under the pointer and while typing. */
+ :where(textarea,input:not([type=checkbox],[type=radio],[type=file]),.upload-box):is(:hover,:focus-visible),:where(#search-form,.chapter-search,.upload-box):is(:hover,:focus-within){border-color:#ff914f;box-shadow:0 0 0 1px rgba(255,145,79,.55),0 0 18px rgba(255,145,79,.28)}
+ :where(.trend-row):hover{box-shadow:inset 3px 0 0 #ff914f,0 0 16px rgba(255,145,79,.14)}
+ :where(button):disabled:hover{box-shadow:none;border-color:inherit}
+}
+@media(prefers-reduced-motion:reduce){:where(button,select,.inscription-card,.trend-row,.tile,.detail-actions a,.art-card){transition:none}}

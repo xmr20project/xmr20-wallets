@@ -1,0 +1,11 @@
+// Separate browser-only encrypted test store. Monero plaintext never crosses
+// the worker boundary; the service receives no vault or password.
+import {encodeSession,decodeSession} from './lab-vault.mjs';
+export const OWNER_STORAGE_KEY='xmr20-joint-browser-owner-v1';
+function boxOnly(box){if(!box||Object.keys(box).sort().join(',')!=='ciphertext,iterations,iv,kdf,salt,version'||box.version!==1||box.kdf!=='PBKDF2-SHA256'||box.iterations!==600000||typeof box.ciphertext!=='string'||box.ciphertext.length>2_000_000||Buffer.from(box.salt||'','base64').length!==32||Buffer.from(box.iv||'','base64').length!==12)throw Error('The worker did not return an encrypted test vault.');return box;}
+export function createOwnerVault(storage,createSigner){return {
+ has(){return storage.getItem(OWNER_STORAGE_KEY)!==null;},
+ async save(s,password,isLive=()=>true){const previous=storage.getItem(OWNER_STORAGE_KEY);if(s.saved?previous!==s.storageVersion:previous!==null)throw Error('Another window updated this test wallet. Reopen it before approving.');if(s.policy.recordOwnerMode!=='browser-saved-test-owner'||!s.recordSigner?.seal)throw Error('This test cannot save its browser keys.');const box=boxOnly(await s.recordSigner.seal({session:encodeSession(s),password}));if(!isLive())throw Error('Test closed while saving.');if(storage.getItem(OWNER_STORAGE_KEY)!==previous)throw Error('Another window updated this test wallet. Reopen it before approving.');const next=JSON.stringify(box);storage.setItem(OWNER_STORAGE_KEY,next);s.storageVersion=next;},
+ async unlock(password,{signal}={}){const bytes=storage.getItem(OWNER_STORAGE_KEY);if(!bytes||bytes.length>2_000_000)throw Error('Saved browser test is unavailable.');let signer;try{signer=await createSigner({signal,restore:{box:boxOnly(JSON.parse(bytes)),password}});const s=decodeSession(signer.restoredSession);signer.restoredSession.ownerSeed='';if(s.policy.recordOwnerMode!=='browser-saved-test-owner'||signer.address!==s.moneroOwner||storage.getItem(OWNER_STORAGE_KEY)!==bytes)throw Error('Another window or saved binding changed. Reopen this test.');s.recordSigner=signer;s.storageVersion=bytes;return s;}catch(e){void signer?.close();throw e;}},
+ forget(){storage.removeItem(OWNER_STORAGE_KEY);}
+};}

@@ -1,0 +1,123 @@
+.joint-transferable{font-size:14px;line-height:1.55;color:#efe5d9}
+.joint-transferable p{margin:16px 0}
+.joint-transferable h3{font-size:16px;margin:24px 0 12px}
+.joint-transferable .subtle,.joint-transferable .joint-limits{font-size:12px;color:#cbbeb0}
+.joint-transferable label{font-size:12px;color:#cbbeb0}
+.joint-transferable input,.joint-transferable select{font-size:14px;caret-color:#ffae68}
+.joint-transferable .primary,.joint-transferable .secondary,.joint-transferable .text-btn{font-size:13px;min-height:44px}
+.joint-transferable button:disabled{cursor:not-allowed}
+.joint-transferable details{margin-top:20px;color:#cbbeb0;font-size:13px}
+.joint-transferable summary{cursor:pointer;text-decoration:underline;text-underline-offset:4px}
+.joint-transferable strong{font-variant-numeric:tabular-nums}
+.joint-transferable a{display:inline-block;min-height:32px;padding-block:6px;color:#ffae68}
+.joint-transferable .address{overflow-wrap:anywhere;user-select:text}
+.joint-transferable ::selection{background:#ab4f15;color:#fff}
+.joint-transferable summary:focus-visible{outline:2px solid #ffae68;outline-offset:3px}
+
+.joint-transferable .joint-error{color:#ffae68;overflow-wrap:anywhere}
+.joint-transferable #progress:empty{display:none}
+.joint-waiting .joint-wait-label{font-size:1.05em;line-height:1.4}
+.joint-waiting .joint-wait-steps{list-style:none;padding:0;margin:18px 0;display:grid;gap:10px;font-size:.9em}
+.joint-wait-steps li{display:flex;justify-content:space-between;gap:16px;color:#cbbeb0}
+.joint-wait-steps li[data-state="current"]{color:#ffae68;font-weight:600}
+.joint-wait-steps li span:last-child{flex-shrink:0}
+.joint-busy[data-paused="true"]::before{animation-play-state:paused!important}
+
+/* Bridge surface: the paired token previews are the primary visual hierarchy. */
+dialog:has(.joint-transferable){background:#101010;border-color:#292929;padding:22px;max-width:420px}
+dialog:has(.joint-transferable) .modal-head{margin-bottom:8px}
+dialog:has(.joint-transferable) .modal-head h2{font-size:24px;letter-spacing:-.5px}
+dialog:has(.joint-transferable) .modal-head button{width:44px;height:44px;padding:0;color:#b8b5b1}
+.joint-transferable{color:#f5f3f0;line-height:1.5}
+.joint-transferable .bridge-intro{font-size:13px;color:#b3b0ab;margin:0 0 22px}
+.joint-transferable .bridge-token-panels{position:relative;margin:4px 0 20px;display:grid;gap:10px}
+.joint-transferable .bridge-token-panel{background:#202020;border-radius:22px;padding:18px;min-width:0}
+.joint-transferable .bridge-panel-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;color:#b7b4af;font-size:13px;margin-bottom:14px}
+.joint-transferable .bridge-panel-heading>span:last-child{color:#d1cec9;font-size:12px}
+.joint-transferable .bridge-panel-value{display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0;min-height:48px}
+.joint-transferable .bridge-panel-value input{background:transparent;border:0;border-radius:4px;box-shadow:none;margin:0;padding:8px 0;width:100%;min-width:0;flex:1;font-size:28px;line-height:1.25;font-weight:550;letter-spacing:-.5px;color:#faf8f5}
+.joint-transferable .bridge-amount{font-size:28px;line-height:1.25;letter-spacing:-.5px;font-weight:550;min-width:0;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+.joint-transferable .bridge-amount-compact{font-size:19px;letter-spacing:-.2px}
+.joint-transferable .bridge-token-chip{position:relative;display:flex;align-items:center;gap:9px;background:#383838;border-radius:30px;padding:6px 10px 6px 6px;flex-shrink:0;max-width:180px;min-height:44px}
+.joint-transferable .bridge-token-chip strong{font-size:13px;line-height:1.2;font-weight:650;min-width:0;overflow-wrap:anywhere}
+.joint-transferable .bridge-token-chip>svg{width:16px;height:16px;flex-shrink:0;fill:none;stroke:currentColor;stroke-width:1.8}
+.joint-transferable .bridge-token-chip select{position:absolute;inset:0;opacity:0;width:100%;height:100%;margin:0;padding:0;cursor:pointer}
+.joint-transferable .bridge-token-chip:focus-within{outline:2px solid #ff813d;outline-offset:3px}
+.joint-transferable .bridge-token-art{position:relative;width:32px;height:32px;flex:0 0 32px}
+.joint-transferable .bridge-token-art>img,.joint-transferable .bridge-token-initial{width:32px;height:32px;display:grid;place-items:center;border-radius:50%;object-fit:cover;background:#121212;color:#ffac78;font-size:12px;font-weight:650;overflow:hidden}
+.joint-transferable .bridge-network-badge{position:absolute;right:-3px;bottom:-3px;display:grid;place-items:center;width:18px;height:18px;background:#101010;color:#ff914e;border-radius:50%;border:2px solid #383838}
+.joint-transferable .bridge-network-badge svg{width:14px;height:14px}
+.joint-transferable .bridge-panel-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:32px;margin-top:12px;color:#b7b4af;font-size:11px;font-variant-numeric:tabular-nums}
+.joint-transferable .bridge-panel-foot>span{min-width:0;overflow-wrap:anywhere}
+.joint-transferable .bridge-panel-foot>span:last-child:not(:first-child){white-space:nowrap;color:#b7b4af;font-size:10px}
+.joint-transferable .bridge-max{background:#383838;color:#f0ebe5;border-radius:18px;padding:0 12px;min-height:44px;font-size:12px;flex-shrink:0}
+.joint-transferable .bridge-direction{position:absolute;inset:calc(50% - 21px) auto auto calc(50% - 21px);z-index:1}
+.joint-transferable .bridge-direction>button,.joint-transferable .bridge-direction>span{width:42px;height:42px;border-radius:50%;background:#ff813d;color:#160e07;display:grid;place-items:center;border:4px solid #101010;padding:6px}
+.joint-transferable .bridge-direction>button{width:44px;height:44px}
+.joint-transferable .bridge-direction svg{width:21px;height:21px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.joint-transferable .bridge-link-panels .bridge-panel-value{flex-wrap:wrap;gap:12px}
+.joint-transferable .bridge-link-panels .bridge-panel-value>.bridge-amount{flex:1 1 100%;font-size:25px;order:2}
+.joint-transferable .bridge-link-panels .bridge-token-chip{max-width:100%;background:#333}
+.joint-transferable .bridge-link-panels .bridge-panel-foot{margin-top:3px}
+.joint-transferable .bridge-link-intro h3{margin:22px 0 8px;font-size:17px}
+.joint-transferable .bridge-link-intro p,.joint-transferable .bridge-link-copy{font-size:13px;color:#bdb9b3;margin:0 0 18px;line-height:1.6}
+.joint-transferable .primary.wide{min-height:52px;border-radius:14px;font-size:15px;background:#ff813d;color:#1a0e06;font-weight:650;margin-top:16px}
+.joint-transferable .bridge-cancel{margin:6px 0 0;color:#bdb9b3;min-height:44px}
+.joint-transferable .bridge-fee-line{display:flex;justify-content:space-between;gap:12px;font-size:12px;color:#bdb9b3;margin:12px 0}
+.joint-transferable .bridge-fee-line>span:last-child{text-align:right;overflow-wrap:anywhere}
+.joint-transferable #j3-transaction-details{font-size:12px;margin:14px 0}
+.joint-transferable details>summary{display:flex;align-items:center;min-height:44px;gap:8px;list-style:none;text-decoration:none;color:#bdb9b3}
+.joint-transferable details>summary::-webkit-details-marker{display:none}
+.joint-transferable details>summary::after{content:'';width:7px;height:7px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(45deg);margin-left:auto;margin-right:4px}
+.joint-transferable details[open]>summary::after{transform:rotate(225deg)}
+.joint-transferable .bridge-secondary{border-top:1px solid #2a2a2a;margin-top:18px;padding-top:6px}
+.joint-transferable .bridge-secondary details{margin:0}
+.joint-transferable .bridge-secondary summary{font-size:12px;min-height:44px}
+.joint-transferable .bridge-secondary .text-btn{margin:0;color:#bdb9b3;font-size:12px;text-align:left;padding:10px 0}
+.joint-transferable #j3-actions{margin:12px 0 0}
+.joint-transferable #j3-actions summary{font-size:12px}
+.joint-transferable .bridge-sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}
+.joint-transferable #progress{font-size:12px}
+@media(max-width:380px){dialog:has(.joint-transferable){padding:17px}.joint-transferable .bridge-token-panel{padding:15px}.joint-transferable .bridge-token-chip{gap:6px;padding-right:8px;max-width:158px}.joint-transferable .bridge-token-chip strong{font-size:12px}.joint-transferable .bridge-amount,.joint-transferable .bridge-panel-value input{font-size:24px}.joint-transferable .bridge-amount-compact{font-size:17px}}
+@media(prefers-reduced-motion:reduce){.joint-transferable *{scroll-behavior:auto}}
+
+.joint-transferable .bridge-value-long{flex-wrap:wrap;gap:12px}.joint-transferable .bridge-value-long>input,.joint-transferable .bridge-value-long>.bridge-amount{flex:1 1 100%;order:2;font-size:24px;letter-spacing:-.3px}.joint-transferable .bridge-value-long>input{padding:0}.joint-transferable .bridge-value-long>.bridge-token-chip{margin-left:auto}
+
+/* Submitted wallet linking uses the full content width and ends at its status. */
+.joint-transferable.bridge-link-wait>h3{margin-top:0}
+.joint-transferable.bridge-link-wait .joint-waiting>p:last-child{margin-bottom:0}
+.joint-transferable .bridge-secondary[hidden]{display:none}
+/* Dedicated Monero send and token details, 0.1.51. */
+dialog:has(.monero-send) .modal-head{position:relative;justify-content:center;margin-bottom:16px;min-height:44px;padding-inline:30px}
+dialog:has(.monero-send) .modal-head h2{text-align:center;font-size:22px;overflow-wrap:anywhere}
+dialog:has(.monero-send) .modal-head button{position:absolute;right:-10px;top:0}
+.joint-transferable .monero-send-art{position:relative;width:72px;height:72px;margin:16px auto 28px;border-radius:50%;background:#242424;display:grid;place-items:center;color:#ffac78;font-size:24px;font-weight:650}
+.monero-send-art>img{width:72px;height:72px;border-radius:50%;object-fit:cover}
+.joint-transferable .monero-send-network{position:absolute;right:-3px;bottom:-3px;display:grid;place-items:center;width:25px;height:25px;background:#101010;border:2px solid #101010;border-radius:50%;color:#ff813d}
+.monero-send-network svg{width:21px;height:21px}
+.joint-transferable .monero-send-form textarea{display:block;box-sizing:border-box;resize:vertical;min-height:76px;width:100%;margin:0 0 12px;padding:16px;border:1px solid #303030;border-radius:12px;background:#191919;color:#f5f3f0;font:inherit;line-height:1.5;overflow-wrap:anywhere;caret-color:#ff813d}
+.joint-transferable .monero-send-form textarea::placeholder,.joint-transferable .monero-send-amount input::placeholder{color:#aaa6a0}
+.joint-transferable .monero-send-amount{display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid #303030;border-radius:12px;background:#191919;min-width:0}
+.joint-transferable .monero-send-amount input{box-sizing:border-box;flex:1;min-width:0;width:100%;margin:0;padding:8px 0;background:transparent;border:0;border-radius:4px;font-size:20px;line-height:1.5;color:#faf8f5;font-variant-numeric:tabular-nums}
+.joint-transferable .monero-send-amount>span{font-size:11px;max-width:95px;overflow-wrap:anywhere;color:#bdb9b3}
+.joint-transferable .monero-send-amount .bridge-max{padding-inline:12px;background:#303030}
+.joint-transferable .monero-send-available{margin:12px 0;text-align:right;color:#bdb9b3;font-size:12px;font-variant-numeric:tabular-nums}
+.joint-transferable .monero-send-help{margin:18px 0 0;line-height:1.6}
+.joint-transferable .monero-send-actions{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:32px}
+.joint-transferable .monero-send-actions>button,.joint-transferable .monero-send-actions>.primary.wide{margin:0;min-height:52px;border-radius:14px;font-size:15px}
+.joint-transferable .monero-send-actions .secondary{background:#262626;color:#f5f3f0}
+.joint-transferable .monero-send-summary{display:grid;gap:6px;text-align:center;margin:0 0 24px}
+.joint-transferable .monero-send-summary strong{font-size:26px;overflow-wrap:anywhere}
+.joint-transferable .monero-send-summary>span{color:#bdb9b3;font-size:12px}
+.monero-send textarea:focus-visible,.monero-send input:focus-visible,.monero-send button:focus-visible{outline:2px solid #ff813d;outline-offset:3px}
+.monero-send textarea:disabled,.monero-send input:disabled{opacity:.65}
+.monero-token-detail .page-title{font-size:30px;line-height:1.2;overflow-wrap:anywhere;margin:20px 0 12px;font-variant-numeric:tabular-nums}
+.monero-token-detail>label{display:block;margin:22px 0 8px;font-size:12px;color:#cbbeb0}
+.monero-token-detail>.address{margin:0;line-height:1.6;overflow-wrap:anywhere}
+.monero-token-detail>.primary{margin-top:22px}
+.monero-token-detail>.secondary{margin-top:12px}
+
+/* Compact send fields, 0.1.53. */
+.joint-transferable .monero-send-form textarea{resize:none;height:62px;min-height:62px;padding:6px 12px;font-size:11px;line-height:16px;overflow-y:auto}
+.joint-transferable .monero-send-amount{min-height:62px}
+.joint-transferable .monero-send-amount input{font-size:18px}
