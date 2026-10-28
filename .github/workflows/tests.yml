@@ -32,13 +32,21 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Engine, extension and CLI tests
         run: npm test
-      # The CLI starts Chromium with its sandbox on. Ubuntu 24.04 blocks the user namespaces that sandbox needs unless
-      # this AppArmor restriction is lifted.
-      - name: Allow Chromium's sandbox
+      # The CLI starts its browser with the sandbox on, and Ubuntu 24.04 blocks the user namespaces that sandbox needs.
+      - name: CLI explains a blocked browser sandbox
+        run: node cli/test/blocked-sandbox.mjs
+      # The same commands as "Linux: Ubuntu 24.04 and newer" in cli/README.md.
+      - name: Allow the browser's sandbox as cli/README.md describes
         run: |
-          if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
-            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-          fi
+          sudo tee /etc/apparmor.d/xmr20-cli-chromium > /dev/null <<EOF
+          abi <abi/4.0>,
+          include <tunables/global>
+
+          profile xmr20-cli-chromium $HOME/.cache/ms-playwright/chromium*/chrome-linux*/{chrome,headless_shell} flags=(unconfined) {
+            userns,
+          }
+          EOF
+          sudo apparmor_parser -r /etc/apparmor.d/xmr20-cli-chromium
       - name: CLI engine in its private browser (offline)
         run: npm run test:engine -w cli
       - name: Build the Chrome extension

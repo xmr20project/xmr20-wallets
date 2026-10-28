@@ -49,6 +49,8 @@ https://nodejs.org (the "LTS" download).
    Windows: open the folder, click the address bar, type cmd, and press Enter.
 3. Install its parts, once:              npm install
 4. Download its browser engine, once:    npm run setup
+   On Ubuntu 24.04 or newer, also allow its sandbox once: see
+   "Linux: Ubuntu 24.04 and newer" in README.md.
 5. Use it:                               ./xmr20 --help
                                          ./xmr20 create    (or ./xmr20 import)
                                          ./xmr20 balance
