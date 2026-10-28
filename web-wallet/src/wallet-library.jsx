@@ -37,7 +37,7 @@ export default function WalletLibrary({owner,pair,localPair,provider,onLink,onSe
    {current.kind!=='watch'&&<><NativeBalance key={current.address} owner={owner} address={current.address} provider={provider} workerPath={sitePath('/monero-native/native.worker.js')}/><PrivateTokenRows address={current.address}/></>}<TokenHoldings key={current.address+':'+reload} address={current.address} network="monero" actions owner={owner} pair={pair} provider={provider} onLink={!pair&&current.kind==='imported'?onLink:undefined}/>
    {current.kind!=='watch'&&<><details className="wallet-advanced"><summary>Wallet backup</summary><LocalMoneroRecovery key={'backup:'+current.address} owner={owner} network="mainnet" address={current.address} provider={provider}/></details></>}
    {!pair&&current.kind==='imported'&&onLink&&<button onClick={async()=>{try{await onLink(current.address);}catch(e){setError(e.message);}}}>Link wallet for launches and bridging</button>}</>}
-  {!importing?<button className="wallet-subtle-button" onClick={()=>setImporting(true)}>+ Import XMR wallet</button>:<WalletImport provider={provider} key={owner} owner={owner} onImport={imported} onClose={()=>setImporting(false)}/>}{error&&<p role="alert">{error}</p>}
+  {!importing?<button className="wallet-subtle-button wallet-row-button" onClick={()=>setImporting(true)}>Import XMR wallet</button>:<WalletImport provider={provider} key={owner} owner={owner} onImport={imported} onClose={()=>setImporting(false)}/>}{error&&<p role="alert">{error}</p>}
  </section>;
 }
 

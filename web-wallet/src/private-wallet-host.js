@@ -30,6 +30,18 @@ dialog.xmr20-pf-modal::backdrop{background:rgba(0,0,0,.6)}
 .pf-facts p{font-size:12.5px;margin:10px 0}
 .modal-foot .error,#error{max-height:200px;overflow:auto;user-select:text;-webkit-user-select:text;white-space:pre-wrap;overflow-wrap:anywhere}
 .asset{position:relative;isolation:isolate}
+/* 28 Oct 2026 (owner: "all the boxes should be consistently sized, as the monero box"): on the website the token rows take the
+   wallet's own row look and size (Monero, SOL): 38px coin, 12/13px padding, 15px corners, two lines on each side. "Price
+   unavailable" is left out, as on the SOL tab. */
+.asset.pf-asset{margin:0 0 8px;padding:12px 13px;gap:11px;border-radius:15px;background:#1a1918;border:1px solid #221f1c}
+.pf-asset .coin-wrap .coin,.pf-asset .coin .token-image{width:38px;height:38px}
+.pf-asset .chain-badge{width:17px;height:17px;right:-3px;bottom:-3px;font-size:9px}
+.pf-asset .asset-info strong{font-size:14px;font-weight:600;line-height:1.3}
+.pf-asset .asset-info small{display:block;margin-top:2px;font-size:11.5px;line-height:1.3;color:#8c8985}
+.pf-asset .asset-value{font-size:14px;font-weight:650;line-height:1.3;color:#fff}
+.pf-asset .asset-value small{display:block;margin-top:2px;font-size:11px;font-weight:400;line-height:1.3;color:#8c8985}
+.pf-asset .asset-value small.asset-usd{color:#edc5a5}
+.pf-asset .asset-value small.asset-usd.none{display:none}
 .asset::after{content:'';position:absolute;z-index:-1;inset:0;border-radius:inherit;background:radial-gradient(240px circle at var(--ux-x,50%) var(--ux-y,0),rgba(242,147,92,.12),transparent 55%);opacity:0;transition:opacity .35s ease;pointer-events:none}
 @media (hover:hover) and (pointer:fine){.asset:hover::after{opacity:1}}`;
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
