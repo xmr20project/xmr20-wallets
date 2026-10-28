@@ -23,6 +23,19 @@ This repository holds every XMR20 wallet in one place, plus the engine they all 
 All three can hold the same Monero wallet. The CLI and the extension can even use the same 25-word phrase. Only send
 from one of them at a time.
 
+## Ready-made downloads
+
+The [Releases page](https://github.com/xmr20project/xmr20-wallets/releases) has files you can use without building
+anything:
+
+- **`XMR20-Wallet-0.1.118.zip`**: the Chrome extension, exactly the build that was tested. Unzip it and load it in
+  `chrome://extensions` ([steps](extension/README.md#install-from-a-tester-zip)).
+- **`xmr20-cli-0.3.0.zip`**: the terminal wallet with its engine already built. You need Node.js 22, then
+  `npm install`, `npm run setup` and `./xmr20` ([steps](cli/README.md#ready-made-download)).
+- **`SHA256SUMS.txt`**: each file's fingerprint, so you can check that your download is complete and unchanged.
+
+You only need the next section if you want to build the wallets yourself.
+
 ## Download (once)
 
 1. **Install Node.js** version 22 or newer from https://nodejs.org. Choose the "LTS" download, then open it and click
@@ -91,7 +104,7 @@ instead of `./xmr20`. All commands are explained in [`cli/README.md`](cli/README
 
 - `npm run build:engine` puts the engine's browser files in `engine/dist/`. The extension, the website wallet and the CLI
   each copy them from there. The build checks that these files are byte-for-byte the same as in the installed wallet
-  0.1.117.
+  0.1.118 (they have not changed since 0.1.117).
 - The XMR20 token engine runs in the browser: the extension popup, the xmr20.org page, or the CLI's private headless
   Chromium. Your keys never leave your computer. Scanning, proving and signing happen locally.
 

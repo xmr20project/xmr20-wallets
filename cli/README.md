@@ -19,6 +19,22 @@ A wallet you use by typing commands. It runs the **same engine** as the Chrome e
 Every send shows a review: amount, recipient, network fee, and bridge fees if any. **Nothing is sent until you type
 `yes`.**
 
+## Ready-made download
+
+If you don't want the whole repository, download **`xmr20-cli-0.3.0.zip`** from the
+[Releases page](https://github.com/xmr20project/xmr20-wallets/releases). Its engine files are already built. With Node.js
+22.12 or newer installed:
+
+1. Unzip it somewhere you will keep, and open a terminal in the unzipped folder.
+2. Install its parts, once: `npm install`
+3. Download its browser engine, once: `npm run setup`
+4. Make or import a wallet: `./xmr20 create` or `./xmr20 import`. Then `./xmr20 balance`.
+
+Everything below works the same way in that folder. To update, unzip the new version and repeat steps 2 and 3. Your
+wallet stays, because it is saved in `~/.xmr20-wallet`, not in the download folder.
+
+Maintainers make this zip with `npm run download:cli` from the repository folder. It is written to `cli/dist/`.
+
 ## Set up (once)
 
 From the repository folder, after `npm install` (see the [main README](../README.md)):
@@ -109,7 +125,7 @@ it also holds your saved operations and scan progress.
 
 - **The engine is not copied.** `cli/build.mjs` bundles `browser/host.js` with `engine/token`, `engine/monero` and
   `engine/shared`, and copies `engine/dist`. The engine build checks that its files are byte-identical to the installed
-  wallet 0.1.117.
+  wallet 0.1.118.
 - **Headless layer.** The token engine was written for screens. [`engine/headless/token-ops.js`](../engine/headless/token-ops.js)
   lets the CLI use it without one: it fills the same fields and presses the same buttons a person would. It stops at
   every review so the CLI can ask you. No engine logic is repeated.

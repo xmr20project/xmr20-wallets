@@ -1,4 +1,4 @@
-// The engine build reproduces the files installed in XMR20 Wallet 0.1.117 byte for byte (both token workers, the holder
+// The engine build reproduces the files installed in XMR20 Wallet 0.1.118 byte for byte (both token workers, the holder
 // engine, the parameter manifest, the Monero worker and the Monero library), so this source is what that wallet runs.
 import test from 'node:test';import assert from 'node:assert/strict';import {mkdtemp,rm} from 'node:fs/promises';import {tmpdir} from 'node:os';import {join} from 'node:path';
 import {buildEngine,INSTALLED} from '../build.mjs';

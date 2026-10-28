@@ -8,6 +8,7 @@ web-wallet/public/monero-wallet/joint-transferable.worker.js
 web-wallet/public/monero-wallet/monero-0.11.16.js
 web-wallet/public/monero-wallet/LICENSE.txt
 cli/.engine/
+cli/dist/
 engine/holder-wasm/target/
 .DS_Store
 *.log

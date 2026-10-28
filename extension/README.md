@@ -25,7 +25,9 @@ Chrome runs the wallet from that folder, so don't delete or move it. The extensi
 
 ## Install from a tester zip
 
-Testers may get a ready-made zip instead, for example `XMR20-Wallet-0.1.117.zip`:
+You can use a ready-made zip instead: `XMR20-Wallet-0.1.118.zip` from the
+[Releases page](https://github.com/xmr20project/xmr20-wallets/releases). It is exactly the build that was tested, `app.js`
+included (see [How it is built](#how-it-is-built)):
 
 1. Unzip it into a folder you will keep.
 2. In `chrome://extensions`, switch on **Developer mode**, click **Load unpacked**, and choose the unzipped folder.
@@ -60,7 +62,7 @@ The first scan of an account takes 2–3 minutes. After that, only new blocks ar
 `build.mjs` follows the same recipe as the real releases (0.1.103–0.1.118):
 
 - **Start from the previous release's files.** These are in `prebuilt/`: the popup page, icons, background service
-  worker, approval page, Monero Market files and older workers. They are kept exactly as installed in 0.1.117.
+  worker, approval page, Monero Market files and older workers. They are kept exactly as installed in 0.1.118.
 - **Rebuild from source:**
   - `app.js` (the wallet) from `src/app.js`, with `../engine/token` and `../engine/shared`
   - `vendor/` (the engine files) from `../engine/build.mjs`
@@ -69,7 +71,7 @@ The first scan of an account takes 2–3 minutes. After that, only new blocks ar
 
 Checked on 28 October 2026:
 
-- Every file of `dist/` except `app.js` and `manifest.json` is byte-identical to the installed 0.1.117.
+- Every file of `dist/` except `app.js` is byte-identical to the installed 0.1.118, `manifest.json` included.
 - The Chromium smoke test loads the extension with its usual ID and shows the start screen without page errors.
 
 `app.js` is not byte-identical to an app.js built in the main repository. The main repository's build takes
