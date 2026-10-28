@@ -90,14 +90,14 @@ export default function NativeBalance({owner,address,provider,workerPath=sitePat
  if(sending&&opened&&client.current)return <WebsiteXmrSend client={client.current} address={address} node={node} balance={balance} syncNow={syncNow} onReviewing={v=>{reviewingRef.current=v;}} onSent={()=>void sync({quiet:true})} onClose={()=>{reviewingRef.current=false;setSending(false);}}/>;
  return <section className="native-wallet wallet-coin" aria-label="Monero balance">
  <div className="wallet-asset wallet-coin-row wallet-coin-send" role="button" tabIndex={0} aria-label="Send XMR" title="Send XMR" onClick={e=>{if(!e.target.closest('button'))openSend();}} onKeyDown={e=>{if((e.key==='Enter'||e.key===' ')&&e.target===e.currentTarget){e.preventDefault();openSend();}}}><div className="wallet-asset-icon wallet-coin-icon"><img src={sitePath('/brand/monero-user.png')} alt=""/></div>
-  <div className="wallet-asset-info"><strong>Monero</strong><small role="status">{status}</small></div>
+  <div className="wallet-asset-info"><strong>Monero</strong><small role="status" title={balance&&confirming(balance)?`${confirming(balance).label} ${confirming(balance).amount} · ${confirming(balance).status}`:undefined}>{status}</small></div>
   <div className="wallet-coin-value"><strong>{balance?`${amount(balance.balanceRaw)} XMR`:'— XMR'}</strong>{balance&&<small>{amount(balance.unlockedRaw)} unlocked</small>}</div>
   {!opened&&!form&&!busy&&<button type="button" className="wallet-coin-sync" onClick={()=>vaulted?void unlockWithWallet():setForm(true)}>Sync</button>}
   {opened&&<button type="button" className="wallet-coin-sync" aria-label="Refresh XMR" title="Refresh XMR" disabled={busy} onClick={sync}>↻</button>}
   {/* Lock closes the unlocked Monero wallet in this browser; the next Sync asks the Solana wallet again. */}
   {(opened||busy)&&<button type="button" className="wallet-coin-sync wallet-coin-lockbtn" aria-label="Lock Monero wallet" title="Lock Monero wallet" onClick={lock}><Lock aria-hidden="true"/></button>}
  </div>
- {balance&&confirming(balance)&&<p className="native-receiving small" role="status">{confirming(balance).label} {confirming(balance).amount} · {confirming(balance).status}</p>}
+ {/* 28 Oct 2026 (owner): no line under the Monero box; the row's own status shows it, and its full text on hover. */}
  {vaulted&&error&&!form&&!opened&&<button type="button" className="wallet-coin-lock" onClick={()=>{setError('');setForm(true);}}>Use recovery phrase or backup instead</button>}
  {progress&&busy&&!form&&progress.phase!=='approval'&&<p role="status" className="small">{progress.height?`Scanning block ${progress.height.toLocaleString()} of ${progress.target.toLocaleString()}`:'Checking wallet history… The first sync can take time.'}</p>}
  {form&&!opened&&<div className="native-unlock">{backedUp&&<label><input type="checkbox" checked={useBackup} disabled={busy} onChange={e=>{setUseBackup(e.target.checked);setSeed('');setPassword('');}}/> Use this device’s encrypted backup</label>}{useBackup?<label>Backup password<input type="password" autoComplete="off" value={password} disabled={busy} onChange={e=>setPassword(e.target.value)}/></label>:<label>Monero recovery phrase<input type="password" autoComplete="off" spellCheck={false} maxLength={400} value={seed} disabled={busy} onChange={e=>setSeed(e.target.value)}/></label>}
