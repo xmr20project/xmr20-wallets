@@ -6,12 +6,12 @@
 //   holder.wasm, parameters-manifest.json                the holder engine and its mainnet parameter manifest
 //   native.worker.js and its three helpers, keys.worker.js   the Monero worker, copied from engine/monero/runtime/
 //   monero-0.11.16.js, monero-full-0.11.16.js             the Monero library (npm package monero-ts 0.11.16)
-// It then compares every file with the one installed in XMR20 Wallet 0.1.117 and writes dist/HASHES.json.
+// It then compares every file with the one installed in XMR20 Wallet 0.1.118 and writes dist/HASHES.json.
 import {readFile,writeFile,mkdir,copyFile,rm} from 'node:fs/promises';import {createHash} from 'node:crypto';import {join,dirname} from 'node:path';
 import {createRequire} from 'node:module';
 const here=import.meta.dirname,dist=join(here,'dist'),require=createRequire(join(here,'package.json'));
 const sha=b=>createHash('sha256').update(b).digest('hex');
-// The files installed in XMR20 Wallet 0.1.117 (extension folder vendor/), 28 Oct 2026.
+// The files installed in XMR20 Wallet 0.1.118 (extension folder vendor/; unchanged since 0.1.117), 28 Oct 2026.
 export const INSTALLED={
  'private-holder.worker.js':'0cafee2f369cb77811e84340635de87c82590c3967d51f1dd680204d89ed4093',
  'private-claim.worker.js':'d896b51fe12fa19612c6b95377ebf9a497de3e458a4c2637ac50c126a78ead79',
@@ -45,7 +45,7 @@ export async function buildEngine({out=dist,quiet=false}={}){
  const files={},differs=[];
  for(const f of Object.keys(INSTALLED)){files[f]=sha(await readFile(join(out,f)));if(files[f]!==INSTALLED[f])differs.push(f);}
  await writeFile(join(out,'HASHES.json'),JSON.stringify({sameAsInstalled0117:differs.length===0,differs,files},null,1)+'\n');
- if(!quiet)console.log(differs.length?`Engine built in ${out}. These files differ from XMR20 Wallet 0.1.117: ${differs.join(', ')}`:`Engine built in ${out}. All ${Object.keys(files).length} files are byte-identical to XMR20 Wallet 0.1.117.`);
+ if(!quiet)console.log(differs.length?`Engine built in ${out}. These files differ from XMR20 Wallet 0.1.118: ${differs.join(', ')}`:`Engine built in ${out}. All ${Object.keys(files).length} files are byte-identical to XMR20 Wallet 0.1.118.`);
  return {files,differs};
 }
 if(process.argv[1]===import.meta.filename)await buildEngine();
