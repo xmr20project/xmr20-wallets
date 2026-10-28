@@ -32,6 +32,13 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Engine, extension and CLI tests
         run: npm test
+      # The CLI starts Chromium with its sandbox on. Ubuntu 24.04 blocks the user namespaces that sandbox needs unless
+      # this AppArmor restriction is lifted.
+      - name: Allow Chromium's sandbox
+        run: |
+          if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
       - name: CLI engine in its private browser (offline)
         run: npm run test:engine -w cli
       - name: Build the Chrome extension
