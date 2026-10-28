@@ -278,6 +278,11 @@ dialog.wallet-dialog.wallet-dialog .wallet-dialog-body .wallet-library>.wallet-r
 dialog.wallet-dialog.wallet-dialog .wallet-dialog-body .wallet-library>.wallet-row-button:hover{border-color:#3a2d22;color:#fff}
 dialog.wallet-dialog.wallet-dialog .wallet-dialog-body .wallet-library>details.wallet-advanced>summary{box-sizing:border-box;min-height:44px}
 dialog.wallet-dialog.wallet-dialog .wallet-dialog-body .wallet-library>.wallet-row-button{height:46px}
+/* 28 Oct 2026 (owner): the wallet's start (creation) block in Wallet backup. */
+dialog.wallet-dialog .monero-start-block{display:grid;gap:8px;margin-bottom:12px}
+dialog.wallet-dialog .monero-start-block p{margin:0}
+dialog.wallet-dialog .monero-start-block strong{color:#fff;font-weight:600}
+dialog.wallet-dialog .monero-start-block>button{justify-self:start}
 
 /* Hidden wallet tab panels stay mounted (the Monero wallet keeps running) but take no space. */
 dialog.wallet-dialog [role="tabpanel"][hidden]{display:none!important}
@@ -301,3 +306,5 @@ dialog.wallet-dialog .wallet-options button:active:not(:disabled){transform:scal
 dialog.wallet-dialog .wallet-options button:focus-visible{outline:2px solid var(--wp-orange);outline-offset:2px}
 dialog.wallet-dialog .wallet-options button:disabled{opacity:.55}
 @media (max-width:420px){dialog.wallet-dialog .wallet-options button{height:60px}}
+/* 28 Oct 2026 (owner): Send / Split tiles under the Monero row. */
+dialog.wallet-dialog .wallet-coin-actions{margin:12px 0 16px}

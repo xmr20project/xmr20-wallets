@@ -1,6 +1,6 @@
 {
   "name": "@xmr20/wallet-extension",
-  "version": "0.1.119",
+  "version": "0.1.120",
   "private": true,
   "type": "module",
   "description": "XMR20 Wallet Chrome extension (experimental)",

@@ -8,7 +8,7 @@ import NativeBalance from './native-balance.jsx';
 import PrivateTokenRows from './private-tokens.jsx';
 import {ArrowLeftRight,Repeat,X} from 'lucide-react';
 import {ensureWebsitePrivateWallet,websiteSolBalance} from './private-wallet-host.js';
-import LocalMoneroRecovery from './monero-local-recovery.jsx';
+import LocalMoneroRecovery,{MoneroStartBlock} from './monero-local-recovery.jsx';
 import {walletLibrary} from './wallet-import-store.js';
 import {loadWalletHoldings,tokenAmount,cachedWalletHoldings,cacheWalletHoldings} from './wallet-holdings.js';
 import {sitePath} from './site-path.js';
@@ -35,7 +35,7 @@ export default function WalletLibrary({owner,pair,localPair,provider,onLink,onSe
   {options.length>1&&<label className="wallet-selector">Monero wallet<select value={current?.address||''} onChange={e=>setSelected(e.target.value)}>{options.map(r=><option key={r.address} value={r.address}>{r.kind==='linked'?'Linked wallet':r.kind==='imported'?'Imported wallet':r.kind==='preview'?'Earlier wallet':'Address only'} · {r.address.slice(0,8)}…{r.address.slice(-6)}</option>)}</select></label>}
   {current&&<>
    {current.kind!=='watch'&&<><NativeBalance key={current.address} owner={owner} address={current.address} provider={provider} workerPath={sitePath('/monero-native/native.worker.js')}/><PrivateTokenRows address={current.address}/></>}<TokenHoldings key={current.address+':'+reload} address={current.address} network="monero" actions owner={owner} pair={pair} provider={provider} onLink={!pair&&current.kind==='imported'?onLink:undefined}/>
-   {current.kind!=='watch'&&<><details className="wallet-advanced"><summary>Wallet backup</summary><LocalMoneroRecovery key={'backup:'+current.address} owner={owner} network="mainnet" address={current.address} provider={provider}/></details></>}
+   {current.kind!=='watch'&&<><details className="wallet-advanced"><summary>Wallet backup</summary><MoneroStartBlock address={current.address} linkedHeight={pair?.address===current.address?pair?.height:undefined}/><LocalMoneroRecovery key={'backup:'+current.address} owner={owner} network="mainnet" address={current.address} provider={provider}/></details></>}
    {!pair&&current.kind==='imported'&&onLink&&<button onClick={async()=>{try{await onLink(current.address);}catch(e){setError(e.message);}}}>Link wallet for launches and bridging</button>}</>}
   {!importing?<button className="wallet-subtle-button wallet-row-button" onClick={()=>setImporting(true)}>Import XMR wallet</button>:<WalletImport provider={provider} key={owner} owner={owner} onImport={imported} onClose={()=>setImporting(false)}/>}{error&&<p role="alert">{error}</p>}
  </section>;
