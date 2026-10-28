@@ -49,9 +49,9 @@ export default function MoneroWalletGenerator({owner,provider,onAddress,onClose,
   }
 
   progress('linking');
-  try{provider?.assertCurrent?.();await onAddress(address);}catch{throw Object.assign(Error(),{code:'WALLET_LINK'});}
+  try{provider?.assertCurrent?.();await onAddress(address,{height:restoreHeight});}catch{throw Object.assign(Error(),{code:'WALLET_LINK'});}
   if(alive.current){setSeed('');setPassword('');}
  }
- if(step==='backup')return <WalletRecovery solanaBackup={!!provider} address={address} seed={seed} saveLocal={saveLocal} password={password} busy={busy} saveStage={saveStage} error={error} onBackup={value=>{setSaveLocal(value);setPassword('');}} onPassword={setPassword} onFinish={()=>run(finish)} onBack={onClose}/>;
+ if(step==='backup')return <WalletRecovery solanaBackup={!!provider} address={address} seed={seed} height={restoreHeight} saveLocal={saveLocal} password={password} busy={busy} saveStage={saveStage} error={error} onBackup={value=>{setSaveLocal(value);setPassword('');}} onPassword={setPassword} onFinish={()=>run(finish)} onBack={onClose}/>;
  return <section className="wallet-create-state" aria-label="Create a Monero wallet"><div className="wallet-setup-icon" aria-hidden="true">M</div><h3>{busy?'Creating your wallet…':'Create a Monero wallet'}</h3><p>Your recovery phrase is generated on this device.</p>{busy?<div className="wallet-loading-bar" role="status" aria-label="Creating wallet"/>:<button className="wallet-primary" onClick={()=>run(generate)}>Create a Monero wallet</button>}{error&&<p className="form-error" role="alert">{error}</p>}<button className="wallet-text-button" disabled={busy} onClick={onClose}>Back</button></section>;
 }

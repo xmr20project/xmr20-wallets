@@ -1,4 +1,4 @@
-# extension/ — XMR20 Wallet for Chrome (0.1.119)
+# extension/ — XMR20 Wallet for Chrome (0.1.120)
 
 The XMR20 Wallet browser extension. It works in Chrome, Brave and Edge. It holds your SOL and Solana tokens, XMR, and
 XMR20 tokens on Monero (Open and Private). It also bridges between the two chains.
@@ -25,7 +25,7 @@ Chrome runs the wallet from that folder, so don't delete or move it. The extensi
 
 ## Install from a tester zip
 
-You can use a ready-made zip instead: `XMR20-Wallet-0.1.119.zip` from the
+You can use a ready-made zip instead: `XMR20-Wallet-0.1.120.zip` from the
 [Releases page](https://github.com/xmr20project/xmr20-wallets/releases). It is exactly the build that was tested, `app.js`
 included (see [How it is built](#how-it-is-built)):
 
@@ -59,10 +59,10 @@ The first scan of an account takes 2–3 minutes. After that, only new blocks ar
 
 ## How it is built
 
-`build.mjs` follows the same recipe as the real releases (0.1.103–0.1.119):
+`build.mjs` follows the same recipe as the real releases (0.1.103–0.1.120):
 
 - **Start from the previous release's files.** These are in `prebuilt/`: the popup page, icons, background service
-  worker, approval page, Monero Market files and older workers. They are kept exactly as installed in 0.1.119.
+  worker, approval page, Monero Market files and older workers. They are kept exactly as installed in 0.1.120.
 - **Rebuild from source:**
   - `app.js` (the wallet) from `src/app.js`, with `../engine/token` and `../engine/shared`
   - `vendor/` (the engine files) from `../engine/build.mjs`
@@ -71,7 +71,7 @@ The first scan of an account takes 2–3 minutes. After that, only new blocks ar
 
 Checked on 28 October 2026:
 
-- Every file of `dist/` except `app.js` is byte-identical to the installed 0.1.119, `manifest.json` included.
+- Every file of `dist/` except `app.js` is byte-identical to the installed 0.1.120, `manifest.json` included.
 - The Chromium smoke test loads the extension with its usual ID and shows the start screen without page errors.
 
 `app.js` is not byte-identical to an app.js built in the main repository. The main repository's build takes
