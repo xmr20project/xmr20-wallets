@@ -18,7 +18,7 @@
 // before parsing; cached files are re-authenticated on every read.
 import {createHolderEngine,createChainScanner} from './holder-engine.js';
 import {checkManifest,createParameterLoader,createIndexedDbCache} from './holder-params.js';
-import {createCarrierBuilder} from './holder-carrier.js';
+import {createCarrierBuilder,createDistributionStore} from './holder-carrier.js';
 import {progressKey,accountTag,createProgressStore} from './holder-progress.js';
 import {signCertificate} from './address-cert.js';
 for(const name of ['log','info','warn','error','debug'])console[name]=()=>{};
@@ -84,7 +84,7 @@ self.onmessage=async({data})=>{if(typeof data?.id!=='string')return;const {id,ac
    const saved=await progress.load().catch(()=>({pool:null,native:null}));network.resumed={pool:saved.pool?.tip??null,native:saved.native?saved.native.state.blocks-1:null};
    scanner=createChainScanner(engine,{rpc:data.rpc,genesis:net.genesis,network:kind,startHeight:network.startHeight,nativeStartHeight:Number(data.nativeStartHeight)||0,saved,onCheckpoint:p=>progress.save(p),lookahead:typeof __XMR20_SCAN_LOOKAHEAD__!=='undefined'?__XMR20_SCAN_LOOKAHEAD__:32,onProgress:p=>post(scanCallId||id,{...p,text:`Scanning the ${kind==='stagenet'?'stagenet':kind==='mainnet'?'Monero':'test'} chain locally · block ${p.height} of ${p.target}`})});
    // monerod sanity checks ON off the fakechain (normal validation); only the tiny offline chain cannot satisfy them.
-   carrier=createCarrierBuilder({engine,rpc:data.rpc,onProgress:p=>post(id,p),sanityChecks:kind!=='offline-fakechain'});
+   carrier=createCarrierBuilder({engine,rpc:data.rpc,onProgress:p=>post(id,p),sanityChecks:kind!=='offline-fakechain',distributionStore:createDistributionStore(kind+':'+(net.genesis||''))});
    tokenAddress=d.tokenAddress;result={tokenAddress,addressCertificate,shieldedAddress:d.shieldedAddress,ownerKey:d.ownerKey,nativeAddress,scheme:d.scheme,domain:shipped.manifest.ledgerDomain,network,parameters:{label:shipped.manifest.label,manifestSha256:shipped.sha256,pinnedInBuild:shipped.pinned,files:Object.fromEntries(Object.entries(shipped.manifest.files).map(([k,v])=>[k,{bytes:v.bytes,sha256:v.sha256}]))},engine:engine.call({op:'version'})};break;}
   case 'sync':{if(!scanner)throw Error('Not open');scanCallId=id;let s;try{s=await scanner.sync();}finally{scanCallId=null;}if(Array.isArray(data.reserveKeyImages))engine.call({op:'nativeReserve',keyImages:data.reserveKeyImages});result={...engine.call({op:'status'}),scan:s,native:engine.call({op:'nativeStatus',exclude:data.reserveKeyImages||[]})};break;}
   case 'nativeStatus':result=engine.call({op:'nativeStatus',exclude:data.exclude||[]});break;
@@ -92,6 +92,9 @@ self.onmessage=async({data})=>{if(typeof data?.id!=='string')return;const {id,ac
   // Carrier fee quote BEFORE any proof: input chosen and ring sampled in the engine; the daemon answers get_outs/distribution through this worker. Returns the exact fee for approval.
   case 'carrierQuote':{carrier.onProgress=p=>post(id,p);const q=await carrier.quote({kind:data.kind,wireLen:data.wireLen,excludeKeyImages:data.exclude||[]});result=q;break;}
   case 'carrierCancel':result=carrier.cancel(data.quoteId);break;
+  // 28 Oct 2026: read the output distribution ahead of a transfer (silently; a transfer screen opened).
+  case 'carrierWarm':{if(!carrier)throw Error('Not open');const KEYS={private:[0,1],shield:[1],unshield:[0,1]};
+   const [read]=await Promise.all([carrier.warm(),...(KEYS[data.kind]||[]).map(slot=>loader.loadProvingKey(slot,{quiet:true}).catch(()=>null))]);result={...read,keys:Object.keys(loader.loaded)};break;}
   // Sign the carrier for a finished record with the approved quote (fee must match), then publish it straight to the daemon.
   case 'carrierSign':result=carrier.sign(data.quoteId,data.wire);break;
   case 'carrierPublish':result=await carrier.publish(data.blob);break;

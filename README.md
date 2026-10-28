@@ -28,7 +28,7 @@ from one of them at a time.
 The [Releases page](https://github.com/xmr20project/xmr20-wallets/releases) has files you can use without building
 anything:
 
-- **`XMR20-Wallet-0.1.118.zip`**: the Chrome extension, exactly the build that was tested. Unzip it and load it in
+- **`XMR20-Wallet-0.1.119.zip`**: the Chrome extension, exactly the build that was tested. Unzip it and load it in
   `chrome://extensions` ([steps](extension/README.md#install-from-a-tester-zip)).
 - **`xmr20-cli-0.3.0.zip`**: the terminal wallet with its engine already built. You need Node.js 22, then
   `npm install`, `npm run setup` and `./xmr20` ([steps](cli/README.md#ready-made-download)).
@@ -104,7 +104,7 @@ instead of `./xmr20`. All commands are explained in [`cli/README.md`](cli/README
 
 - `npm run build:engine` puts the engine's browser files in `engine/dist/`. The extension, the website wallet and the CLI
   each copy them from there. The build checks that these files are byte-for-byte the same as in the installed wallet
-  0.1.118 (they have not changed since 0.1.117).
+  0.1.119.
 - The XMR20 token engine runs in the browser: the extension popup, the xmr20.org page, or the CLI's private headless
   Chromium. Your keys never leave your computer. Scanning, proving and signing happen locally.
 
