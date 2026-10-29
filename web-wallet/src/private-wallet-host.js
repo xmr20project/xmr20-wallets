@@ -105,6 +105,9 @@ export function createWebsitePrivateWallet({account:fixed,signSol,onChange=()=>{
   splitXmr:{prepare:async()=>{const n=nativeFor(account().xmr);await n.syncNow();return n.client.prepareSplit({node:n.node,carrierLookup:'local'});},
    checkCoins:async()=>{const n=nativeFor(account().xmr);return n.client.checkCarriers({node:n.node,carrierLookup:'node'});},
    relay:async review=>{const n=nativeFor(account().xmr);const sent=await n.client.relay({reviewId:review.id,node:n.node});void n.syncNow().catch(()=>{});return sent;}}});
+ // 29 Oct 2026 (owner: the receiving wallet "should say pending"): while no token screen is open and the page is visible, the
+ // token wallet checks again every 20 seconds (new blocks, and transfers waiting for this wallet), as the extension's home does.
+ const recheck=setInterval(()=>{if(!closed&&!busy&&!modal.open&&!document.hidden)void pf.refresh();},20000);
  return {
   pf,account,
   // A container that shows the token rows: its shadow root gets the extension's styles and is searched by the module.
@@ -112,7 +115,7 @@ export function createWebsitePrivateWallet({account:fixed,signSol,onChange=()=>{
   rowsHTML:()=>pf.rowsHTML(),bind:()=>pf.bind(),refresh:()=>pf.refresh(),syncStatus:()=>pf.syncStatus(),receiveInfo:()=>pf.receiveInfo(),
   openBridge:(...a)=>pf.openBridge(...a),openSend:(...a)=>pf.openSend(...a),heldTokens:()=>pf.heldTokens(),portfolioRows:()=>pf.portfolioRows(),
   // Lock or disconnect: ends running tasks, closes the dialog, stops the workers and forgets the phrase.
-  dispose(){closed=true;epoch++;busy=false;close();pf.reset();host.remove();fixed={...fixed,xmrSeed:''};}
+  dispose(){closed=true;clearInterval(recheck);epoch++;busy=false;close();pf.reset();host.remove();fixed={...fixed,xmrSeed:''};}
  };
 }
 

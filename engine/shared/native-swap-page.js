@@ -3,15 +3,16 @@ import {nativeCoinPanels,bindNativeBridgePanels,setPanelFee,bridgeTabs} from './
 
 const labels={waiting:'Waiting for your deposit',new:'Waiting for your deposit',confirming:'Confirming your deposit',exchanging:'Exchanging your funds',sending:'Sending to your wallet',finished:'ChangeNOW reports the payout complete',failed:'Exchange failed — contact ChangeNOW',refunding:'Refund in progress',refunded:'ChangeNOW reports a refund',expired:'Exchange expired — do not send a deposit',verifying:'ChangeNOW is reviewing this exchange',unknown:'Status unavailable'};
 const money=(raw,decimals)=>{const n=BigInt(raw),scale=10n**BigInt(decimals);return String(n/scale)+((n%scale)?'.'+String(n%scale).padStart(decimals,'0').replace(/0+$/,''):'');};
+// 29 Oct 2026: `direction` sets the starting side ('xmr-sol' from the website's Monero screen, Bridge); 'sol-xmr' otherwise.
 export function createNativeSwapPage({container,account,assertCurrent,onClose,onPay,maximum,loadOrders,saveOrder,onTokens,balance,
- fetcher=globalThis.fetch,now=()=>Date.now()}){
+ fetcher=globalThis.fetch,now=()=>Date.now(),direction='sol-xmr'}){
  container.classList.add('native-send-window');
  container.innerHTML='<main id="native-send"><div class="native-send-head"><h1>SOL ↔ XMR</h1><button type="button" data-close>Back</button></div><p class="native-send-message" role="status" aria-live="polite"></p><div class="native-send-content"></div><p class="native-send-error" role="alert" hidden></p></main>';
  const root=container.querySelector('main'),layout=createNativePageLayout(root),content=root.querySelector('.native-send-content'),message=root.querySelector('.native-send-message'),error=root.querySelector('.native-send-error');
  root.querySelector('[data-close]').onclick=onClose;
  // Inside Bridge, tabs replace the visual title; the heading stays for assistive technology.
  if(typeof onTokens==='function')root.querySelector('h1').before(bridgeTabs({active:'coins',onTokens}));
- let closed=false,busy=false,quote,order,kind='sol-xmr';
+ let closed=false,busy=false,quote,order,kind=direction==='xmr-sol'?'xmr-sol':'sol-xmr';
  const current=()=>{if(closed)throw Error('Exchange closed.');assertCurrent();};
  const text=(sel,value)=>{content.querySelector(sel).textContent=value;};
  async function api(action,body={}){

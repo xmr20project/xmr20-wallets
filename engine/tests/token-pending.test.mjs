@@ -56,3 +56,29 @@ test('no pending operation: balance and tiles as before, no activity box',async(
  const {pf,detail}=await wallet({status:status({notes:[{commitment:'c1',asset:ASSET,amount:'200000000',position:1}],balance:'200000000'}),pending:{}});
  assert.equal(pf.heldTokens()[0].private,'200000000');const html=detail();assert.doesNotMatch(html,/pf-activity/);assert.match(text(html),/Private 200 Only you can see it · 1 note/);
 });
+// 29 Oct 2026 (owner: the receiving wallet "should say pending", then "Confirming n/10"): tokens arriving at this wallet.
+const box=html=>{const i=html.indexOf('<div class="pf-activity"');return i<0?'':text(html.slice(i,html.indexOf('<div class="pf-card"',i)));};
+test('receiver: a private transfer waiting in the pool shows as pending and is not in the balance yet',async()=>{
+ const st={...status({notes:[],balance:'0'}),incoming:[{kind:'shielded',record:'private-part-b',asset:ASSET,amount:'200000000',commitment:'c9',txid:'9'.repeat(64)}]};
+ const {pf,detail}=await wallet({status:st,pending:{}});
+ assert.equal(pf.heldTokens()[0].total,'0');assert.match(text(pf.rowsHTML()),/ 0 XMR20 .*1 pending$/);
+ const html=detail();assert.equal(box(html),'Received privately Pending +200 XMR20');assert.match(text(html),/Private 0 Only you can see it · 0 notes/);
+});
+test('receiver: once in a block it counts and shows Confirming n/10 until it has 10 confirmations',async()=>{
+ const tx='9'.repeat(64),rec={r9:{txid:tx,kind:'private-part-b',status:'accepted',height:996,confirmations:5}};
+ const at=h=>({...status({notes:[{commitment:'c9',asset:ASSET,amount:'200000000',position:3,height:h,txid:tx}],balance:'200000000',records:rec}),incoming:[]});
+ let {pf,detail}=await wallet({status:at(996),pending:{}});
+ assert.equal(pf.heldTokens()[0].private,'200000000');assert.equal(box(detail()),'Received privately Confirming · 5/10 +200 XMR20');assert.match(text(pf.rowsHTML()),/1 pending/);
+ ({pf,detail}=await wallet({status:at(992),pending:{}}));assert.equal(box(detail()),'Received privately Confirming · 9/10 +200 XMR20');
+ ({pf,detail}=await wallet({status:at(991),pending:{}}));assert.equal(box(detail()),'');assert.doesNotMatch(text(pf.rowsHTML()),/pending/);
+});
+test('receiver: change from this wallet\'s own transfer is not shown as received',async()=>{
+ const tx='8'.repeat(64);const st={...status({notes:[{commitment:'c8',asset:ASSET,amount:'50000000',position:4,height:998,txid:tx}],balance:'50000000',records:{r7:{txid:'7'.repeat(64),kind:'private-part-a',status:'accepted',height:998,confirmations:3},r8:{txid:tx,kind:'private-part-b',status:'accepted',height:998,confirmations:3}}}),incoming:[]};
+ const {detail}=await wallet({status:st,pending:{op2:{kind:'private',asset:ASSET,symbol:'XMR20',amount:'150000000',inputKind:'shielded',reserved:['c1'],status:'mined',created:Date.now(),txids:['7'.repeat(64),tx],recordIds:['r7','r8'],carriers:[{txid:'7'.repeat(64),fee:'30000000'},{txid:tx,fee:'31000000'}]}}});
+ assert.equal(box(detail()),'Sent privately Confirming · 3/10 −150 XMR20 fee 0.000061 XMR');
+});
+test('receiver: open tokens arriving from Solana show the same way',async()=>{
+ const tx='c'.repeat(64),st={...status({notes:[],balance:'0'}),public:{balances:{[ASSET]:'985000000'},notes:[{id:'p1',asset:ASSET,amount:'985000000',height:999,txid:tx}]},records:{rc:{txid:tx,kind:'public-credit',status:'accepted',height:999,confirmations:2}},incoming:[]};
+ const {pf,detail}=await wallet({status:st,pending:{}});
+ assert.equal(pf.heldTokens()[0].open,'985000000');assert.equal(box(detail()),'Arriving from Solana Confirming · 2/10 +985 XMR20');
+});

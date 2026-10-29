@@ -107,5 +107,18 @@ export function createChainScanner(engine,{rpc,fetch:fetchOnce=globalThis.fetch,
   if(moved&&(Date.now()-lastSave.at>=checkpointMs||moved>=100||!savedOnce))await checkpoint();
   return {tip,tipHash:known.get(tip)||null,applied,received,startHeight:base,nativeStartHeight:nativeFirst};
  }
- return {sync,reset,checkpoint,get height(){return Math.min(poolNext,nativeNext)-base;}};
+ // 29 Oct 2026 (owner: the receiving wallet "should say pending"): tokens on their way to this wallet. The node's waiting
+ // transactions are listed by hash; each new one is downloaded once and kept while it waits. The engine tries them on a copy of
+ // the token pool (peekPool, read-only) and reports the notes they would give this wallet, leaving out its own operations.
+ const waitingTx=new Map();
+ async function waiting(){
+  if(!ready)return {incoming:[],checked:0,records:0};
+  const ids=((await other('/get_transaction_pool_hashes',{})).tx_hashes||[]).slice(0,400),now=new Set(ids);
+  for(const k of [...waitingTx.keys()])if(!now.has(k))waitingTx.delete(k);
+  const fresh=ids.filter(id=>!waitingTx.has(id));
+  for(let i=0;i<fresh.length;i+=100){const t=await other('/get_transactions',{txs_hashes:fresh.slice(i,i+100),decode_as_json:false,prune:false});
+   for(const tx of t.txs||[])if(tx?.tx_hash&&tx.as_hex&&tx.in_pool!==false&&now.has(tx.tx_hash))waitingTx.set(tx.tx_hash,tx.as_hex);}
+  return engine.call({op:'peekPool',txs:ids.filter(id=>waitingTx.has(id)).map(id=>({txid:id,hex:waitingTx.get(id)}))});
+ }
+ return {sync,reset,checkpoint,waiting,get height(){return Math.min(poolNext,nativeNext)-base;}};
 }
