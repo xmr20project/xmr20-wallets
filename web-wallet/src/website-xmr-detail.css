@@ -1,0 +1,24 @@
+/* Monero screen (29 Oct 2026): the XMR20 token screen's layout — coin and balance, action tiles, receive card. Selectors start
+   at the wallet dialog so the dialog's general button styles do not apply. */
+.website-native-page .xmr-detail{display:flex;flex-direction:column;flex:1 1 auto;min-height:0;padding:16px;gap:4px;color:#f3efe9}
+.website-native-page .xmr-detail .xmr-detail-head{display:flex;flex-direction:row;align-items:center;justify-content:space-between;gap:12px;padding:0 0 8px}
+.website-native-page .xmr-detail .xmr-detail-head h1{margin:0;font-size:20px;font-weight:700;letter-spacing:-.01em;text-align:left}
+dialog.wallet-dialog .xmr-detail .xmr-detail-head button{flex:none;width:38px;height:38px;min-height:38px;display:grid;place-items:center;padding:0;border-radius:11px;border:1px solid #33302c;background:#1b1a18;color:#d8d2ca;cursor:pointer}
+.website-native-page .xmr-detail .xmr-detail-head button svg{width:18px;height:18px}
+.website-native-page .xmr-detail .xmr-detail-scroll{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:12px;padding-bottom:4px}
+.website-native-page .xmr-detail .xmr-detail-hero{display:flex;flex-direction:column;align-items:center;gap:6px;padding:4px 0}
+.website-native-page .xmr-detail .xmr-detail-coin{width:64px;height:64px;border-radius:50%;overflow:hidden;box-shadow:0 0 34px rgba(255,129,61,.28)}
+.website-native-page .xmr-detail .xmr-detail-coin img{width:100%;height:100%;display:block}
+.website-native-page .xmr-detail .xmr-detail-total{font-size:30px;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1.15}
+.website-native-page .xmr-detail .xmr-detail-total span{font-size:15px;font-weight:600;color:#a8a29a}
+.website-native-page .xmr-detail .xmr-detail-hero small{font-size:12px;color:#a8a29a;font-variant-numeric:tabular-nums}
+.website-native-page .xmr-detail .xmr-detail-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.website-native-page .xmr-detail .xmr-detail-actions.two{grid-template-columns:repeat(2,minmax(0,1fr))}
+dialog.wallet-dialog .xmr-detail .xmr-detail-actions button{height:76px;min-height:76px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:8px;border-radius:16px;border:1px solid #2a2724;background:linear-gradient(145deg,#23211e,#191816);color:#f0ebe5;font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+dialog.wallet-dialog .xmr-detail .xmr-detail-actions button:hover{border-color:#4a3221;color:#fff}
+.website-native-page .xmr-detail .xmr-detail-actions svg{width:20px;height:20px;color:#ff813d}
+.website-native-page .xmr-detail .xmr-detail-card{display:flex;flex-direction:column;gap:10px;padding:16px;border-radius:16px;border:1px solid #262320;background:#181715}
+.website-native-page .xmr-detail .xmr-detail-card-head{display:flex;flex-direction:row;align-items:center;justify-content:space-between;gap:10px;font-size:14px;font-weight:650}
+dialog.wallet-dialog .xmr-detail .xmr-detail-card-head button{min-height:28px;height:28px;padding:0 12px;border-radius:999px;border:0;background:rgba(255,129,61,.14);color:#ff9a5c;font:inherit;font-size:12px;font-weight:650;cursor:pointer}
+.website-native-page .xmr-detail .xmr-detail-address{padding:12px;border-radius:12px;border:1px solid #2a2724;background:#0c0b0a;font:12.5px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere;user-select:all}
+.website-native-page .xmr-detail .xmr-detail-card small{font-size:12px;color:#8f8a84}

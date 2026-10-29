@@ -1,13 +1,14 @@
-import React,{useEffect,useRef,useState} from 'react';
+import React,{Suspense,lazy,useEffect,useRef,useState} from 'react';
 import {localMoneroBackup} from './monero-local-backup.js';
 import {MONERO_NODES,XMR20_MONERO_START,nativeRestoreHeight,savedNativeRestoreHeight,saveNativeRestoreHeight,createNativeBalanceClient} from '../../engine/monero/native-wallet-client.js';
 import {openWebsitePrivateWallet,closeWebsitePrivateWallet,setWebsiteNativeWallet,clearWebsiteNativeWallet} from './private-wallet-host.js';
 import {sitePath} from './site-path.js';
-import {ArrowUpRight,Split} from 'lucide-react';
 import {moneroWalletVault} from './monero-wallet-vault.js';
 import {createNativeScanCache} from '../../engine/token/native-scan-cache.js';
 import WebsiteXmrSend from './website-xmr-send.jsx';
 import WebsiteXmrSplit from './website-xmr-split.jsx';
+import WebsiteXmrDetail from './website-xmr-detail.jsx';
+const WebsiteNativeSwap=lazy(()=>import('./website-native-swap.jsx'));
 // Saved XMR scan progress (the library-encrypted wallet cache), per wallet and starting block, as in the extension.
 const scanCache=createNativeScanCache();
 const scanKey=(owner,address,height)=>'web:'+owner+':'+address+':'+height;
@@ -36,12 +37,12 @@ function confirming(b){
 export default function NativeBalance({owner,address,provider,workerPath=sitePath('/monero-native/native.worker.js')}){
  const [node,setNode]=useState(MONERO_NODES[0].url),[seed,setSeed]=useState(''),[password,setPassword]=useState(''),[height,setHeight]=useState(()=>String(nativeRestoreHeight(address))),[balance,setBalance]=useState(null),[opened,setOpened]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(''),[progress,setProgress]=useState(null),[form,setForm]=useState(false);
  const client=useRef(null),revision=useRef(0),context={owner,network:'mainnet',address};
- // 28 Oct 2026 (owner): tapping the Monero row (or its logo) or Send opens Send XMR, Split opens Split XMR; a locked wallet
- // unlocks first, then that page opens.
- const [sending,setSending]=useState(false),[splitting,setSplitting]=useState(false),[afterUnlock,setAfterUnlock]=useState(null),reviewingRef=useRef(false);
+ // 29 Oct 2026 (owner): tapping the Monero row (or its logo) opens the Monero screen (Send, Split, Bridge, receive address);
+ // each of its pages returns to it. A locked wallet unlocks first, then the screen opens.
+ const [page,setPage]=useState(null),[afterUnlock,setAfterUnlock]=useState(null),reviewingRef=useRef(false);
  let backedUp=false;try{backedUp=localMoneroBackup().has(context);}catch{}
  const [useBackup,setUseBackup]=useState(backedUp);
- function lock(){closeWebsitePrivateWallet();setSending(false);setSplitting(false);setAfterUnlock(null);revision.current++;client.current?.dispose();client.current=null;setSeed('');setPassword('');setOpened(false);setBusy(false);setBalance(null);setProgress(null);}
+ function lock(){closeWebsitePrivateWallet();setPage(null);setAfterUnlock(null);revision.current++;client.current?.dispose();client.current=null;setSeed('');setPassword('');setOpened(false);setBusy(false);setBalance(null);setProgress(null);}
  // Leaving the Monero tab keeps the XMR20 token wallet open (Bridge on the Solana tab uses it); the wallet closes after 5 minutes
  // in a hidden tab (28 Oct 2026, owner: no Lock button on the row).
  useEffect(()=>()=>{revision.current++;client.current?.dispose();},[owner,address]);
@@ -85,9 +86,9 @@ export default function NativeBalance({owner,address,provider,workerPath=sitePat
  const unlock=()=>openWith(()=>useBackup?localMoneroBackup().load(context,password):Promise.resolve(seed.trim()),{remember:true});
  // The approval request is made from the click itself, before any network wait, so the wallet window opens straight away.
  const unlockWithWallet=()=>openWith(()=>{setProgress({phase:'approval'});return moneroWalletVault().load(context,provider);});
- useEffect(()=>{if(afterUnlock&&opened&&balance){setAfterUnlock(null);(afterUnlock==='split'?setSplitting:setSending)(true);}else if(afterUnlock&&!busy&&!opened&&!form)setAfterUnlock(null);},[afterUnlock,opened,balance,busy,form]);
- function openPage(page){const show=page==='split'?setSplitting:setSending;if(opened&&client.current?.alive){show(true);return;}if(busy)return;setAfterUnlock(page);if(vaulted)void unlockWithWallet();else setForm(true);}
- const openSend=()=>openPage('send');
+ useEffect(()=>{if(afterUnlock&&opened&&balance){setPage(afterUnlock);setAfterUnlock(null);}else if(afterUnlock&&!busy&&!opened&&!form)setAfterUnlock(null);},[afterUnlock,opened,balance,busy,form]);
+ function openPage(name){if(opened&&client.current?.alive){setPage(name);return;}if(busy)return;setAfterUnlock(name);if(vaulted)void unlockWithWallet();else setForm(true);}
+ const openSend=()=>openPage('detail');
  // 28 Oct 2026 (owner): one Monero row at the top of the Monero tab, as in the extension: the XMR balance, its status and
  // Sync, which also syncs XMR20 on Monero. The unlock form opens under the row.
  const scanFrom=Number(height)||0,pct=progress?.height&&progress?.target?Math.max(0,Math.min(99,Math.round((progress.height-scanFrom)/Math.max(1,progress.target-scanFrom)*100))):null;
@@ -98,17 +99,22 @@ export default function NativeBalance({owner,address,provider,workerPath=sitePat
  // The token screen's "Enable private transfers" uses this unlocked wallet (see private-wallet-host.js).
  const syncNowRef=useRef(syncNow);syncNowRef.current=syncNow;
  useEffect(()=>{const c=client.current;if(!opened||!c)return;setWebsiteNativeWallet({address,client:c,node,syncNow:()=>syncNowRef.current()});return()=>clearWebsiteNativeWallet(c);},[opened,address,node]);
- if(splitting&&opened&&client.current)return <WebsiteXmrSplit client={client.current} node={node} balance={balance} syncNow={syncNow} onReviewing={v=>{reviewingRef.current=v;}} onSent={()=>void sync({quiet:true})} onClose={()=>{reviewingRef.current=false;setSplitting(false);}}/>;
- if(sending&&opened&&client.current)return <WebsiteXmrSend client={client.current} address={address} node={node} balance={balance} syncNow={syncNow} onReviewing={v=>{reviewingRef.current=v;}} onSent={()=>void sync({quiet:true})} onClose={()=>{reviewingRef.current=false;setSending(false);}}/>;
+ const reviewing=v=>{reviewingRef.current=v;},toDetail=()=>{reviewingRef.current=false;setPage('detail');};
+ // Bridge = "bridge xmr to solana" (owner): the exchange page (ChangeNOW) from XMR to this Solana wallet, paid from this wallet.
+ const canBridge=Boolean(owner)&&provider?.kind!=='xmr20';
+ if(page&&opened&&client.current){
+  if(page==='split')return <WebsiteXmrSplit client={client.current} node={node} balance={balance} syncNow={syncNow} onReviewing={reviewing} onSent={()=>void sync({quiet:true})} onClose={toDetail}/>;
+  if(page==='send')return <WebsiteXmrSend client={client.current} address={address} node={node} balance={balance} syncNow={syncNow} onReviewing={reviewing} onSent={()=>void sync({quiet:true})} onClose={toDetail}/>;
+  if(page==='bridge'&&canBridge)return <Suspense fallback={<p role="status">Loading exchange…</p>}><WebsiteNativeSwap owner={owner} provider={provider} moneroAddress={address} direction="xmr-sol" xmrWallet={{client:client.current,node,syncNow,balance}} onReviewing={reviewing} onClose={toDetail}/></Suspense>;
+  return <WebsiteXmrDetail address={address} balance={balance} onSend={()=>setPage('send')} onSplit={()=>setPage('split')} onBridge={canBridge?()=>setPage('bridge'):null} onClose={()=>{reviewingRef.current=false;setPage(null);}}/>;
+ }
  return <section className="native-wallet wallet-coin" aria-label="Monero balance">
- <div className="wallet-asset wallet-coin-row wallet-coin-send" role="button" tabIndex={0} aria-label="Send XMR" title="Send XMR" onClick={e=>{if(!e.target.closest('button'))openSend();}} onKeyDown={e=>{if((e.key==='Enter'||e.key===' ')&&e.target===e.currentTarget){e.preventDefault();openSend();}}}><div className="wallet-asset-icon wallet-coin-icon"><img src={sitePath('/brand/monero-user.png')} alt=""/></div>
+ <div className="wallet-asset wallet-coin-row wallet-coin-send" role="button" tabIndex={0} aria-label="Open Monero" title="Open Monero" onClick={e=>{if(!e.target.closest('button'))openSend();}} onKeyDown={e=>{if((e.key==='Enter'||e.key===' ')&&e.target===e.currentTarget){e.preventDefault();openSend();}}}><div className="wallet-asset-icon wallet-coin-icon"><img src={sitePath('/brand/monero-user.png')} alt=""/></div>
   <div className="wallet-asset-info"><strong>Monero</strong><small role="status" title={balance&&confirming(balance)?`${confirming(balance).label} ${confirming(balance).amount} · ${confirming(balance).status}`:undefined}>{status}</small></div>
   <div className="wallet-coin-value"><strong>{balance?`${amount(balance.balanceRaw)} XMR`:'— XMR'}</strong>{balance&&<small>{amount(balance.unlockedRaw)} unlocked</small>}</div>
   {!opened&&!form&&!busy&&<button type="button" className="wallet-coin-sync" onClick={()=>vaulted?void unlockWithWallet():setForm(true)}>Sync</button>}
   {opened&&<button type="button" className="wallet-coin-sync" aria-label="Refresh XMR" title="Refresh XMR" disabled={busy} onClick={sync}>↻</button>}
  </div>
- {/* 28 Oct 2026 (owner): Send and Split under the Monero row, in the Solana tab's tile style (hidden while the unlock form is open). */}
- {!form&&<div className="wallet-actions-row wallet-coin-actions"><button type="button" className="wallet-tile wallet-primary" onClick={()=>openPage('send')}><ArrowUpRight aria-hidden="true"/><span>Send</span></button><button type="button" className="wallet-tile wallet-secondary" onClick={()=>openPage('split')}><Split aria-hidden="true"/><span>Split</span></button></div>}
  {/* 28 Oct 2026 (owner): no line under the Monero box; the row's own status shows it, and its full text on hover. */}
  {vaulted&&error&&!form&&!opened&&<button type="button" className="wallet-coin-lock" onClick={()=>{setError('');setForm(true);}}>Use recovery phrase or backup instead</button>}
  {progress&&busy&&!form&&progress.phase!=='approval'&&<p role="status" className="small">{progress.height?`Scanning block ${progress.height.toLocaleString()} of ${progress.target.toLocaleString()}`:'Checking wallet history… The first sync can take time.'}</p>}

@@ -306,5 +306,3 @@ dialog.wallet-dialog .wallet-options button:active:not(:disabled){transform:scal
 dialog.wallet-dialog .wallet-options button:focus-visible{outline:2px solid var(--wp-orange);outline-offset:2px}
 dialog.wallet-dialog .wallet-options button:disabled{opacity:.55}
 @media (max-width:420px){dialog.wallet-dialog .wallet-options button{height:60px}}
-/* 28 Oct 2026 (owner): Send / Split tiles under the Monero row. */
-dialog.wallet-dialog .wallet-coin-actions{margin:12px 0 16px}
