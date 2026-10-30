@@ -1,6 +1,6 @@
 // Builds the Chrome extension into extension/dist/ (load that folder in chrome://extensions → Load unpacked).
 //   node extension/build.mjs        (or: npm run build:extension, from the repository folder)
-// Same recipe as the wallet releases 0.1.103–0.1.119: start from the previous release's files (prebuilt/), then rebuild
+// Same recipe as the wallet releases 0.1.103–0.1.124: start from the previous release's files (prebuilt/), then rebuild
 //   app.js                  from extension/src/app.js (with engine/token and engine/shared)
 //   vendor/                 the engine files (engine/build.mjs: token workers, holder.wasm, Monero worker)
 //   style.css               engine/shared/extension-style.css + engine/token/private-format.css
@@ -10,7 +10,7 @@ import {buildEngine} from '../engine/build.mjs';
 import {operatorConfigurationPlugin} from '../engine/shared/build-tools/operator-configuration.mjs';
 const here=import.meta.dirname,engineDir=join(here,'../engine'),dist=join(here,'dist'),require=createRequire(join(here,'package.json'));
 const sha=b=>createHash('sha256').update(b).digest('hex');
-// Build flags of the installed releases (operations recipe 0.1.95 → 0.1.119): operator-native bridge on, Monero Market off by
+// Build flags of the installed releases (operations recipe 0.1.95 → 0.1.124): operator-native bridge on, Monero Market off by
 // the server, the real private bridge at api.xmr20.org with lazy registration and the XMR20 bridge mint.
 export const define={__XMR20_NATIVE_COIN_SWAPS__:'true',__XMR20_OPERATOR_NATIVE__:'true',__XMR20_NATIVE_MARKET__:'true',__XMR20_NATIVE_SPEND_PROTECTION__:'true',__XMR20_FAST_SEND__:'true',
  __XMR20_UNIVERSAL_LINK__:'true',__XMR20_JOINT_PREVIEW__:'false',__XMR20_JOINT_MAINNET_REVIEW__:'true',__XMR20_JOINT_TRANSFERABLE_REVIEW__:'true',__XMR20_JOINT_PRIVATE_TEST__:'true',__XMR20_JOINT_WALLET_TEST__:'true',

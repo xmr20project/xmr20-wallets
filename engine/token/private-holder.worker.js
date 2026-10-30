@@ -80,13 +80,16 @@ self.onmessage=async({data})=>{if(typeof data?.id!=='string')return;const {id,ac
    network={kind,startHeight:Number(net.startHeight)||0,nettype:info.nettype};
    // Saved scan progress: the shared pool log and this account's sealed native outputs; the account's own outputs are scanned
    // from its first height (the creation height the wallet saved for it), never below the pool start.
-   progress=createProgressStore({manifestSha256:shipped.sha256,engineVersion:engine.call({op:'version'}).engine,account:await accountTag(d.ownerKey,shipped.sha256),key:sealKey});
+   // 29 Oct 2026: the 0.0.4 engine resumes from progress the 0.0.3 engine saved (same pool record log, re-verified on replay).
+   progress=createProgressStore({manifestSha256:shipped.sha256,engineVersion:engine.call({op:'version'}).engine,account:await accountTag(d.ownerKey,shipped.sha256),key:sealKey,compatible:['xmr20-holder-wasm 0.0.3-persist']});
    const saved=await progress.load().catch(()=>({pool:null,native:null}));network.resumed={pool:saved.pool?.tip??null,native:saved.native?saved.native.state.blocks-1:null};
    scanner=createChainScanner(engine,{rpc:data.rpc,genesis:net.genesis,network:kind,startHeight:network.startHeight,nativeStartHeight:Number(data.nativeStartHeight)||0,saved,onCheckpoint:p=>progress.save(p),lookahead:typeof __XMR20_SCAN_LOOKAHEAD__!=='undefined'?__XMR20_SCAN_LOOKAHEAD__:32,onProgress:p=>post(scanCallId||id,{...p,text:`Scanning the ${kind==='stagenet'?'stagenet':kind==='mainnet'?'Monero':'test'} chain locally · block ${p.height} of ${p.target}`})});
    // monerod sanity checks ON off the fakechain (normal validation); only the tiny offline chain cannot satisfy them.
    carrier=createCarrierBuilder({engine,rpc:data.rpc,onProgress:p=>post(id,p),sanityChecks:kind!=='offline-fakechain',distributionStore:createDistributionStore(kind+':'+(net.genesis||''))});
    tokenAddress=d.tokenAddress;result={tokenAddress,addressCertificate,shieldedAddress:d.shieldedAddress,ownerKey:d.ownerKey,nativeAddress,scheme:d.scheme,domain:shipped.manifest.ledgerDomain,network,parameters:{label:shipped.manifest.label,manifestSha256:shipped.sha256,pinnedInBuild:shipped.pinned,files:Object.fromEntries(Object.entries(shipped.manifest.files).map(([k,v])=>[k,{bytes:v.bytes,sha256:v.sha256}]))},engine:engine.call({op:'version'})};break;}
-  case 'sync':{if(!scanner)throw Error('Not open');scanCallId=id;let s;try{s=await scanner.sync();}finally{scanCallId=null;}if(Array.isArray(data.reserveKeyImages))engine.call({op:'nativeReserve',keyImages:data.reserveKeyImages});result={...engine.call({op:'status'}),scan:s,native:engine.call({op:'nativeStatus',exclude:data.reserveKeyImages||[]})};break;}
+  case 'sync':{if(!scanner)throw Error('Not open');scanCallId=id;let s;try{s=await scanner.sync();}finally{scanCallId=null;}if(Array.isArray(data.reserveKeyImages))engine.call({op:'nativeReserve',keyImages:data.reserveKeyImages});result={...engine.call({op:'status'}),scan:s,native:engine.call({op:'nativeStatus',exclude:data.reserveKeyImages||[]})};
+   // 29 Oct 2026: tokens waiting in the node's pool for this wallet (read-only; a failed check never fails the sync).
+   try{const w=await scanner.waiting();result.incoming=Array.isArray(w?.incoming)?w.incoming:[];}catch{result.incoming=null;}break;}
   case 'nativeStatus':result=engine.call({op:'nativeStatus',exclude:data.exclude||[]});break;
   case 'nativeRelease':result=engine.call({op:'nativeRelease',keyImages:data.keyImages||[]});break;
   // Carrier fee quote BEFORE any proof: input chosen and ring sampled in the engine; the daemon answers get_outs/distribution through this worker. Returns the exact fee for approval.
