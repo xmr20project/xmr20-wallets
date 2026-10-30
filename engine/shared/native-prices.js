@@ -1,4 +1,4 @@
-import {tokenPortfolio,tokenUsd,currentQuote} from '../../engine/shared/prices.js';
+import {tokenPortfolio,tokenUsd,currentQuote} from './prices.js';
 export const NATIVE_PRICE_URL='https://api.coingecko.com/api/v3/simple/price?ids=solana,monero&vs_currencies=usd&include_last_updated_at=true';
 export function parseNativePrices(data,now=Date.now()){
  const out={};for(const [symbol,id] of [['sol','solana'],['xmr','monero']]){

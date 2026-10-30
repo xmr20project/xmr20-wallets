@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {Keypair,PublicKey} from '@solana/web3.js';
 import {MintLayout,AccountLayout,TOKEN_PROGRAM_ID,TOKEN_2022_PROGRAM_ID,getAssociatedTokenAddressSync} from '@solana/spl-token';
-import {loadSolanaHoldings,solanaDisplayRows} from '../src/solana-holdings.js';
+import {loadSolanaHoldings,solanaDisplayRows} from '../../engine/shared/solana-holdings.js';
 const owner=Keypair.generate().publicKey,other=Keypair.generate().publicKey;
 const GENESIS='5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d';
 function token(i=0){return {id:'11111111-1111-1111-1111-'+String(i).padStart(12,'0'),mint:Keypair.generate().publicKey.toBase58(),name:'Monero Extremist',ticker:'EXTREMIST',moneroTxid:'ab'.repeat(32),solanaFinalized:true,proofVerified:false,bridgeReady:false,state:'Inscribing'};}

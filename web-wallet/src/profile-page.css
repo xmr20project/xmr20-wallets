@@ -1,0 +1,122 @@
+/* XMR20 profile page (29 Oct 2026): dark ground, orange glow, glass cards — the site's premium look (docs / holders pages). */
+.xp-shell{--xp-orange:#ff813d;--xp-amber:#ffb15c;--xp-text:#f6f2ec;--xp-muted:#a39b92;--xp-line:rgba(255,255,255,.08);--xp-panel:rgba(22,20,18,.72);
+ position:relative;z-index:1;box-sizing:border-box;width:min(1160px,100%);margin:0 auto;padding:34px 24px 80px;color:var(--xp-text);font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+.xp-shell *{box-sizing:border-box}
+.xp-kicker{margin:0 0 6px;font-size:11px;letter-spacing:.18em;font-weight:700;color:var(--xp-orange)}
+.xp-dot{color:var(--xp-orange)}
+.xp-note{margin:0;font-size:12px;color:#8f8a84;line-height:1.5}
+.xp-muted{color:var(--xp-muted);font-size:14px;padding:14px 4px;display:flex;flex-direction:column;align-items:flex-start;gap:10px}
+.xp-muted p{margin:0}
+/* Cards */
+.xp-hero{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(280px,1fr);gap:18px;margin-bottom:22px}
+.xp-hero-card,.xp-card{position:relative;border-radius:24px;border:1px solid var(--xp-line);background:linear-gradient(160deg,rgba(40,30,22,.55),rgba(14,13,12,.78) 55%);backdrop-filter:blur(14px);box-shadow:0 30px 80px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.04)}
+.xp-hero-card::before{content:'';position:absolute;inset:-1px;border-radius:inherit;padding:1px;background:linear-gradient(135deg,rgba(255,129,61,.55),rgba(255,129,61,0) 40%,rgba(255,177,92,.18));-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none}
+.xp-identity{display:flex;gap:26px;align-items:flex-start;padding:30px}
+.xp-identity-text{min-width:0;flex:1}
+.xp-identity h1{margin:0;font-size:clamp(28px,4vw,44px);line-height:1.05;letter-spacing:-.03em;font-weight:800;overflow-wrap:anywhere}
+.xp-bio{margin:10px 0 0;color:#d6cec5;font-size:15px;line-height:1.5;max-width:56ch}
+.xp-bio:empty{display:none}
+.xp-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+.xp-chip{display:inline-flex;align-items:center;gap:8px;padding:6px 6px 6px 12px;border-radius:999px;border:1px solid var(--xp-line);background:rgba(12,11,10,.6);font-size:12.5px}
+.xp-chip-label{color:var(--xp-muted);font-weight:600}
+.xp-chip-value{font:12.5px ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--xp-text)}
+.xp-chip button,.xp-chip a{display:grid;place-items:center;width:26px;height:26px;border-radius:50%;border:0;background:rgba(255,129,61,.12);color:#ffb488;cursor:pointer}
+.xp-chip svg{width:13px;height:13px}
+.xp-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:20px}
+.xp-btn{display:inline-flex;align-items:center;gap:8px;min-height:42px;padding:0 18px;border-radius:12px;font:inherit;font-size:14px;font-weight:650;cursor:pointer;text-decoration:none;border:1px solid transparent}
+.xp-btn svg{width:16px;height:16px}
+.xp-primary{background:var(--xp-orange);color:#170c05;border-color:var(--xp-orange)}
+.xp-primary:hover{background:#ff9150}
+.xp-ghost{background:rgba(255,255,255,.04);color:var(--xp-text);border-color:var(--xp-line)}
+.xp-ghost:hover{border-color:rgba(255,129,61,.45)}
+.xp-inline{margin-top:10px}
+/* Avatar */
+.xp-avatar{flex:none;display:grid;place-items:center;border-radius:50%;color:#160b04;font-weight:800;letter-spacing:-.02em;box-shadow:0 18px 40px rgba(0,0,0,.4),inset 0 -6px 16px rgba(0,0,0,.18)}
+.xp-big{width:104px;height:104px;font-size:36px}
+.xp-small{width:40px;height:40px;font-size:15px}
+.xp-accent-ember{background:radial-gradient(circle at 30% 25%,#ffd2a8,#ff813d 45%,#c2410c)}
+.xp-accent-amber{background:radial-gradient(circle at 30% 25%,#fff0b8,#ffb15c 45%,#c97a12)}
+.xp-accent-rose{background:radial-gradient(circle at 30% 25%,#ffd0dc,#ff6b8a 45%,#b4234a)}
+.xp-accent-violet{background:radial-gradient(circle at 30% 25%,#e4d6ff,#9b7bff 45%,#5b36c9)}
+.xp-accent-teal{background:radial-gradient(circle at 30% 25%,#c9fff2,#38d3b4 45%,#0f8a73)}
+/* Portfolio value */
+.xp-worth{padding:26px 26px 22px;display:flex;flex-direction:column;gap:14px}
+.xp-total{font-size:clamp(30px,3.6vw,42px);font-weight:800;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+.xp-split{display:flex;gap:4px;height:10px;border-radius:999px;overflow:hidden;background:rgba(255,255,255,.05)}
+.xp-split span{flex-basis:0;min-width:6px;border-radius:999px}
+.xp-split-sol,.xp-key-sol{background:linear-gradient(90deg,#9b7bff,#38d3b4)}
+.xp-split-xmr,.xp-key-xmr{background:linear-gradient(90deg,#ff813d,#ffb15c)}
+.xp-worth-rows{margin:0;display:flex;flex-direction:column;gap:8px}
+.xp-worth-rows div{display:flex;justify-content:space-between;font-size:14px}
+.xp-worth-rows dt{display:flex;align-items:center;gap:8px;color:var(--xp-muted)}
+.xp-worth-rows dd{margin:0;font-weight:650;font-variant-numeric:tabular-nums}
+.xp-worth-rows i{width:10px;height:10px;border-radius:50%}
+/* Tabs */
+.xp-tabs{display:flex;gap:6px;margin:0 0 18px;padding:5px;width:fit-content;border-radius:16px;border:1px solid var(--xp-line);background:rgba(12,11,10,.6)}
+.xp-tabs button{display:inline-flex;align-items:center;gap:8px;min-height:40px;padding:0 18px;border:0;border-radius:12px;background:transparent;color:var(--xp-muted);font:inherit;font-size:14px;font-weight:650;cursor:pointer}
+.xp-tabs button svg{width:16px;height:16px}
+.xp-tabs button[aria-selected="true"]{background:linear-gradient(145deg,#2b2420,#1c1916);color:var(--xp-text);box-shadow:inset 0 0 0 1px rgba(255,129,61,.28)}
+/* Holdings */
+.xp-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;align-items:start}
+.xp-card{padding:18px 18px 10px}
+.xp-card-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:2px 4px 12px;border-bottom:1px solid var(--xp-line);margin-bottom:6px}
+.xp-card-head span{display:flex;align-items:center;gap:10px;font-weight:700;font-size:15px}
+.xp-card-head img,.xp-card-head svg{width:22px;height:22px;border-radius:50%}
+.xp-card-head strong{font-variant-numeric:tabular-nums}
+.xp-row{display:flex;align-items:center;gap:12px;padding:12px 4px;border-bottom:1px solid rgba(255,255,255,.04)}
+.xp-row:last-child{border-bottom:0}
+.xp-row.stale{opacity:.6}
+.xp-row-icon{flex:none;width:40px;height:40px;border-radius:50%;overflow:hidden;display:grid;place-items:center;background:#1b1917}
+.xp-row-icon img{width:100%;height:100%;object-fit:cover}
+.xp-row-icon img[src$=".svg"]{width:58%;height:58%;object-fit:contain}
+.xp-row-initial{font-weight:800;color:var(--xp-orange)}
+.xp-row-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.xp-row-main strong{font-size:15px}
+.xp-row-main small,.xp-row-amt small{font-size:12px;color:var(--xp-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.xp-row-amt{display:flex;flex-direction:column;align-items:flex-end;gap:2px;text-align:right;font-variant-numeric:tabular-nums}
+.xp-row-amt strong{font-size:14.5px}
+.xp-row-amt a{font-size:12px;color:#ffb488;text-decoration:none}
+.xp-act{font-size:17px;font-weight:700;color:var(--xp-orange)}
+/* The real wallet panels, larger: the wallet window's styles apply (dialog.wallet-dialog), shown inline. */
+.xp-wallets{align-items:stretch}
+dialog.wallet-dialog.xp-embed{position:relative;inset:auto;margin:0;width:100%;max-width:none;max-height:none;height:min(760px,calc(100dvh - 140px));z-index:auto;display:flex;flex-direction:column;box-shadow:0 30px 80px rgba(0,0,0,.35)}
+dialog.wallet-dialog.xp-embed .xp-embed-head{display:flex;align-items:center;gap:10px;padding:16px 18px 4px;font-weight:700;font-size:15px}
+dialog.wallet-dialog.xp-embed .xp-embed-head img{width:22px;height:22px;border-radius:50%}
+dialog.wallet-dialog.xp-embed .wallet-dialog-body{flex:1 1 auto;min-height:0}
+dialog.wallet-dialog.xp-embed .wallet-panel-scroll{flex:1 1 auto}
+/* Edit dialog */
+.xp-modal{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;padding:16px;background:rgba(6,6,6,.62);backdrop-filter:blur(6px)}
+.xp-modal-card{width:min(460px,100%);display:flex;flex-direction:column;gap:14px;padding:22px;border-radius:22px;border:1px solid #2b2724;background:radial-gradient(130% 55% at 50% -8%,#24170f 0%,rgba(13,12,11,0) 62%),#0c0b0a;color:var(--xp-text,#f6f2ec);font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;box-shadow:0 40px 100px rgba(0,0,0,.65)}
+.xp-modal-head{display:flex;align-items:center;justify-content:space-between}
+.xp-modal-head h2{margin:0;font-size:19px}
+.xp-modal-head button{width:36px;height:36px;display:grid;place-items:center;border-radius:10px;border:1px solid #33302c;background:#1b1a18;color:#d8d2ca;cursor:pointer}
+.xp-modal-head svg{width:16px;height:16px}
+.xp-edit-preview{display:flex;align-items:center;gap:14px;padding:12px;border-radius:16px;background:#151413;border:1px solid #262320}
+.xp-edit-preview .xp-avatar{width:56px;height:56px;font-size:20px}
+.xp-edit-preview div{display:flex;flex-direction:column;gap:3px;min-width:0}
+.xp-edit-preview small{color:#a39b92;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.xp-modal-card label{display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:600;color:#d6cec5}
+.xp-modal-card label small{align-self:flex-end;color:#8f8a84;font-weight:500}
+.xp-modal-card input,.xp-modal-card textarea{width:100%;padding:11px 12px;border-radius:12px;border:1px solid #2f2b27;background:#121110;color:#f6f2ec;font:inherit;font-size:14px;resize:vertical}
+.xp-modal-card input:focus,.xp-modal-card textarea:focus{outline:2px solid rgba(255,129,61,.5);outline-offset:1px}
+.xp-accents{display:flex;gap:10px;margin:0;padding:0;border:0}
+.xp-accents legend{margin-bottom:8px;font-size:13px;font-weight:600;color:#d6cec5}
+.xp-swatch{width:32px;height:32px;border-radius:50%;border:2px solid transparent;cursor:pointer}
+.xp-swatch[aria-pressed="true"]{border-color:#f6f2ec;box-shadow:0 0 0 3px rgba(255,129,61,.35)}
+.xp-modal-actions{display:flex;justify-content:flex-end;gap:10px}
+.xp-error{margin:0;color:#ff8a7a;font-size:13px}
+@media (max-width:900px){.xp-hero,.xp-grid{grid-template-columns:minmax(0,1fr)}dialog.wallet-dialog.xp-embed{height:min(720px,calc(100dvh - 96px))}}
+@media (max-width:560px){.xp-shell{padding:22px 16px 60px}.xp-identity{flex-direction:column;gap:16px;padding:22px}.xp-big{width:84px;height:84px;font-size:30px}.xp-tabs{width:100%}.xp-tabs button{flex:1;justify-content:center;padding:0 8px}}
+/* The site's global button and link styles (site-ui.css) must not reach the page's own controls. */
+.xp-shell button,.xp-modal button{margin:0!important;min-height:0;letter-spacing:normal;text-transform:none;box-shadow:none}
+.xp-shell .xp-chip button,.xp-shell .xp-chip a{flex:none;width:26px!important;height:26px!important;min-width:0!important;min-height:0!important;padding:0!important;border:0!important;border-radius:50%!important;line-height:1!important}
+.xp-shell .xp-btn,.xp-modal .xp-btn{min-height:42px;padding:0 18px!important;border-radius:12px!important;line-height:1}
+.xp-shell .xp-tabs button{min-height:40px;padding:0 18px!important;border:0!important;border-radius:12px!important}
+.xp-modal .xp-swatch{padding:0!important;border-radius:50%!important}
+.xp-modal .xp-modal-head button{padding:0!important;border-radius:10px!important}
+/* The docs page's background glow (dx-glow) stays inside the profile page's main and never takes clicks. */
+/* 29 Oct 2026 (owner: the orange glow went over the top bar, "inconsistent with the other pages"): the glow box covers main only and
+   clips its own layers, exactly as on the docs page (docs-premium.css, main.docs-shell), so nothing reaches the header. */
+main.xp-main{position:relative;isolation:isolate;width:100%;max-width:none;margin:0;padding:0;min-height:calc(100dvh - 140px)}
+body.dx-docs>main.xp-main>*{position:relative;z-index:1}
+body.dx-docs>main.xp-main>.dx-glow{position:absolute;z-index:0;top:0;bottom:0;left:50%;width:100vw;margin-left:-50vw;pointer-events:none;overflow:hidden}

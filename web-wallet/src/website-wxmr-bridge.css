@@ -1,0 +1,15 @@
+/* wXMR bridge page (29 Oct 2026): direction tabs, notes and recent requests, inside the Send XMR page style. */
+#native-send.wxmr-bridge .wxmr-tabs{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:4px;border-radius:14px;background:#151413;border:1px solid #2a2724}
+dialog.wallet-dialog #native-send.wxmr-bridge .wxmr-tabs button{min-height:36px;border:0;border-radius:10px;background:transparent;color:#a8a29a;font:inherit;font-size:13px;font-weight:650;cursor:pointer}
+dialog.wallet-dialog #native-send.wxmr-bridge .wxmr-tabs button[aria-selected="true"]{background:#2a2725;color:#f6f2ec}
+#native-send.wxmr-bridge .wxmr-receive{flex:1;min-width:0;font-size:24px;font-weight:550;font-variant-numeric:tabular-nums;color:#d8d2ca;overflow:hidden;text-overflow:ellipsis}
+#native-send.wxmr-bridge .wxmr-card{display:flex;flex-direction:column;gap:6px;padding:14px 16px;border-radius:16px;border:1px solid #2a2724;background:#191817}
+#native-send.wxmr-bridge .wxmr-card strong{font-size:14px}
+#native-send.wxmr-bridge .wxmr-card p{margin:0;font-size:13px;color:#a8a29a;line-height:1.45}
+#native-send.wxmr-bridge .wxmr-list{display:flex;flex-direction:column;gap:6px}
+#native-send.wxmr-bridge .wxmr-list>span{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#8f8a84}
+#native-send.wxmr-bridge .wxmr-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border-radius:12px;background:#191817;border:1px solid #262320}
+#native-send.wxmr-bridge .wxmr-row span{display:flex;flex-direction:column;gap:2px;min-width:0}
+#native-send.wxmr-bridge .wxmr-row strong{font-size:13px}
+#native-send.wxmr-bridge .wxmr-row small{font-size:11.5px;color:#a8a29a}
+dialog.wallet-dialog #native-send.wxmr-bridge .wxmr-row button{min-height:30px;padding:0 12px}
