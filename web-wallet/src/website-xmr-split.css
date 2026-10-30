@@ -1,0 +1,7 @@
+/* Split XMR (28 Oct 2026): coin count stepper inside the Send XMR panel style. */
+#native-send.xmr-split .xmr-split-stepper{justify-content:center;gap:18px}
+#native-send.xmr-split .xmr-split-stepper button{width:40px;height:40px;flex:none;display:grid;place-items:center;padding:0;border-radius:50%;border:1px solid #3a3836;background:#2a2928;color:#f0ebe5;font-family:inherit;font-size:20px;font-weight:600;line-height:1;cursor:pointer}
+#native-send.xmr-split .xmr-split-stepper button:disabled{opacity:.35;cursor:default}
+#native-send.xmr-split .xmr-split-stepper output{min-width:96px;text-align:center;font-size:28px;font-weight:600;font-variant-numeric:tabular-nums;color:#f6f2ec}
+#native-send.xmr-split .xmr-split-stepper output small{font-size:13px;font-weight:500;color:#a8a6a2}
+#native-send.xmr-split .xmr-split-range{display:block;width:100%;margin:8px 0 0;accent-color:#ff813d}

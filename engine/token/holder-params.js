@@ -60,21 +60,27 @@ export function createParameterLoader({manifest,engine,fetch:f=globalThis.fetch,
   if(bytes.length!==exp.bytes)throw new ParameterRejected(`Served parameters.json rejected: ${bytes.length} bytes, the shipped manifest pins ${exp.bytes}. The parameter server serves another version or ledger.`,{source:'download',reason:'length'});
   const digest=await sha256Hex(bytes);if(digest!==exp.sha256)throw new ParameterRejected(`Served parameters.json rejected: sha256 ${digest.slice(0,16)}… differs from the shipped manifest (${exp.sha256.slice(0,16)}…). The parameter server serves another version or ledger.`,{source:'download',reason:'sha256'});
   return JSON.parse(new TextDecoder().decode(bytes));}
- const loaded={};
- async function loadProvingKey(slot){
+ const loaded={},inflight={};
+ // 28 Oct 2026 (private sends "as fast as possible"): `quiet` loads a key ahead of a transfer without progress lines (the token
+ // worker's carrierWarm, when a transfer screen opens); a later call waits for a load that is already running instead of
+ // downloading the same file again.
+ async function loadProvingKey(slot,{quiet=false}={}){
   if(loaded[slot])return loaded[slot];
+  if(inflight[slot]){if(!quiet)onProgress({phase:'params',text:'Getting the proving parameters ready…'});return inflight[slot];}
+  inflight[slot]=loadKey(slot,quiet?()=>{}:onProgress);try{return await inflight[slot];}finally{delete inflight[slot];}}
+ async function loadKey(slot,say){
   const name=PARAMETER_FILES[slot],expected=manifest.files[name];let bytes=null,source='download';
-  if(cache){try{const hit=await cache.get(cacheKey(slot));if(hit){onProgress({phase:'params',text:`Checking the cached ${name} proving parameters against the hashes shipped with this build…`});
+  if(cache){try{const hit=await cache.get(cacheKey(slot));if(hit){say({phase:'params',text:`Checking the cached ${name} proving parameters against the hashes shipped with this build…`});
     try{await authenticate(expected,hit,'cache');bytes=hit;source='cache';}
-    catch(e){log({event:'cache-rejected',name,reason:e.reason,received:e.received});await cache.delete(cacheKey(slot)).catch(()=>{});onProgress({phase:'params',text:`Cached ${name} parameters failed authentication and were discarded. Downloading again…`});}}}
+    catch(e){log({event:'cache-rejected',name,reason:e.reason,received:e.received});await cache.delete(cacheKey(slot)).catch(()=>{});say({phase:'params',text:`Cached ${name} parameters failed authentication and were discarded. Downloading again…`});}}}
    catch(e){log({event:'cache-unavailable',message:e.message});}}
   if(!bytes){
-   onProgress({phase:'params',text:`Downloading the ${name} proving parameters (public, ${Math.round(expected.bytes/1e6)} MB) from the parameter server…`});
-   bytes=await download('/params/'+expected.path,{expectedBytes:expected.bytes,onBytes:(got,total)=>onProgress({phase:'params',text:`Downloading ${name} proving parameters… ${Math.round(got/1e6)}${total?' of '+Math.round(total/1e6):''} MB`})});
-   onProgress({phase:'params',text:`Authenticating the ${name} proving parameters against the hashes shipped with this build…`});
+   say({phase:'params',text:`Downloading the ${name} proving parameters (public, ${Math.round(expected.bytes/1e6)} MB) from the parameter server…`});
+   bytes=await download('/params/'+expected.path,{expectedBytes:expected.bytes,onBytes:(got,total)=>say({phase:'params',text:`Downloading ${name} proving parameters… ${Math.round(got/1e6)}${total?' of '+Math.round(total/1e6):''} MB`})});
+   say({phase:'params',text:`Authenticating the ${name} proving parameters against the hashes shipped with this build…`});
    await authenticate(expected,bytes,'download');
    if(cache){try{await cache.put(cacheKey(slot),bytes);}catch(e){log({event:'cache-write-failed',message:e.message});}}}
-  onProgress({phase:'params',text:`Loading the authenticated ${name} proving parameters into the holder engine…`});
+  say({phase:'params',text:`Loading the authenticated ${name} proving parameters into the holder engine…`});
   const info=engine.blob(slot,bytes);// the engine repeats length + sha256 before deserializing
   if(info.sha256!==expected.sha256||info.authenticated!==true)throw new ParameterRejected('Engine did not confirm the authenticated parameters');
   loaded[slot]={...info,source,path:expected.path};log({event:'parameters-loaded',name,source,sha256:info.sha256});return loaded[slot];}

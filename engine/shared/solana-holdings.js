@@ -4,7 +4,7 @@
 import {Buffer} from 'buffer';
 import {PublicKey} from '@solana/web3.js';
 import {TOKEN_PROGRAM_ID,TOKEN_2022_PROGRAM_ID,unpackMint,unpackAccount,getAssociatedTokenAddressSync} from '@solana/spl-token';
-import {sharedCatalog,TOKEN_CATALOG_URL} from '../../engine/shared/catalog-cache.js';
+import {sharedCatalog,TOKEN_CATALOG_URL} from './catalog-cache.js';
 const GENESIS='5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d';
 const ENDPOINT='https://xmr20.org/api/wallet';
 const CATALOG=TOKEN_CATALOG_URL;

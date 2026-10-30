@@ -11,8 +11,13 @@ export default function PrivateTokenRows({address}){
   if(!holder.current)return;shadow.current??=holder.current.attachShadow({mode:'open'});const root=shadow.current;
   const w=state.wallet?.account()?.xmr===address?state.wallet:null;
   holder.current.dataset.rows='';if(!w){root.innerHTML='';return;}
-  const detach=w.attach(root),st=w.syncStatus(),rows=w.rowsHTML();holder.current.dataset.rows=rows?'1':'';
-  root.innerHTML=`<style>${PRIVATE_WALLET_CSS}</style><section class="token-section" aria-label="XMR20 on Monero" data-network="monero">${rows||(st.syncing?`<div class="empty" role="status"><strong>Reading XMR20 token history… ${st.pct??0}%</strong>The first time on this browser takes a few minutes; it picks up where it left off. Your tokens appear here when it finishes.</div>`:'')}</section>`;
+  // 30 Oct 2026 (owner: "why does "xmr20 tokens" still show on the right? I havent bridged … remove and fix this problem"): when the
+  // token service cannot be reached, a wallet that holds no XMR20 on Monero shows nothing here; the "Unavailable right now" row stays
+  // only for a wallet that held tokens when it was last read (the module lists no tokens while it is unavailable).
+  const detach=w.attach(root),st=w.syncStatus(),key='xmr20-monero-tokens-held:'+address;
+  try{if(!st.error&&!st.syncing){if(w.heldTokens().length)localStorage.setItem(key,'1');else localStorage.removeItem(key);}}catch{}
+  const hadTokens=(()=>{try{return localStorage.getItem(key)==='1';}catch{return false;}})(),rows=st.error&&!hadTokens?'':w.rowsHTML();holder.current.dataset.rows=rows?'1':'';
+  root.innerHTML=`<style>${PRIVATE_WALLET_CSS}</style><section class="token-section" aria-label="XMR20 on Monero" data-network="monero">${rows||(st.syncing?`<div class="empty" role="status"><strong>Reading XMR20 token history…${st.pct==null?'':' '+st.pct+'%'}</strong>The first time on this browser takes a few minutes; it picks up where it left off. Your tokens appear here when it finishes.</div>`:'')}</section>`;
   w.bind();return detach;
  },[state,address]);
  return <div ref={holder} className="xmr20-private-rows"/>;

@@ -19,6 +19,23 @@ A wallet you use by typing commands. It runs the **same engine** as the Chrome e
 Every send shows a review: amount, recipient, network fee, and bridge fees if any. **Nothing is sent until you type
 `yes`.**
 
+## Ready-made download
+
+If you don't want the whole repository, download **`xmr20-cli-0.3.0.zip`** from the
+[Releases page](https://github.com/xmr20project/xmr20-wallets/releases). Its engine files are already built. With Node.js
+22.12 or newer installed:
+
+1. Unzip it somewhere you will keep, and open a terminal in the unzipped folder.
+2. Install its parts, once: `npm install`
+3. Download its browser engine, once: `npm run setup`. On Ubuntu 24.04 or newer, also allow its sandbox once
+   ([how](#linux-ubuntu-2404-and-newer)).
+4. Make or import a wallet: `./xmr20 create` or `./xmr20 import`. Then `./xmr20 balance`.
+
+Everything below works the same way in that folder. To update, unzip the new version and repeat steps 2 and 3. Your
+wallet stays, because it is saved in `~/.xmr20-wallet`, not in the download folder.
+
+Maintainers make this zip with `npm run download:cli` from the repository folder. It is written to `cli/dist/`.
+
 ## Set up (once)
 
 From the repository folder, after `npm install` (see the [main README](../README.md)):
@@ -32,6 +49,36 @@ npm run setup
 `cli/.engine/`. If you skip it, the engine files are prepared on first use, but the browser download is still needed.
 
 On Mac and Linux you start the CLI with `./xmr20`. On Windows, type `node bin/xmr20.mjs` instead.
+
+### Linux: Ubuntu 24.04 and newer
+
+Ubuntu 24.04 and newer (and 23.10) block the "user namespaces" that the browser engine's security sandbox needs. The CLI
+always keeps that sandbox on, so on these systems it stops with "The browser engine could not start its security
+sandbox". Allow the sandbox once, only for the browser that `npm run setup` downloaded. Paste this into a terminal as the
+user who runs the CLI (not as root). It asks for your password:
+
+```bash
+sudo tee /etc/apparmor.d/xmr20-cli-chromium > /dev/null <<EOF
+abi <abi/4.0>,
+include <tunables/global>
+
+profile xmr20-cli-chromium $HOME/.cache/ms-playwright/chromium*/chrome-linux*/{chrome,headless_shell} flags=(unconfined) {
+  userns,
+}
+EOF
+sudo apparmor_parser -r /etc/apparmor.d/xmr20-cli-chromium
+```
+
+The rule stays after a restart, and it still applies when `npm run setup` downloads a newer browser. To remove it:
+
+```bash
+sudo apparmor_parser -R /etc/apparmor.d/xmr20-cli-chromium
+sudo rm /etc/apparmor.d/xmr20-cli-chromium
+```
+
+This is the AppArmor rule approach from Chromium's notes on this Ubuntu change
+([details](https://chromium.googlesource.com/chromium/src/+/main/docs/security/apparmor-userns-restrictions.md)).
+GitHub's tests run them on Ubuntu 24.04 before the CLI's engine test.
 
 ## Make or import a wallet
 
@@ -109,7 +156,7 @@ it also holds your saved operations and scan progress.
 
 - **The engine is not copied.** `cli/build.mjs` bundles `browser/host.js` with `engine/token`, `engine/monero` and
   `engine/shared`, and copies `engine/dist`. The engine build checks that its files are byte-identical to the installed
-  wallet 0.1.117.
+  wallet 0.1.124.
 - **Headless layer.** The token engine was written for screens. [`engine/headless/token-ops.js`](../engine/headless/token-ops.js)
   lets the CLI use it without one: it fills the same fields and presses the same buttons a person would. It stops at
   every review so the CLI can ask you. No engine logic is repeated.
@@ -127,6 +174,7 @@ it also holds your saved operations and scan progress.
 ```bash
 npm test               # unit tests: commands, amounts, the encrypted wallet file, the network allowlist (no network)
 npm run test:engine    # starts the private browser offline, makes and restores Monero keys, checks blocking
+node test/blocked-sandbox.mjs   # Linux: where Ubuntu blocks the browser's sandbox, the CLI says so and how to allow it
 npm run check:readonly -- /path/to/test-account.json   # read-only mainnet sync with a THROWAWAY account
 ```
 
@@ -150,4 +198,5 @@ repository's history.
   - offline, where the real token module stopped at its fee review, Cancel released the coin, and the split was
     relayed only after approval (`engine/tests/headless.test.mjs`)
   - `balance`, `address`, `pending` and `doctor` against mainnet
-- Windows and Linux. The CLI was checked on macOS.
+- Windows, and wallet commands on Linux. The CLI was checked on macOS. On Linux, GitHub's tests run on Ubuntu 24.04:
+  they check the blocked-sandbox message, allow the sandbox with the steps above, and start the engine offline.

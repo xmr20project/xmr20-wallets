@@ -9,9 +9,10 @@
 // the test backend.
 // `sanityChecks`: monerod's send_raw_transaction sanity checks (ring statistics). true for stagenet/mainnet (normal validation);
 // false only for the offline fakechain whose few outputs cannot satisfy them.
-export function createCarrierBuilder({engine,rpc,fetch:f=globalThis.fetch,onProgress:initialProgress=()=>{},sanityChecks=false}){
+// `distributionStore` (optional): keeps the output distribution on this device between sessions (createDistributionStore).
+export function createCarrierBuilder({engine,rpc,fetch:f=globalThis.fetch,onProgress:initialProgress=()=>{},sanityChecks=false,distributionStore=null}){
  let onProgress=initialProgress;
- const json=async(method,params={})=>{const r=await f(rpc+'/json_rpc',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:'c',method,params}),signal:AbortSignal.timeout(60000)});if(!r.ok)throw Error('Daemon HTTP '+r.status);const v=await r.json();if(v.error)throw Error('Daemon: '+(v.error.message||JSON.stringify(v.error)));return v.result;};
+ const json=async(method,params={},ms=60000)=>{const r=await f(rpc+'/json_rpc',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:'c',method,params}),signal:AbortSignal.timeout(ms)});if(!r.ok)throw Error('Daemon HTTP '+r.status);const v=await r.json();if(v.error)throw Error('Daemon: '+(v.error.message||JSON.stringify(v.error)));return v.result;};
  const other=async(path,body)=>{const r=await f(rpc+path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(60000)});if(!r.ok)throw Error('Daemon HTTP '+r.status);return r.json();};
  // Fee rate from the daemon (per byte + quantization mask). On the offline test
  // chain this is far above mainnet rates (tiny block-weight median); the engine
@@ -19,15 +20,42 @@ export function createCarrierBuilder({engine,rpc,fetch:f=globalThis.fetch,onProg
  async function feeRate(){const e=await json('get_fee_estimate',{grace_blocks:10});if(!(e.fee>0))throw Error('Daemon returned no fee estimate');return {perWeight:String(e.fee),mask:String(e.quantization_mask||1)};}
  // Cumulative RingCT output distribution per height 0..=tip (the engine checks
  // the last value against its own local count before trusting it for sampling).
- async function distribution(tip){const d=await json('get_output_distribution',{amounts:[0],from_height:0,to_height:tip,cumulative:true,binary:false});const row=(d.distributions||[])[0];if(!row)throw Error('Daemon returned no output distribution');const start=row.start_height||0;const out=new Array(tip+1).fill(0);for(let h=0;h<=tip;h++){const i=h-start;out[h]=i<0?0:Number(row.distribution[Math.min(i,row.distribution.length-1)]);}return out;}
+ // 28 Oct 2026 (owner: a private send stopped with "signal timed out"; "it needs to work and be as fast as possible"): on mainnet
+ // the whole list is about 23 MB and was read again for every carrier (twice per private transfer), over a 60 s limit. It is now
+ // kept (in memory, and on this device when a store is given) and only the last blocks are read again. Counts below the tip
+ // change only in a reorganisation, which replaces a suffix of the chain, so the re-read starts DIST_OVERLAP blocks below the
+ // kept tip and must repeat the kept counts exactly; any difference reads the whole list again. The engine receives the same
+ // array as before. One read at a time: a quote that arrives during a read waits for it.
+ const DIST_OVERLAP=20;let kept=null,reading=null;
+ const readDist=async(from,to,ms)=>{const d=await json('get_output_distribution',{amounts:[0],from_height:from,to_height:to,cumulative:true,binary:false},ms);const row=(d.distributions||[])[0];
+  if(!row||!Array.isArray(row.distribution)||!row.distribution.length)throw Error('Daemon returned no output distribution');
+  // As before: heights the daemon did not list repeat its last count.
+  const start=Number(row.start_height)||0,values=row.distribution.map(Number);while(values.length<to-start+1)values.push(values[values.length-1]);values.length=Math.max(0,to-start+1);return {start,values};};
+ async function readKept(tip,quiet){
+  if(!kept&&distributionStore){const saved=await distributionStore.load().catch(()=>null);if(saved&&Number.isInteger(saved.start)&&Number.isInteger(saved.tip)&&saved.values?.length===saved.tip-saved.start+1)kept={start:saved.start,tip:saved.tip,values:Array.from(saved.values)};}
+  if(kept){const from=Math.max(kept.start,Math.min(kept.tip,tip)-DIST_OVERLAP),end=Math.min(kept.tip,tip);
+   const r=await readDist(from,tip,60000);
+   if(r.start===from&&r.values.slice(0,end-from+1).every((v,i)=>v===kept.values[from-kept.start+i])){kept={start:kept.start,tip,values:kept.values.slice(0,from-kept.start).concat(r.values)};return;}
+   kept=null;}
+  if(!quiet)onProgress({phase:'carrier',text:'Downloading the Monero output distribution (about 25 MB, kept on this device afterwards)…'});
+  const r=await readDist(0,tip,300000);kept={start:r.start,tip,values:r.values};}
+ async function keepDistribution(tip,quiet=false){
+  while(reading)await reading.catch(()=>{});
+  if(kept&&kept.tip===tip)return;
+  reading=readKept(tip,quiet);try{await reading;}finally{reading=null;}
+  if(distributionStore&&kept)void distributionStore.save(kept).catch(()=>{});}
+ async function distribution(tip){await keepDistribution(tip);const out=new Array(tip+1).fill(0);for(let h=kept.start;h<=tip;h++)out[h]=kept.values[h-kept.start];return out;}
+ // Read the distribution ahead of a transfer, silently (the wallet calls this when a transfer screen opens), so Review is quick.
+ async function warm(){const info=await json('get_info');await keepDistribution(info.height-1,true);return {tip:info.height-1,heights:kept.values.length};}
  // Quote: pick the input in the engine, then satisfy its decoy-sampling needs.
  async function quote({kind,wireLen,excludeKeyImages=[]}){if(!(Number.isInteger(wireLen)&&wireLen>0))throw Error('quote needs the exact record length (wireLen) from the engine plan');
-  onProgress({phase:'carrier',text:'Reading the fee rate and output distribution from the test daemon…'});
-  const info=await json('get_info');const tip=info.height-1;const rate=await feeRate();const dist=await distribution(tip);
+  onProgress({phase:'carrier',text:'Reading the fee rate and output distribution from the Monero node…'});
+  const info=await json('get_info');const tip=info.height-1;
   // Pool awareness (fix from the restart cases): an output already spent by an UNCONFIRMED transaction in the daemon's pool
   // (for example this wallet's own carrier published by another installation, or before a restart) must not be chosen
   // again; the daemon would refuse the new carrier as a double spend. Key images spent in the pool are excluded here.
-  const poolSpent=await poolSpentKeyImages();
+  // The three reads are independent and run together (28 Oct 2026).
+  const [rate,dist,poolSpent]=await Promise.all([feeRate(),distribution(tip),poolSpentKeyImages()]);
   let r=engine.call({op:'carrierQuote',kind,wireLen,feeRate:rate,distribution:dist,exclude:[...new Set([...excludeKeyImages,...poolSpent])]});let rounds=0;
   while(!r.ready){if(++rounds>12)throw Error('Decoy selection did not converge');
    onProgress({phase:'carrier',text:`Sampling ring members for the carrier (round ${rounds}, ${r.need.length} outputs)…`});
@@ -69,8 +97,15 @@ export function createCarrierBuilder({engine,rpc,fetch:f=globalThis.fetch,onProg
      break;}catch(e2){trail.push({attempt:i,action:'lookup',error:String(e2.cause?.code||e2.message).slice(0,160)});await new Promise(r=>setTimeout(r,delayMs));}}
    await new Promise(r=>setTimeout(r,delayMs));}
   return {ok:false,status:'UNCERTAIN',reason:'no reply from the daemon and the transaction is not known to it after '+attempts+' attempts: '+(last?.message||''),uncertain:true,resends:attempts-1,trail,recovered:false};}
- return {quote,sign,cancel,publish,inPool,lookup,publishWithRecovery,poolSpentKeyImages,feeRate,set onProgress(fn){onProgress=fn;}};
+ return {quote,sign,cancel,publish,inPool,lookup,publishWithRecovery,poolSpentKeyImages,feeRate,warm,set onProgress(fn){onProgress=fn;}};
 }
+// Keeps the output distribution on this device (IndexedDB, in the token worker) under a key per network; null where IndexedDB is
+// unavailable (Node tests). Counts are stored as 32-bit integers (mainnet has about 1.7e8 outputs); larger values are not stored.
+export function createDistributionStore(key){if(typeof indexedDB==='undefined')return null;
+ const open=()=>new Promise((ok,no)=>{const r=indexedDB.open('xmr20-carrier-distribution',1);r.onupgradeneeded=()=>r.result.createObjectStore('d');r.onsuccess=()=>ok(r.result);r.onerror=()=>no(r.error);});
+ const use=async(mode,fn)=>{const db=await open();try{return await new Promise((ok,no)=>{const t=db.transaction('d',mode),q=fn(t.objectStore('d'));t.oncomplete=()=>ok(q.result);t.onerror=()=>no(t.error);t.onabort=()=>no(t.error);});}finally{db.close();}};
+ return {load:async()=>{const v=await use('readonly',s=>s.get(key));return v&&v.values instanceof Uint32Array?v:null;},
+  save:async kept=>{if(kept.values.some(v=>!(v>=0&&v<=0xffffffff)))return;await use('readwrite',s=>s.put({start:kept.start,tip:kept.tip,values:Uint32Array.from(kept.values)},key));}};}
 export const PICONERO=1_000_000_000_000n;
 // FIX (review L2): EXACT piconero-derived text (up to twelve decimals, only trailing zeros removed) — used for every fee shown on
 // approval screens and journals. xmrApprox is the compact six-decimal display and is always labelled as approximate.

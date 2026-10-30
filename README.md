@@ -23,6 +23,47 @@ This repository holds every XMR20 wallet in one place, plus the engine they all 
 All three can hold the same Monero wallet. The CLI and the extension can even use the same 25-word phrase. Only send
 from one of them at a time.
 
+## How private transfers work
+
+XMR20 tokens live on Monero. Every token balance has two sides:
+
+- **Open**: like a normal token. Amounts and owners are visible on chain, and anyone can send open tokens to your
+  ordinary Monero address. Tokens bridged from Solana arrive open.
+- **Private**: only you can see it. **Make private** moves tokens from your open side to your private side; **Make
+  open** moves them back. Both are your explicit choice; nothing becomes private by itself.
+
+A **private transfer** sends from your private side to someone's private address (it starts with `xmr20p1…`; each
+wallet shows its own under **Receive private**). The amount and the recipient are not shown on chain. Your
+wallet builds a zero-knowledge proof on your own computer (Penumbra's published circuits and keys) that the transfer is
+valid without revealing it, and puts the record inside ordinary Monero transactions, whose small XMR network fee you
+pay yourself. Like everything here, this is experimental and has not had an independent security review.
+
+Private transfers need 2 XMR coins in your wallet. The wallet's **Enable private transfers** (or **Split** on the
+Monero screen) splits your XMR into a few coins once, so you are ready. An incoming transfer shows as **Pending**,
+then **Confirming n/10**, until it has 10 Monero confirmations.
+
+## What's new (30 October 2026)
+
+- **Chrome extension 0.1.124**: while a Make private / Make open / send is on its way, your balance only drops by the
+  amount that is moving (with "arriving" on the other side), instead of hiding the whole coin it came from. When the
+  bridge restarts, balances stay on screen with a "Bridge restarting" note and open forms wait for it.
+- **Website wallet** (xmr20.org): a **profile page** (portfolio, wallet, activity), the **wXMR bridge** (XMR ⇄ wXMR on
+  Solana via wxmr.io), Solana balances read directly from the chain with token prices, XMR **splits and sends in
+  Activity** with live confirmations and a link from the start, and one Phantom approval per browser session to sync.
+
+## Ready-made downloads
+
+The [Releases page](https://github.com/xmr20project/xmr20-wallets/releases) has files you can use without building
+anything:
+
+- **`XMR20-Wallet-0.1.124.zip`**: the Chrome extension, exactly the build that was tested. Unzip it and load it in
+  `chrome://extensions` ([steps](extension/README.md#install-from-a-tester-zip)).
+- **`xmr20-cli-0.3.0.zip`**: the terminal wallet with its engine already built. You need Node.js 22, then
+  `npm install`, `npm run setup` and `./xmr20` ([steps](cli/README.md#ready-made-download)).
+- **`SHA256SUMS.txt`**: each file's fingerprint, so you can check that your download is complete and unchanged.
+
+You only need the next section if you want to build the wallets yourself.
+
 ## Download (once)
 
 1. **Install Node.js** version 22 or newer from https://nodejs.org. Choose the "LTS" download, then open it and click
@@ -91,7 +132,7 @@ instead of `./xmr20`. All commands are explained in [`cli/README.md`](cli/README
 
 - `npm run build:engine` puts the engine's browser files in `engine/dist/`. The extension, the website wallet and the CLI
   each copy them from there. The build checks that these files are byte-for-byte the same as in the installed wallet
-  0.1.117.
+  0.1.124.
 - The XMR20 token engine runs in the browser: the extension popup, the xmr20.org page, or the CLI's private headless
   Chromium. Your keys never leave your computer. Scanning, proving and signing happen locally.
 
@@ -103,6 +144,10 @@ npm test
 
 This runs the engine tests, the extension's unit tests and the CLI's unit tests. More checks are listed in each
 folder's README.
+
+GitHub runs these tests, the CLI's engine test and every build automatically on each pull request and each change to
+`main` ([`.github/workflows/tests.yml`](.github/workflows/tests.yml)). It only reads the repository: nothing is
+published or deployed.
 
 ## Where this came from
 
