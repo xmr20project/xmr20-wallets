@@ -110,11 +110,13 @@ export default function ProfilePage(){
  const unknown=[...solana,...monero].some(r=>r.usd==null&&r.amount!=='—');
  // 29 Oct 2026 (owner: "remove the "your xmr20 profile" welcome screen … dont show that screen"): without a connected wallet the
  // page shows nothing of its own and the wallet's Connect window opens once the saved connection has been checked.
- if(!owner)return <ConnectFirst w={w}/>;
- const name=profile?.name||short(owner);
- // Own Monero transactions still confirming: ask the node every minute and redraw (30 Oct 2026).
+ // Own Monero transactions still confirming: ask the node every minute and redraw (30 Oct 2026). These hooks stay ABOVE the early
+ // return below: placed after it in release 28, they changed the hook count when the wallet connected after the page loaded, and
+ // React stopped the whole wallet app (blank profile, no header button).
  const [txTick,setTxTick]=useState(0);
  useEffect(()=>{if(!moneroAddress)return;let live=true;const load=()=>refreshXmrTxStatus(moneroAddress).then(()=>{if(live)setTxTick(t=>t+1);}).catch(()=>{});void load();const t=setInterval(()=>{if(!document.hidden&&openXmrTxs(moneroAddress).length)void load();},60000);return()=>{live=false;clearInterval(t);};},[moneroAddress]);
+ if(!owner)return <ConnectFirst w={w}/>;
+ const name=profile?.name||short(owner);
  const activity=[...readActivity(owner,moneroAddress),...bridgeActivity,...pendingDeposits(owner,bridgeActivity)].sort((a,b)=>(b.at||0)-(a.at||0)).slice(0,60);void txTick;
  return <section className="xp-shell">
   <div className="xp-hero">
