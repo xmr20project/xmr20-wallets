@@ -76,7 +76,7 @@ export default function WebsiteXmrSend({client,address,node,balance,syncNow,onRe
   if(!review||Date.now()>=review.expires){setStep('form');setReview(null);maxReview.current=null;throw Error('This review expired. Review the send again; nothing was sent.');}
   const row={hash:review.hash,to:review.to,amountRaw:review.amountRaw,feeRaw:review.feeRaw,at:Date.now(),status:'submitting'};saveSend(address,row);
   setMessage('Sending to the Monero network…');
-  try{const sent=await client.relay({reviewId:review.id,node});saveSend(address,{...row,hash:sent?.hash||row.hash,status:'submitted'},row.hash);
+  try{const sent=await client.relay({reviewId:review.id,node});saveSend(address,{...row,hash:sent?.hash||row.hash,status:'submitted'},row.hash);window.dispatchEvent(new Event('xmr20-xmr-tx'));
    if(!alive.current)return;setResult({...row,hash:sent?.hash||row.hash});setStep('done');setMessage('');onSent?.();}
   catch(e){
    saveSend(address,{...row,status:e?.code==='xmr-not-submitted'?'not submitted':'uncertain'});

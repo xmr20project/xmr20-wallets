@@ -14,4 +14,4 @@ await copyFile(join(dirname(require.resolve('monero-ts/package.json')),'LICENSE.
 await require('esbuild').build({entryPoints:[join(here,'../engine/shared/joint-transferable.worker.js')],bundle:true,format:'iife',platform:'browser',target:'es2022',
  inject:[join(here,'../engine/shared/polyfill.js')],outfile:join(pub,'monero-wallet/joint-transferable.worker.js'),logLevel:'silent'});
 await rm(tmp,{recursive:true,force:true});
-console.log('Engine files placed in web-wallet/public/'+(differs.length?` (differ from wallet 0.1.121: ${differs.join(', ')})`:' (identical to XMR20 Wallet 0.1.121)')+'.');
+console.log('Engine files placed in web-wallet/public/'+(differs.length?` (differ from wallet 0.1.124: ${differs.join(', ')})`:' (identical to XMR20 Wallet 0.1.124)')+'.');
