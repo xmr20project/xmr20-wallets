@@ -7,7 +7,7 @@ import {createPublicBalanceReader,cachedSolBalance,saveSolBalance} from '../../e
 import {createRefreshLanes} from './refresh-lanes.js';
 import {cachedPortfolio,savePortfolio,portfolioDisplay} from './portfolio-cache.js';
 import {cachedWalletHoldings,cacheWalletHoldings} from '../../engine/shared/holdings.js';
-import {loadSolanaHoldings,solanaDisplayRows} from './solana-holdings.js';
+import {loadSolanaHoldings,solanaDisplayRows} from '../../engine/shared/solana-holdings.js';
 import {maxControl,fillMaximum,maximumRaw,TOKEN_TRANSFER_LIMIT} from '../../engine/token/max-amount.js';
 import {solanaMaximum,solanaTokenMaximum} from '../../engine/shared/solana-max.js';
 import {createBridgeUI} from './bridge-ui.js';
@@ -17,7 +17,7 @@ import {createJointHoldings,isJointHolding,replaceHoldingSource,jointIncomingSta
 import {pendingDebits,cancellationConfirmed,balanceRejection} from './pending-debits.js';
 import {tokenImage,tokenGroups,createTokenImageClient,compactTokenBalance} from '../../engine/shared/token-display.js';
 import {sendFieldState} from './send-fields.js';
-import {createNativePriceClient,nativeUsd,walletPortfolio,walletPortfolioEstimate} from './native-prices.js';
+import {createNativePriceClient,nativeUsd,walletPortfolio,walletPortfolioEstimate} from '../../engine/shared/native-prices.js';
 import {checkTransferAmount,validateTransferQuote} from './transfer-quote.js';
 import {createPriceClient,tokenUsd,tokenPortfolio,usd,currentQuote} from '../../engine/shared/prices.js';
 import {normalizePreferences,idleExpired,AUTO_LOCK_OPTIONS,timeoutLabel} from '../../engine/shared/preferences.js';

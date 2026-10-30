@@ -91,6 +91,9 @@ pub struct Engine {
     // verification on restore), and the last block height whose extras were applied.
     pool_log: Vec<(u64, String, Vec<u8>)>,
     pool_tip: Option<u64>,
+    // 29 Oct 2026: the block height and transaction of every note commitment the pool added (shielded notes report their
+    // height, so a wallet can show "Confirming n/10" for tokens it received). Rebuilt with the pool on replay and reset.
+    note_origin: BTreeMap<[u8; 32], (u64, String)>,
     spend_pk: Option<ProvingKey<Bls12_377>>,
     output_pk: Option<ProvingKey<Bls12_377>>,
     native: Option<native::NativeWallet>,
@@ -170,8 +173,14 @@ impl Engine {
     pub fn owned(&self) -> Result<Vec<core::ledger::OwnedNote>> {
         self.pool()?.ledger.owned(self.fvk()?)
     }
-    fn note_json(o: &core::ledger::OwnedNote) -> J {
-        json!({"commitment":hex::encode(o.note.commit().0.to_bytes()),"asset":hex::encode(o.note.asset_id().to_bytes()),"amount":u128::from(o.note.amount()).to_string(),"position":o.position,"spent":o.spent})
+    fn note_json(&self, o: &core::ledger::OwnedNote) -> J {
+        let cm = o.note.commit().0.to_bytes();
+        let mut j = json!({"commitment":hex::encode(cm),"asset":hex::encode(o.note.asset_id().to_bytes()),"amount":u128::from(o.note.amount()).to_string(),"position":o.position,"spent":o.spent});
+        if let Some((height, txid)) = self.note_origin.get(&cm) {
+            j["height"] = json!(height);
+            j["txid"] = json!(txid);
+        }
+        j
     }
     fn select_shielded(&self, asset: asset::Id, amount: u128, exclude: &std::collections::BTreeSet<[u8; 32]>, max: usize) -> Result<Vec<Note>> {
         ensure!(amount > 0, "Positive amount required");
@@ -258,9 +267,14 @@ impl Engine {
         let wire = transport::unframe(extra).ok().flatten();
         let p = self.params.as_ref().context("params")?;
         let pool = self.pool.as_mut().context("params")?;
+        let before = pool.ledger.history.len();
         let result = pool.apply(wire.as_deref(), &txid, height, &p.vks);
         if result["record"] == "ignored" {
             return Ok(json!({"record":"ignored"}));
+        }
+        let added: Vec<[u8; 32]> = pool.ledger.history[before..].iter().map(|x| x.note_commitment.0.to_bytes()).collect();
+        for cm in added {
+            self.note_origin.insert(cm, (height, txid.clone()));
         }
         self.pool_log.push((height, txid.clone(), extra.to_vec()));
         let id = hex::encode(core::hash(wire.as_deref().unwrap()));
@@ -404,7 +418,7 @@ impl Engine {
     }
     pub fn call(&mut self, q: &J) -> Result<J> {
         match txt(q, "op")? {
-            "version" => Ok(json!({"scheme":SCHEME,"protocol":PROTOCOL,"engine":"xmr20-holder-wasm 0.0.3-persist","parameterManifest":MANIFEST_FORMAT,"domainLabel":DOMAIN_LABEL,"records":{"public":"XP1","credit":"XC1","burn":"XR1","shield":"XS1","unshield":"XU1","privateA":"XMA","privateB":"XMB"},"parameters":self.params.as_ref().map(|p|json!({"label":p.manifest.label,"domain":p.config.domain,"spendLoaded":self.spend_pk.is_some(),"outputLoaded":self.output_pk.is_some()}))})),
+            "version" => Ok(json!({"scheme":SCHEME,"protocol":PROTOCOL,"engine":"xmr20-holder-wasm 0.0.4-incoming","parameterManifest":MANIFEST_FORMAT,"domainLabel":DOMAIN_LABEL,"records":{"public":"XP1","credit":"XC1","burn":"XR1","shield":"XS1","unshield":"XU1","privateA":"XMA","privateB":"XMB"},"parameters":self.params.as_ref().map(|p|json!({"label":p.manifest.label,"domain":p.config.domain,"spendLoaded":self.spend_pk.is_some(),"outputLoaded":self.output_pk.is_some()}))})),
             "derive" => {
                 let mut root = Zeroizing::new(bytes32(txt(q, "root")?)?);
                 let account = q["account"].as_u64().unwrap_or(0) as u32;
@@ -443,6 +457,7 @@ impl Engine {
                 let served: Option<Config> = if q["served"].is_null() { None } else { Some(serde_json::from_value(q["served"].clone()).context("served configuration")?) };
                 let p = Params::new(manifest, served)?;
                 self.pool = Some(pool::Pool::new(p.domain));
+                self.note_origin.clear();
                 self.records.clear();
                 self.pool_log.clear();
                 self.pool_tip = None;
@@ -456,6 +471,7 @@ impl Engine {
             "reset" => {
                 let d = self.params()?.domain;
                 self.pool = Some(pool::Pool::new(d));
+                self.note_origin.clear();
                 self.records.clear();
                 self.pool_log.clear();
                 self.pool_tip = None;
@@ -516,6 +532,7 @@ impl Engine {
                 let entries = q["log"].as_array().context("log")?;
                 let d = self.params()?.domain;
                 self.pool = Some(pool::Pool::new(d));
+                self.note_origin.clear();
                 self.records.clear();
                 self.pool_log.clear();
                 let mut last = 0;
@@ -609,6 +626,75 @@ impl Engine {
                 self.tip = self.tip.max(height);
                 Ok(r)
             }
+            // 29 Oct 2026: read-only check of waiting (unconfirmed) transactions for incoming tokens. The node's pool
+            // transactions are tried, in the given order, on a COPY of the token pool at the next height; nothing in the engine
+            // changes. A record that spends any of this wallet's notes is its own operation (a send, Make private/open), so its
+            // outputs to this wallet are change and are left out. First halves of two-part private transfers add nothing until
+            // the second half is also waiting. A second pass retries records that depend on another waiting record.
+            "peekPool" => {
+                let txs: Vec<(String, String)> = q["txs"].as_array().context("txs")?.iter().map(|t| Ok((txt(t, "txid")?.to_string(), txt(t, "hex")?.to_string()))).collect::<Result<_>>()?;
+                let mut wires = vec![];
+                for (txid, hex_tx) in &txs {
+                    let b = hex::decode(hex_tx)?;
+                    let tx = monero_wallet::transaction::Transaction::read(&mut b.as_slice()).map_err(|e| anyhow::anyhow!("Transaction: {e}"))?;
+                    ensure!(hex::encode(tx.hash()) == *txid, "Transaction hash mismatch");
+                    if let Some(w) = transport::unframe(&tx.prefix().extra).ok().flatten() {
+                        if transport::known_magic(&w) {
+                            wires.push((txid.clone(), w));
+                        }
+                    }
+                }
+                if wires.is_empty() {
+                    return Ok(json!({"incoming":[],"checked":txs.len(),"records":0}));
+                }
+                let p = self.params()?;
+                let fvk = self.fvk()?;
+                let owner = self.owner_key;
+                let mut candidate = self.pool()?.clone();
+                let height = self.tip + 1;
+                let shielded_of = |pool: &pool::Pool| -> Result<BTreeMap<[u8; 32], (bool, asset::Id, u128)>> {
+                    Ok(pool.ledger.owned(fvk)?.into_iter().map(|o| (o.note.commit().0.to_bytes(), (o.spent, o.note.asset_id(), u128::from(o.note.amount())))).collect())
+                };
+                let public_of = |pool: &pool::Pool| -> BTreeMap<String, pool::PublicNote> { owner.map(|o| pool.notes_of_owner(&o).into_iter().collect()).unwrap_or_default() };
+                let mut incoming = vec![];
+                let mut accepted = 0usize;
+                let mut todo = wires;
+                for _pass in 0..2 {
+                    let mut retry = vec![];
+                    for (txid, w) in todo {
+                        let (sh0, pb0) = (shielded_of(&candidate)?, public_of(&candidate));
+                        let r = candidate.apply(Some(&w), &txid, height, &p.vks);
+                        match r["record"].as_str() {
+                            Some("accepted") => accepted += 1,
+                            Some("rejected") => {
+                                retry.push((txid, w));
+                                continue;
+                            }
+                            _ => continue,
+                        }
+                        let (sh1, pb1) = (shielded_of(&candidate)?, public_of(&candidate));
+                        let own = sh0.iter().any(|(cm, (spent, _, _))| !spent && sh1.get(cm).map_or(false, |x| x.0)) || pb0.keys().any(|id| !pb1.contains_key(id));
+                        if own {
+                            continue;
+                        }
+                        for (cm, (spent, a, v)) in &sh1 {
+                            if !spent && *v > 0 && !sh0.contains_key(cm) {
+                                incoming.push(json!({"kind":"shielded","record":r["kind"],"asset":hex::encode(a.to_bytes()),"amount":v.to_string(),"commitment":hex::encode(cm),"txid":txid}));
+                            }
+                        }
+                        for (id, n) in &pb1 {
+                            if n.amount > 0 && !pb0.contains_key(id) {
+                                incoming.push(json!({"kind":"public","record":r["kind"],"asset":n.asset,"amount":n.amount.to_string(),"id":id,"txid":txid}));
+                            }
+                        }
+                    }
+                    if retry.is_empty() {
+                        break;
+                    }
+                    todo = retry;
+                }
+                Ok(json!({"incoming":incoming,"checked":txs.len(),"records":accepted}))
+            }
             "tip" => {
                 self.tip = q["height"].as_u64().context("height")?;
                 Ok(json!({"tip":self.tip}))
@@ -632,11 +718,11 @@ impl Engine {
                     "canSpend":self.key.is_some(),
                     "tip":self.tip,
                     "public":{"balances":public_balances.iter().map(|(a,v)|(a.clone(),v.to_string())).collect::<BTreeMap<_,_>>(),"notes":public_notes.iter().map(|(id,n)|json!({"id":id,"asset":n.asset,"amount":n.amount.to_string(),"height":n.height,"txid":n.txid})).collect::<Vec<_>>()},
-                    "shielded":{"balances":shielded.iter().map(|(a,v)|(a.clone(),v.to_string())).collect::<BTreeMap<_,_>>(),"notes":owned.iter().filter(|o|!o.spent&&u128::from(o.note.amount())>0).map(Self::note_json).collect::<Vec<_>>(),"spent":owned.iter().filter(|o|o.spent).map(Self::note_json).collect::<Vec<_>>(),"zeroNotes":owned.iter().filter(|o|!o.spent&&u128::from(o.note.amount())==0).count()},
+                    "shielded":{"balances":shielded.iter().map(|(a,v)|(a.clone(),v.to_string())).collect::<BTreeMap<_,_>>(),"notes":owned.iter().filter(|o|!o.spent&&u128::from(o.note.amount())>0).map(|o| self.note_json(o)).collect::<Vec<_>>(),"spent":owned.iter().filter(|o|o.spent).map(|o| self.note_json(o)).collect::<Vec<_>>(),"zeroNotes":owned.iter().filter(|o|!o.spent&&u128::from(o.note.amount())==0).count()},
                     // Backwards-compatible aliases for callers that read the shielded view only.
                     "balances":shielded.iter().map(|(a,v)|(a.clone(),v.to_string())).collect::<BTreeMap<_,_>>(),
-                    "notes":owned.iter().filter(|o|!o.spent&&u128::from(o.note.amount())>0).map(Self::note_json).collect::<Vec<_>>(),
-                    "spent":owned.iter().filter(|o|o.spent).map(Self::note_json).collect::<Vec<_>>(),
+                    "notes":owned.iter().filter(|o|!o.spent&&u128::from(o.note.amount())>0).map(|o| self.note_json(o)).collect::<Vec<_>>(),
+                    "spent":owned.iter().filter(|o|o.spent).map(|o| self.note_json(o)).collect::<Vec<_>>(),
                     "records":records,
                     "pool":pool.summary()
                 }))

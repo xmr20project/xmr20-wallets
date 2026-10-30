@@ -29,8 +29,15 @@ async function creationNodeHeight(node){
 export function nativeRestoreHeight(address){
  try{const raw=localStorage.getItem('xmr20-native-birth:'+address);if(!/^\d+$/.test(raw||''))return XMR20_MONERO_START;const height=Number(raw);return Number.isSafeInteger(height)?height:XMR20_MONERO_START;}catch{return XMR20_MONERO_START;}
 }
+// 28 Oct 2026 (owner: "allow users to see their wallets creation height"): the saved block itself, or null when this browser has
+// none (nativeRestoreHeight then falls back to the XMR20 start).
+export function savedNativeRestoreHeight(address){
+ try{const raw=localStorage.getItem('xmr20-native-birth:'+address);if(!/^\d+$/.test(raw||''))return null;const height=Number(raw);return Number.isSafeInteger(height)?height:null;}catch{return null;}
+}
 export function saveNativeRestoreHeight(address,height){
- try{if(!Number.isSafeInteger(height)||height<0)return false;const key='xmr20-native-birth:'+address;localStorage.setItem(key,String(height));return localStorage.getItem(key)===String(height);}catch{return false;}
+ try{if(!Number.isSafeInteger(height)||height<0)return false;const key='xmr20-native-birth:'+address;localStorage.setItem(key,String(height));const ok=localStorage.getItem(key)===String(height);
+  // The wallet backup panel and the Monero row show and use the new block at once.
+  if(ok)window.dispatchEvent(new CustomEvent('xmr20-start-block',{detail:{address,height}}));return ok;}catch{return false;}
 }
 // 28 Oct 2026: `onCheckpoint({cache,height})` receives the worker's saved scan progress; `open({...,cache})` resumes from it.
 // 28 Oct 2026 (owner: send XMR from the website): the worker is the installed extension's native worker, so the client also

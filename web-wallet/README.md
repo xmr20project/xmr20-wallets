@@ -52,6 +52,14 @@ This folder holds the wallet part on its own.
 - `src/private-wallet-host.js`, `src/private-tokens.jsx`: host the shared token engine (Open/Private XMR20, the private
   bridge, Enable private transfers) inside the page. Solana signing goes through Phantom or Solflare.
 - `src/website-native-swap.jsx`, `src/website-native-bridge.jsx`: the older bridge's screens.
+- `src/website-xmr-detail.jsx`, `src/website-xmr-split.jsx`, `src/xmr-tx-store.js`: the Monero screen (Send, Split, Bridge,
+  your receive address), splitting XMR into coins, and this browser's own XMR sends and splits with their confirmations.
+- `src/profile-page.jsx`, `src/profile-store.js`: the profile page (portfolio, wallet, activity). The profile itself is
+  kept in this browser only.
+- `src/wxmr-bridge.js`, `src/website-wxmr-bridge.jsx`, `src/website-wxmr-send.jsx`: XMR ⇄ wXMR through the wxmr.io
+  bridge (a public Solana program run by the wXMR team) and sending wXMR.
+- `src/solana-chain-holdings.js`, `src/site-prices.js`: Solana token balances read from the chain, and display prices
+  (Raydium LaunchLab for XMR20 tokens, CoinGecko for SOL/XMR).
 - `src/wallet-premium.css`: the wallet's look.
 - `shared/`: small helpers only the website uses. Code shared with the extension is in `../engine/shared/`.
 

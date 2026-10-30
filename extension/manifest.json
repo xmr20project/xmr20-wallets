@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "XMR20 Wallet — Bridge testing",
-  "version": "0.1.119",
+  "version": "0.1.124",
   "minimum_chrome_version": "120",
   "description": "SOL, Monero and indexed XMR20 inscriptions. Local encrypted wallets and watch-only accounts.",
   "action": {

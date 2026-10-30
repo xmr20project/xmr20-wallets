@@ -315,16 +315,19 @@ async function handle({data}){
    await snapshot(data.node);
    pending=null;
    const protectedImages=await guardCarriers(data.node,data.carrierLookup);
-   const unlocked=BigInt(await wallet.getUnlockedBalance()),part=unlocked/3n;
-   if(part<200000000n){const error=Error('You need at least 0.0006 unlocked XMR to make 3 coins. Receive more XMR, or wait until incoming XMR unlocks (10 confirmations).');error.code='split-too-small';throw error;}
-   const tx=await wallet.createTx({accountIndex:0,destinations:[{address:own,amount:part},{address:own,amount:part}],relay:false});
+   // 28 Oct 2026: `coins` (2..16) = coins-1 equal payments to this wallet plus the change; 3 when omitted.
+   const coins=data.coins===undefined?3:data.coins;
+   if(!Number.isInteger(coins)||coins<2||coins>16){const error=Error('Choose between 2 and 16 coins.');error.code='split-coins';throw error;}
+   const unlocked=BigInt(await wallet.getUnlockedBalance()),part=unlocked/BigInt(coins);
+   if(part<200000000n){const need=(Number(200000000n*BigInt(coins))/1e12).toFixed(4).replace(/0+$/,'').replace(/\.$/,'');const error=Error('You need at least '+need+' unlocked XMR to make '+coins+' coins. Receive more XMR, or wait until incoming XMR unlocks (10 confirmations).');error.code='split-too-small';throw error;}
+   const tx=await wallet.createTx({accountIndex:0,destinations:Array.from({length:coins-1},()=>({address:own,amount:part})),relay:false});
    checkInputs(tx,protectedImages);
    const destinations=tx.getOutgoingTransfer().getDestinations();
-   if(destinations.length!==2||destinations.some(d=>d.getAddress()!==own||BigInt(d.getAmount())!==part)||tx.getIsRelayed())throw Error('Transfer mismatch');
-   const feeRaw=String(tx.getFee()),hash=tx.getHash(),amountRaw=String(part*2n);
+   if(destinations.length!==coins-1||destinations.some(d=>d.getAddress()!==own||BigInt(d.getAmount())!==part)||tx.getIsRelayed())throw Error('Transfer mismatch');
+   const feeRaw=String(tx.getFee()),hash=tx.getHash(),amountRaw=String(part*BigInt(coins-1));
    if(!/^[0-9]+$/.test(feeRaw)||! /^[a-f0-9]{64}$/.test(hash))throw Error('Invalid transaction');
    const id=crypto.randomUUID();pending={id,tx,to:own,amountRaw,node:data.node,protectedImages,expires:Date.now()+120000};
-   result={id,to:own,amountRaw,partRaw:String(part),coins:3,unlockedRaw:String(unlocked),feeRaw,hash,expires:pending.expires};
+   result={id,to:own,amountRaw,partRaw:String(part),coins,unlockedRaw:String(unlocked),feeRaw,hash,expires:pending.expires};
   }else if(data.action==='prepare'){
    if(!wallet||!/^(?:[48][1-9A-HJ-NP-Za-km-z]{94}|4[1-9A-HJ-NP-Za-km-z]{105})$/.test(data.to)||! /^[1-9][0-9]{0,19}$/.test(data.amountRaw))throw Error('Invalid transfer');
    if(data.to===await wallet.getPrimaryAddress())throw Error('Same address');
@@ -395,7 +398,7 @@ async function handle({data}){
    post({id:data.id,code,error:code==='xmr-not-submitted'?'This payment was not submitted. Check its status before trying again.':'Check the saved payment to see whether it reached Monero. Retry only that saved transaction.'});return;
   }
   if(data.action==='checkPayment'){post({id:data.id,error:'Could not check this payment. Your saved transaction is kept; try again.'});return;}
-  if(error?.code==='split-too-small'){post({id:data.id,error:error.message,code:error.code})
+  if(error?.code==='split-too-small'||error?.code==='split-coins'){post({id:data.id,error:error.message,code:error.code})
 return
 }
   if(error?.code==='carrier-check-unavailable'||error?.code==='carrier-check-capacity'){post({id:data.id,error:error.message,code:error.code,count:error.count});return;}
