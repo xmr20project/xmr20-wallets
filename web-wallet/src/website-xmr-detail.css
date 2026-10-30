@@ -7,7 +7,8 @@ dialog.wallet-dialog .xmr-detail .xmr-detail-head button{flex:none;width:38px;he
 .website-native-page .xmr-detail .xmr-detail-head button svg{width:18px;height:18px}
 .website-native-page .xmr-detail .xmr-detail-scroll{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:12px;padding-bottom:4px}
 .website-native-page .xmr-detail .xmr-detail-hero{display:flex;flex-direction:column;align-items:center;gap:6px;padding:4px 0}
-.website-native-page .xmr-detail .xmr-detail-coin{width:64px;height:64px;border-radius:50%;overflow:hidden;box-shadow:0 0 34px rgba(255,129,61,.28)}
+/* 29 Oct 2026 (owner: the outer glow "looks bad here, maybe just remove the glow"): no glow. */
+.website-native-page .xmr-detail .xmr-detail-coin{width:64px;height:64px;border-radius:50%;overflow:hidden}
 .website-native-page .xmr-detail .xmr-detail-coin img{width:100%;height:100%;display:block}
 .website-native-page .xmr-detail .xmr-detail-total{font-size:30px;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1.15}
 .website-native-page .xmr-detail .xmr-detail-total span{font-size:15px;font-weight:600;color:#a8a29a}
@@ -22,3 +23,21 @@ dialog.wallet-dialog .xmr-detail .xmr-detail-actions button:hover{border-color:#
 dialog.wallet-dialog .xmr-detail .xmr-detail-card-head button{min-height:28px;height:28px;padding:0 12px;border-radius:999px;border:0;background:rgba(255,129,61,.14);color:#ff9a5c;font:inherit;font-size:12px;font-weight:650;cursor:pointer}
 .website-native-page .xmr-detail .xmr-detail-address{padding:12px;border-radius:12px;border:1px solid #2a2724;background:#0c0b0a;font:12.5px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere;user-select:all}
 .website-native-page .xmr-detail .xmr-detail-card small{font-size:12px;color:#8f8a84}
+/* Bridge choice (29 Oct 2026): the two bridges as rows. */
+dialog.wallet-dialog .xmr-detail .xmr-detail-option{display:flex;align-items:center;gap:12px;width:100%;min-height:72px;padding:12px 14px;border-radius:16px;border:1px solid #2a2724;background:linear-gradient(145deg,#23211e,#191816);color:#f0ebe5;font:inherit;text-align:left;cursor:pointer}
+dialog.wallet-dialog .xmr-detail .xmr-detail-option:hover{border-color:#4a3221}
+.website-native-page .xmr-detail .xmr-detail-option-icon{flex:none;width:40px;height:40px;border-radius:50%;overflow:hidden;display:grid;place-items:center;background:#15140f}
+.website-native-page .xmr-detail .xmr-detail-option-icon img{width:100%;height:100%;object-fit:cover}
+.website-native-page .xmr-detail .xmr-detail-option-icon img[src$=".svg"]{width:60%;height:60%;object-fit:contain}
+.website-native-page .xmr-detail .xmr-detail-option-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.website-native-page .xmr-detail .xmr-detail-option-text strong{font-size:15px}
+.website-native-page .xmr-detail .xmr-detail-option-text small{font-size:12px;color:#a8a29a}
+.website-native-page .xmr-detail .xmr-detail-option>svg{flex:none;width:18px;height:18px;color:#ff813d}
+
+/* 30 Oct 2026: this wallet's own sends and splits still confirming (xmr-tx-store.js) */
+.xmr-detail-pending-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 0;border-top:1px solid rgba(255,255,255,.06)}
+.xmr-detail-pending-row:first-of-type{border-top:0}
+.xmr-detail-pending-row span{display:flex;flex-direction:column;gap:2px;min-width:0}
+.xmr-detail-pending-row strong{font-size:13px;font-weight:600}
+.xmr-detail-pending-row small{font-size:11px;color:#9a9690}
+.xmr-detail-pending-row a{font-size:12px;color:#f2935c;text-decoration:none;white-space:nowrap}

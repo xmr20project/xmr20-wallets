@@ -15,7 +15,7 @@ export async function buildCli({quiet=false}={}){
  await require('esbuild').build({entryPoints:[join(here,'browser/host.js')],outfile:join(out,'host.js'),bundle:true,format:'esm',platform:'browser',target:'chrome120',minify:true,
   define,inject:[join(here,'../engine/shared/polyfill.js')],logLevel:'warning'});
  await writeFile(join(out,'host.html'),'<!doctype html><html><head><meta charset="utf-8"><title>XMR20 CLI engine</title></head><body><script type="module" src="/host.js"></script></body></html>\n');
- if(!quiet)console.log(`CLI engine ready in ${out}${engine.differs.length?' (engine files differ from wallet 0.1.121: '+engine.differs.join(', ')+')':' (engine files identical to XMR20 Wallet 0.1.121)'}.`);
+ if(!quiet)console.log(`CLI engine ready in ${out}${engine.differs.length?' (engine files differ from wallet 0.1.124: '+engine.differs.join(', ')+')':' (engine files identical to XMR20 Wallet 0.1.124)'}.`);
  return engine;
 }
 if(process.argv[1]===import.meta.filename)await buildCli();

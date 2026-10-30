@@ -5,6 +5,7 @@
 // connected Phantom/Solflare wallet instead of a key held by the wallet. The extension's screens and token rows are drawn inside
 // shadow roots that carry the extension's own stylesheet, so they look the same and the site's styles cannot reach them.
 import {createPrivateFormat} from '../../engine/token/token-format.js';
+import {createPrivateJournal,JOURNAL_KEY,SALT_KEY} from '../../engine/token/private-journal.js';
 import {createWorkerClient} from '../../engine/token/worker-client.js';
 import {amount,units,importSol} from '../../engine/shared/core.js';
 import {compactTokenBalance} from '../../engine/shared/token-display.js';
@@ -16,6 +17,7 @@ import {sha256} from '@noble/hashes/sha256';
 import {bytesToHex} from '@noble/hashes/utils';
 import {loadTokenImages} from './wallet-token-images.js';
 import {moneroWalletVault} from './monero-wallet-vault.js';
+import {recordBridgeDeposit} from './profile-store.js';
 import {nativeRestoreHeight} from '../../engine/monero/native-wallet-client.js';
 
 const BASE=(import.meta.env?.BASE_URL||'/')+'xmr20-private/';
@@ -48,6 +50,18 @@ const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 // Saved pending operations and the journal are per site (localStorage), like the extension's are per install.
 const store={async get(k){try{return JSON.parse(localStorage.getItem(k)||'null');}catch{return null;}},async set(k,v){localStorage.setItem(k,JSON.stringify(v));}};
 const journalSecret=seed=>bytesToHex(sha256(new TextEncoder().encode('XMR20-website-private-journal-v1\n'+seed.trim().split(/\s+/).join(' '))));
+// 30 Oct 2026 (owner: a new Phantom and a new Monero wallet in the same browser showed "Saved private-operation journal could
+// not be read"): each Monero wallet keeps its own journal on this site. Before, the site had one journal, and only the first
+// wallet's phrase opens it. That journal moves (a copy; the original stays) to the first wallet whose phrase opens it, once; any
+// other wallet starts its own.
+const journalStore=(address,secret)=>{
+ const ns=':'+bytesToHex(sha256(new TextEncoder().encode('XMR20-website-journal|'+address))).slice(0,24);let adopted=null;
+ const adopt=async()=>{if(await store.get(SALT_KEY+ns)||!await store.get(JOURNAL_KEY))return;
+  const old=createPrivateJournal({store});try{await old.unlock(secret());await old.read();}catch{return;}
+  await store.set(JOURNAL_KEY+ns,await store.get(JOURNAL_KEY));await store.set(SALT_KEY+ns,await store.get(SALT_KEY));};
+ const ready=()=>adopted??=adopt().catch(e=>{adopted=null;throw e;});
+ return {async get(k){await ready();return store.get(k+ns);},async set(k,v){await ready();return store.set(k+ns,v);}};
+};
 // 28 Oct 2026 ("Enable private transfers"): the Monero row registers its unlocked Monero wallet here, so the token screen's
 // split can use it (the token module itself never holds that wallet).
 let nativeWallet=null;
@@ -67,7 +81,9 @@ export function createWebsitePrivateWallet({account:fixed,signSol,onChange=()=>{
  // Element lookups search the dialog first, then every attached row container (each its own shadow root).
  const $=selector=>{for(const root of roots){const el=root.querySelector(selector);if(el)return el;}return null;};
  const $$=selector=>{const found=[];for(const root of roots)found.push(...root.querySelectorAll(selector));return found;};
- const on=(id,fn)=>{const el=$('#'+id);if(el)el.onclick=fn;};
+ // 30 Oct 2026 (owner: "i cant actually click on my xmr20 tokens on monero"): a page can show the token rows in more than one place (the
+ // wallet sheet and the profile's Wallet tab); the handler goes on every copy, not only the first root that has the id.
+ const on=(id,fn)=>{for(const el of $$('#'+id))el.onclick=fn;};
  const account=()=>closed?null:fixed;
  const same=e=>{if(e!==epoch||!account())throw Error('Wallet changed or locked.');};
  function toast(text){toastEl.textContent=text;toastEl.classList.add('visible');clearTimeout(toastTimer);toastTimer=setTimeout(()=>toastEl.classList.remove('visible'),3200);}
@@ -91,7 +107,10 @@ export function createWebsitePrivateWallet({account:fixed,signSol,onChange=()=>{
  async function run(fn){if(busy)return;busy=true;const e=epoch,task=++runSequence;const buttons=[...modal.querySelectorAll('button:not([data-keep]),input,textarea,select')];buttons.forEach(b=>b.disabled=true);if($('#error'))$('#error').textContent='';
   try{await fn(e);}catch(error){if(e===epoch){if($('#progress'))$('#progress').textContent='';if($('#error'))$('#error').textContent=error.message||'Could not complete. Try again.';else toast(error.message);}}
   finally{if(task===runSequence){busy=false;buttons.forEach(b=>b.disabled=b.dataset.disabled==='true');}}}
- const workerClient=(file,hooks={})=>createWorkerClient(file,{...hooks,spawn:name=>new Worker(BASE+name)});
+ // 29 Oct 2026 (owner: "Reading XMR20 token history… 0%" did not move): scan progress redraws the token rows (the percentage) at
+ // most every 1.5 s; before, the rows were drawn only when a sync started or finished.
+ let progressDrawn=0;
+ const workerClient=(file,hooks={})=>createWorkerClient(file,{...hooks,onProgress:p=>{hooks.onProgress?.(p);if(p?.phase==='scan'&&Date.now()-progressDrawn>=1500){progressDrawn=Date.now();onChange();}},spawn:name=>new Worker(BASE+name)});
  const oneShot=(file,action,args)=>{const c=workerClient(file);return c.call(action,args).finally(()=>c.close());};
  // The journal is encrypted at rest with a key from the account's Monero phrase (the extension uses its vault password).
  const secret=()=>{const a=account();if(!a?.xmrSeed)throw Error('Unlock the Monero wallet first.');return journalSecret(a.xmrSeed);};
@@ -100,7 +119,7 @@ export function createWebsitePrivateWallet({account:fixed,signSol,onChange=()=>{
  const api=location.origin==='https://xmr20.org'?'https://api.xmr20.org':location.origin;
  const pf=createPrivateFormat({endpoint:api+'/api/private-bridge',node:api+'/api/private-node',
   signSol:async tx=>{const signed=await signSol(tx);if(!signed?.signatures?.some(s=>s.signature&&s.publicKey.toBase58()===account()?.sol))throw Error('The wallet did not sign with the connected account. Nothing was sent.');return signed;},
-  account,oneShot,workerClient,store,secret,show,on,run,toast,esc,amount,units,compactTokenBalance,importSol,same,$,
+  account,oneShot,workerClient,store:journalStore(fixed.xmr,secret),secret,show,on,run,toast,esc,amount,units,compactTokenBalance,importSol,same,$,
   render:()=>onChange(),onActivity,close,tokenIcon,usdOf,solBalance,$$,
   splitXmr:{prepare:async()=>{const n=nativeFor(account().xmr);await n.syncNow();return n.client.prepareSplit({node:n.node,carrierLookup:'local'});},
    checkCoins:async()=>{const n=nativeFor(account().xmr);return n.client.checkCarriers({node:n.node,carrierLookup:'node'});},
@@ -132,7 +151,7 @@ export function openWebsitePrivateWallet({owner,address,seed,height,provider}){
  const account={id:websiteAccountId(owner,address),sol:owner,xmr:address,xmrSeed:seed,height:Number(height)||0};
  // Token artwork from the site's checked catalog images, as the extension's token list shows it.
  void loadTokenImages().then(map=>{images=map;notify();});
- current=createWebsitePrivateWallet({account,onChange:notify,onActivity:()=>window.dispatchEvent(new Event('xmr20-holdings-refresh')),solBalance:()=>solLamports,tokenIcon:mint=>images.get(mint)||null,signSol:async tx=>{provider.assertCurrent?.();return provider.signTransaction(tx);}});
+ current=createWebsitePrivateWallet({account,onChange:notify,onActivity:a=>{if(a?.kind==='deposit')recordBridgeDeposit(owner,a);window.dispatchEvent(new Event('xmr20-holdings-refresh'));},solBalance:()=>solLamports,tokenIcon:mint=>images.get(mint)||null,signSol:async tx=>{provider.assertCurrent?.();return provider.signTransaction(tx);}});
  notify();void current.refresh().finally(notify);return current;
 }
 // The open token wallet for this Solana + Monero pair, opening it with one approval from the connected wallet when needed
@@ -141,7 +160,7 @@ export async function ensureWebsitePrivateWallet({owner,address,provider}){
  const open=current?.account();if(open&&open.sol===owner&&open.xmr===address)return current;
  const context={owner,network:'mainnet',address};
  if(!provider?.signMessage||!moneroWalletVault().has(context))throw Error('Sync this Monero wallet once on the Monero tab, or import it with your Solana wallet connected. Bridged tokens arrive there.');
- const seed=await moneroWalletVault().load(context,provider);
+ const seed=await moneroWalletVault().load(context,provider,{session:true});
  return openWebsitePrivateWallet({owner,address,seed,height:nativeRestoreHeight(address),provider});
 }
 export function closeWebsitePrivateWallet(){if(!current)return;const c=current;current=null;c.dispose();notify();}
