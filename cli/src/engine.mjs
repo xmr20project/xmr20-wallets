@@ -10,6 +10,14 @@ const ROOT=join(import.meta.dirname,'../.engine');
 const CSP="default-src 'none'; script-src 'self' 'wasm-unsafe-eval' 'unsafe-eval'; worker-src 'self'; connect-src 'self' https://api.xmr20.org https://xmr-node.cakewallet.com:18081 https://node.sethforprivacy.com; frame-ancestors 'none'";
 const TYPES={'.wasm':'application/wasm','.html':'text/html; charset=utf-8','.json':'application/json','.js':'text/javascript','.txt':'text/plain'};
 async function bounded(response,limit){if(!response.body)return Buffer.alloc(0);const parts=[];let size=0;for await(const c of response.body){size+=c.length;if(size>limit)throw Error('Reply too large');parts.push(c);}return Buffer.concat(parts);}
+// Why the private browser did not start. Ubuntu 23.10 and newer (AppArmor) block the user namespaces Chromium's sandbox
+// needs, and Chromium then stops with "No usable sandbox!". The CLI keeps the sandbox on; cli/README.md "Linux: Ubuntu 24.04
+// and newer" allows it for the downloaded browser only.
+export function startFailure(error,platform=process.platform){
+ if(error?.code==='EADDRINUSE')return 'Another program is using this wallet\'s engine port. Close the other xmr20 window and try again.';
+ if(platform==='linux'&&/No usable sandbox/.test(String(error?.message)))return 'The browser engine could not start its security sandbox: this Linux system blocks it (Ubuntu 24.04 and newer do). The CLI only runs with that sandbox. Allow it once with the steps under "Linux: Ubuntu 24.04 and newer" in the CLI\'s README.md, then try again.';
+ return 'Could not start the CLI engine. In the cli folder run "npm run setup" (it downloads the browser engine), then try again.';
+}
 export async function ensureBuilt(){try{await lstat(join(ROOT,'host.js'));await lstat(join(ROOT,'engine/private-holder.worker.js'));}catch{const {buildCli}=await import('../build.mjs');await buildCli({quiet:true});}}
 // onRelay(kind) is told before any transaction leaves for a Monero node, so the terminal can say so; returning false blocks it.
 export async function startEngine(dir,{onProgress=()=>{},onRelay=()=>{},fetcher=fetch}={}){
@@ -56,8 +64,7 @@ export async function startEngine(dir,{onProgress=()=>{},onRelay=()=>{},fetcher=
   await page.exposeFunction('cliSaveCheckpoint',async(base64,height)=>{if(typeof base64!=='string'||base64.length>256*1024*1024)return false;await atomicWrite(join(dir,'xmr-scan-cache.b64'),base64);await atomicWrite(join(dir,'xmr-scan-height.json'),JSON.stringify({height}));return true;});
   await page.goto(origin+'/host.html');await page.waitForFunction(()=>window.cliReady===true,null,{timeout:60000});
  }catch(e){await context?.close().catch(()=>{});server.closeAllConnections?.();await new Promise(r=>server.close(r));
-  if(e.code==='EADDRINUSE')throw new UserError('Another program is using this wallet\'s engine port. Close the other xmr20 window and try again.');
-  throw new UserError('Could not start the CLI engine. In the cli folder run "npm run setup" (it downloads the browser engine), then try again.');}
+  throw new UserError(startFailure(e));}
  return {
   origin,
   async call(name,...args){need(!closed,'The engine is closed.');let answer;

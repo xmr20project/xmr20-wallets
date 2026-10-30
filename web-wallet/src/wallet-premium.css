@@ -90,6 +90,11 @@ dialog.wallet-dialog .wallet-dialog-body details.wallet-height>summary{font-weig
 dialog.wallet-dialog .wallet-dialog-body details.wallet-height>summary span{color:#8f8a84}
 dialog.wallet-dialog .wallet-dialog-body details.wallet-height>summary em{float:right;font-style:normal;color:var(--wp-orange);font-weight:600;margin-right:6px}
 dialog.wallet-dialog .wallet-dialog-body details.wallet-height>summary::after{content:none}
+/* 28 Oct 2026 (owner: "the 'change' … is too close to the other text"): the row is a flex line, so the float never applied.
+   Change is pinned to the right with 16px before it; the description wraps on its own side when the window is narrow. */
+dialog.wallet-dialog.wallet-dialog .wallet-dialog-body details.wallet-height>summary{display:flex;align-items:flex-start;gap:16px}
+dialog.wallet-dialog.wallet-dialog .wallet-dialog-body details.wallet-height>summary span.wallet-height-text{flex:1 1 auto;min-width:0;color:inherit}
+dialog.wallet-dialog.wallet-dialog .wallet-dialog-body details.wallet-height>summary em{float:none;flex:none;margin:0 6px 0 0}
 
 /* Panels opened inside the list (bridge, swap, send, import, setup) read as one card */
 dialog.wallet-dialog .wallet-dialog-body :is(.wallet-action-sheet,.wallet-import,.wallet-setup-panel,.native-unlock){margin:8px 0 0;padding:14px;border-radius:16px;background:#151413;border:1px solid #24211e}
@@ -128,6 +133,10 @@ dialog.wallet-dialog .wallet-dialog-body :is(.native-xmr-details,.wallet-advance
 dialog.wallet-dialog .wallet-dialog-body :is(.native-xmr-details,.wallet-advanced)>:not(summary){margin:0 13px 13px}
 dialog.wallet-dialog .wallet-dialog-body .native-xmr-details .native-wallet{margin:0 13px 13px;padding:0;border:0;background:none}
 dialog.wallet-dialog.wallet-dialog .wallet-dialog-body details.wallet-advanced,dialog.wallet-dialog.wallet-dialog .wallet-dialog-body details.wallet-advanced>summary{background:var(--wp-panel)}
+/* 28 Oct 2026 (owner: "there is a box that sticks out … it should just be a bubble box"): the summary's background is rounded
+   like the box (15px, inside its 1px border) instead of poking out at the top. An explicit radius: a summary inherits from the
+   details element's built-in slot, not from the box. */
+dialog.wallet-dialog.wallet-dialog .wallet-dialog-body :is(.native-xmr-details,.wallet-advanced)>summary{border-radius:14px}
 dialog.wallet-dialog .wallet-dialog-body details:not(.wallet-height)>summary::after{content:"";float:none;width:7px;height:7px;margin-left:auto;margin-right:4px;border-right:1.5px solid #8f8a84;border-bottom:1.5px solid #8f8a84;transform:rotate(-45deg);transition:transform .15s}
 dialog.wallet-dialog .wallet-dialog-body details:not(.wallet-height)[open]>summary::after{transform:rotate(45deg)}
 dialog.wallet-dialog .wallet-dialog-body details:not(.native-xmr-details):not(.wallet-advanced):not(.wallet-height)>summary{display:flex;align-items:center}
@@ -174,6 +183,22 @@ dialog.wallet-dialog .wallet-dialog-head h2 .wallet-head-address em{display:inli
 dialog.wallet-dialog .wallet-dialog-head h2 .wallet-head-address em svg{width:12px;height:12px}
 dialog.wallet-dialog .wallet-dialog-head h2 .wallet-head-address:is(:hover,:focus-visible) em{opacity:1;transform:none}
 @media (hover:none){dialog.wallet-dialog .wallet-dialog-head h2 .wallet-head-address em{opacity:1;transform:none}}
+/* 28 Oct 2026 (owner): on the Monero tab the header shows the normal and the private address side by side, labelled Normal and
+   Private; a click copies, and Copy shows next to the label on hover (always on touch screens). */
+dialog.wallet-dialog .wallet-dialog-head h2.wallet-head-pair{display:flex;align-items:flex-end;gap:16px;overflow:visible;white-space:normal}
+dialog.wallet-dialog .wallet-head-col{display:flex;flex-direction:column;align-items:flex-start;flex:1 1 0;min-width:0;width:auto;margin:0;padding:0;min-height:0;background:none;border:0;border-radius:0;box-shadow:none;color:#fff;font:inherit;letter-spacing:inherit;text-align:left;cursor:pointer}
+dialog.wallet-dialog .wallet-head-col+.wallet-head-col{align-items:flex-end;text-align:right}
+dialog.wallet-dialog .wallet-head-col .wallet-kicker{display:flex;align-items:center;gap:6px;min-height:16px;margin:0 0 3px}
+dialog.wallet-dialog .wallet-head-col em{display:inline-flex;align-items:center;gap:3px;padding:1px 6px;border-radius:999px;background:rgba(255,129,61,.12);border:1px solid rgba(255,129,61,.3);color:#ff9b63;font-style:normal;font-size:9.5px;font-weight:600;letter-spacing:0;text-transform:none;opacity:0;transition:opacity .15s ease}
+dialog.wallet-dialog .wallet-head-col em svg{width:10px;height:10px}
+dialog.wallet-dialog .wallet-head-col:is(:hover,:focus-visible) em{opacity:1}
+@media (hover:none){dialog.wallet-dialog .wallet-head-col em{opacity:1}}
+dialog.wallet-dialog .wallet-head-value{display:block;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+dialog.wallet-dialog .wallet-head-col.pending{cursor:default}
+dialog.wallet-dialog .wallet-head-col.pending .wallet-head-value{color:var(--wp-muted);font-weight:500}
+dialog.wallet-dialog .wallet-head-col+.wallet-head-col .wallet-kicker{flex-direction:row-reverse}
+@media (max-width:420px){dialog.wallet-dialog .wallet-dialog-head h2.wallet-head-pair{gap:10px}dialog.wallet-dialog .wallet-head-value{font-size:14px}}
+@media (max-width:360px){dialog.wallet-dialog .wallet-head-value{font-size:13px}}
 
 /* Close: a centred X icon (the × character sat off-centre) */
 dialog.wallet-dialog .wallet-close svg{width:18px;height:18px;stroke-width:2.2;display:block}
@@ -240,6 +265,24 @@ dialog.wallet-dialog.wallet-dialog .website-native-page #native-send #native-sta
 /* Size to content (at most the panel height the engine page measures), so short screens have no empty gap */
 dialog.wallet-dialog.wallet-dialog .website-native-page.native-popup-root{height:auto}
 dialog.wallet-dialog.wallet-dialog .website-native-page.native-popup-root>div,dialog.wallet-dialog.wallet-dialog .website-native-page.native-popup-root #native-send{flex:0 1 auto}
+/* 28 Oct 2026 (owner: "remove the black box … behind cancel and review"): the footer keeps its place under the form but takes the
+   window's colour; the extension's black footer (#080808, its popup's background) and its divider are not used here. */
+dialog.wallet-dialog.wallet-dialog .website-native-page #native-send .native-send-footer{background:transparent;border-top:0}
+/* 28 Oct 2026 (owner: "all the boxes should be consistently sized, as the monero box … wallet backup and import xmr wallet
+   should be the same format … and the same size"): Previously bridged's Check fits the row height of the Monero and SOL boxes;
+   Import XMR wallet is a row like Wallet backup (same box, text, size), with + where the chevron is. */
+dialog.wallet-dialog.wallet-dialog .wallet-native-holdings .wallet-native-check{min-height:0;height:32px;padding:0 14px;border-radius:999px;font-size:12px}
+dialog.wallet-dialog.wallet-dialog .wallet-dialog-body .wallet-library>.wallet-row-button{display:flex;align-items:center;justify-content:space-between;align-self:stretch;width:100%;box-sizing:border-box;min-height:0;margin:8px 0 0;padding:12px 13px;border:1px solid #221f1c;border-radius:15px;background:var(--wp-panel);color:#cfc8c0;font:600 13px/1.3 Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;text-align:left;box-shadow:none}
+dialog.wallet-dialog.wallet-dialog .wallet-dialog-body .wallet-library>.wallet-row-button::before{content:none}
+dialog.wallet-dialog.wallet-dialog .wallet-dialog-body .wallet-library>.wallet-row-button::after{content:'+';position:static;inset:auto;z-index:auto;opacity:1;background:none;margin-right:2px;color:#8f8a84;font-size:17px;font-weight:400;line-height:1}
+dialog.wallet-dialog.wallet-dialog .wallet-dialog-body .wallet-library>.wallet-row-button:hover{border-color:#3a2d22;color:#fff}
+dialog.wallet-dialog.wallet-dialog .wallet-dialog-body .wallet-library>details.wallet-advanced>summary{box-sizing:border-box;min-height:44px}
+dialog.wallet-dialog.wallet-dialog .wallet-dialog-body .wallet-library>.wallet-row-button{height:46px}
+/* 28 Oct 2026 (owner): the wallet's start (creation) block in Wallet backup. */
+dialog.wallet-dialog .monero-start-block{display:grid;gap:8px;margin-bottom:12px}
+dialog.wallet-dialog .monero-start-block p{margin:0}
+dialog.wallet-dialog .monero-start-block strong{color:#fff;font-weight:600}
+dialog.wallet-dialog .monero-start-block>button{justify-self:start}
 
 /* Hidden wallet tab panels stay mounted (the Monero wallet keeps running) but take no space. */
 dialog.wallet-dialog [role="tabpanel"][hidden]{display:none!important}

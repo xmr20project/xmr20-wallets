@@ -2,6 +2,23 @@ import CopyRecoveryPhrase from './copy-recovery-phrase.jsx';
 import React,{useEffect,useRef,useState} from 'react';
 import {localMoneroBackup} from './monero-local-backup.js';
 import {moneroWalletVault} from './monero-wallet-vault.js';
+import {XMR20_MONERO_START,savedNativeRestoreHeight,saveNativeRestoreHeight} from '../../engine/monero/native-wallet-client.js';
+// 28 Oct 2026 (owner: "could we also allow users to see their wallets creation height? and let them choose that as default?"): the
+// block this wallet's syncs start from on this browser (saved when it was created or imported here), and a way to set it. Like the
+// phrase, it is kept per browser; written down with the phrase, it makes the first sync on another browser start there.
+export function MoneroStartBlock({address,linkedHeight}){
+ const [saved,setSaved]=useState(()=>savedNativeRestoreHeight(address)),[editing,setEditing]=useState(false),[value,setValue]=useState(''),[error,setError]=useState('');
+ useEffect(()=>{setSaved(savedNativeRestoreHeight(address));const update=e=>{if(e.detail?.address===address)setSaved(e.detail.height);};window.addEventListener('xmr20-start-block',update);return()=>window.removeEventListener('xmr20-start-block',update);},[address]);
+ function save(){const text=value.trim().replace(/[,._\s]/g,''),height=Number(text);if(!/^\d+$/.test(text)||!Number.isSafeInteger(height)){setError('Enter a block number.');return;}
+  if(!saveNativeRestoreHeight(address,height)){setError('This browser could not save it. Check site storage and retry.');return;}setSaved(height);setEditing(false);setError('');}
+ return <div className="monero-start-block">
+  <p className="small">{saved!==null&&saved===linkedHeight?<>Creation block: <strong>{saved.toLocaleString()}</strong>, saved with your wallet link, so every browser you sign in with starts its first sync there.</>:saved!==null?<>Creation block: <strong>{saved.toLocaleString()}</strong>, saved on this browser. Keep it with your recovery phrase: on another browser, enter it under Change when you sync, so the first sync starts there.</>:<>This browser doesn’t know when this wallet was created, so syncs start at the XMR20 start (block {XMR20_MONERO_START.toLocaleString()}). If you know the creation block, set it here.</>}</p>
+  {editing?<><label>Start syncing at block<input inputMode="numeric" autoComplete="off" value={value} onChange={e=>setValue(e.target.value)}/></label>
+   <p className="small">Use the wallet’s creation block or an earlier one; a later block can miss deposits. It applies from the next Sync.</p>{error&&<p role="alert" className="form-error">{error}</p>}
+   <div className="wallet-form-actions"><button type="button" className="wallet-primary" onClick={save}>Save</button><button type="button" onClick={()=>{setEditing(false);setError('');}}>Cancel</button></div></>
+  :<button type="button" className="bevel" onClick={()=>{setValue(saved===null?'':String(saved));setEditing(true);}}>{saved!==null?'Change start block':'Set start block'}</button>}
+ </div>;
+}
 // 28 Oct 2026 (owner): a Monero wallet saved with the connected Solana wallet shows its recovery phrase after one approval in
 // that wallet, like other wallets' export; a password backup (older wallets) still asks for its password.
 export default function LocalMoneroRecovery({owner,network,address,provider}){

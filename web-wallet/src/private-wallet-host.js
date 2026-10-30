@@ -5,6 +5,7 @@
 // connected Phantom/Solflare wallet instead of a key held by the wallet. The extension's screens and token rows are drawn inside
 // shadow roots that carry the extension's own stylesheet, so they look the same and the site's styles cannot reach them.
 import {createPrivateFormat} from '../../engine/token/token-format.js';
+import {createPrivateJournal,JOURNAL_KEY,SALT_KEY} from '../../engine/token/private-journal.js';
 import {createWorkerClient} from '../../engine/token/worker-client.js';
 import {amount,units,importSol} from '../../engine/shared/core.js';
 import {compactTokenBalance} from '../../engine/shared/token-display.js';
@@ -16,6 +17,7 @@ import {sha256} from '@noble/hashes/sha256';
 import {bytesToHex} from '@noble/hashes/utils';
 import {loadTokenImages} from './wallet-token-images.js';
 import {moneroWalletVault} from './monero-wallet-vault.js';
+import {recordBridgeDeposit} from './profile-store.js';
 import {nativeRestoreHeight} from '../../engine/monero/native-wallet-client.js';
 
 const BASE=(import.meta.env?.BASE_URL||'/')+'xmr20-private/';
@@ -30,12 +32,36 @@ dialog.xmr20-pf-modal::backdrop{background:rgba(0,0,0,.6)}
 .pf-facts p{font-size:12.5px;margin:10px 0}
 .modal-foot .error,#error{max-height:200px;overflow:auto;user-select:text;-webkit-user-select:text;white-space:pre-wrap;overflow-wrap:anywhere}
 .asset{position:relative;isolation:isolate}
+/* 28 Oct 2026 (owner: "all the boxes should be consistently sized, as the monero box"): on the website the token rows take the
+   wallet's own row look and size (Monero, SOL): 38px coin, 12/13px padding, 15px corners, two lines on each side. "Price
+   unavailable" is left out, as on the SOL tab. */
+.asset.pf-asset{margin:0 0 8px;padding:12px 13px;gap:11px;border-radius:15px;background:#1a1918;border:1px solid #221f1c}
+.pf-asset .coin-wrap .coin,.pf-asset .coin .token-image{width:38px;height:38px}
+.pf-asset .chain-badge{width:17px;height:17px;right:-3px;bottom:-3px;font-size:9px}
+.pf-asset .asset-info strong{font-size:14px;font-weight:600;line-height:1.3}
+.pf-asset .asset-info small{display:block;margin-top:2px;font-size:11.5px;line-height:1.3;color:#8c8985}
+.pf-asset .asset-value{font-size:14px;font-weight:650;line-height:1.3;color:#fff}
+.pf-asset .asset-value small{display:block;margin-top:2px;font-size:11px;font-weight:400;line-height:1.3;color:#8c8985}
+.pf-asset .asset-value small.asset-usd{color:#edc5a5}
+.pf-asset .asset-value small.asset-usd.none{display:none}
 .asset::after{content:'';position:absolute;z-index:-1;inset:0;border-radius:inherit;background:radial-gradient(240px circle at var(--ux-x,50%) var(--ux-y,0),rgba(242,147,92,.12),transparent 55%);opacity:0;transition:opacity .35s ease;pointer-events:none}
 @media (hover:hover) and (pointer:fine){.asset:hover::after{opacity:1}}`;
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 // Saved pending operations and the journal are per site (localStorage), like the extension's are per install.
 const store={async get(k){try{return JSON.parse(localStorage.getItem(k)||'null');}catch{return null;}},async set(k,v){localStorage.setItem(k,JSON.stringify(v));}};
 const journalSecret=seed=>bytesToHex(sha256(new TextEncoder().encode('XMR20-website-private-journal-v1\n'+seed.trim().split(/\s+/).join(' '))));
+// 30 Oct 2026 (owner: a new Phantom and a new Monero wallet in the same browser showed "Saved private-operation journal could
+// not be read"): each Monero wallet keeps its own journal on this site. Before, the site had one journal, and only the first
+// wallet's phrase opens it. That journal moves (a copy; the original stays) to the first wallet whose phrase opens it, once; any
+// other wallet starts its own.
+const journalStore=(address,secret)=>{
+ const ns=':'+bytesToHex(sha256(new TextEncoder().encode('XMR20-website-journal|'+address))).slice(0,24);let adopted=null;
+ const adopt=async()=>{if(await store.get(SALT_KEY+ns)||!await store.get(JOURNAL_KEY))return;
+  const old=createPrivateJournal({store});try{await old.unlock(secret());await old.read();}catch{return;}
+  await store.set(JOURNAL_KEY+ns,await store.get(JOURNAL_KEY));await store.set(SALT_KEY+ns,await store.get(SALT_KEY));};
+ const ready=()=>adopted??=adopt().catch(e=>{adopted=null;throw e;});
+ return {async get(k){await ready();return store.get(k+ns);},async set(k,v){await ready();return store.set(k+ns,v);}};
+};
 // 28 Oct 2026 ("Enable private transfers"): the Monero row registers its unlocked Monero wallet here, so the token screen's
 // split can use it (the token module itself never holds that wallet).
 let nativeWallet=null;
@@ -55,17 +81,36 @@ export function createWebsitePrivateWallet({account:fixed,signSol,onChange=()=>{
  // Element lookups search the dialog first, then every attached row container (each its own shadow root).
  const $=selector=>{for(const root of roots){const el=root.querySelector(selector);if(el)return el;}return null;};
  const $$=selector=>{const found=[];for(const root of roots)found.push(...root.querySelectorAll(selector));return found;};
- const on=(id,fn)=>{const el=$('#'+id);if(el)el.onclick=fn;};
+ // 30 Oct 2026 (owner: "i cant actually click on my xmr20 tokens on monero"): a page can show the token rows in more than one place (the
+ // wallet sheet and the profile's Wallet tab); the handler goes on every copy, not only the first root that has the id.
+ const on=(id,fn)=>{for(const el of $$('#'+id))el.onclick=fn;};
  const account=()=>closed?null:fixed;
  const same=e=>{if(e!==epoch||!account())throw Error('Wallet changed or locked.');};
  function toast(text){toastEl.textContent=text;toastEl.classList.add('visible');clearTimeout(toastTimer);toastTimer=setTimeout(()=>toastEl.classList.remove('visible'),3200);}
  function close(){modal.close();modal.innerHTML='';}
  function show(title,body){modal.innerHTML=`<div class="modal-head"><h2 id="modal-title">${esc(title)}</h2><button id="close" aria-label="Close">×</button></div><div class="modal-body">${body}</div><div class="modal-foot"><p class="error" id="error" role="alert"></p></div>`;
-  if(!modal.open)modal.showModal();on('close',()=>{if(!busy){close();onChange();}});}
+  layoutModal();if(!modal.open)modal.showModal();on('close',()=>{if(!busy){close();onChange();}});}
+ // 28 Oct 2026 (owner: "when I click the private tab … it doesn't do anything … I can't click submit"): as the extension's popup
+ // does (app.js layoutModal), the body scrolls while progress, the trailing action buttons and errors stay in view; on a
+ // laptop-height window Review, Back and the progress line were below the fold. Elements keep their ids and handlers.
+ function layoutModal(){
+  const body=modal.querySelector(':scope > .modal-body'),foot=modal.querySelector(':scope > .modal-foot');if(!body||!foot)return;
+  const moved=[];let seenButton=false;
+  for(let el=body.lastElementChild;el;el=el.previousElementSibling){
+   const button=el.matches('button.wide,button.text-btn,button.primary,button.secondary'),status=el.matches('p#progress,p.busy'),note=el.matches('p.subtle,p.notice')&&seenButton;
+   if(!button&&!status&&!note)break;
+   if(button)seenButton=true;moved.unshift(el);
+  }
+  if(!seenButton)return;
+  foot.prepend(...moved);foot.classList.add('has-actions');
+ }
  async function run(fn){if(busy)return;busy=true;const e=epoch,task=++runSequence;const buttons=[...modal.querySelectorAll('button:not([data-keep]),input,textarea,select')];buttons.forEach(b=>b.disabled=true);if($('#error'))$('#error').textContent='';
   try{await fn(e);}catch(error){if(e===epoch){if($('#progress'))$('#progress').textContent='';if($('#error'))$('#error').textContent=error.message||'Could not complete. Try again.';else toast(error.message);}}
   finally{if(task===runSequence){busy=false;buttons.forEach(b=>b.disabled=b.dataset.disabled==='true');}}}
- const workerClient=(file,hooks={})=>createWorkerClient(file,{...hooks,spawn:name=>new Worker(BASE+name)});
+ // 29 Oct 2026 (owner: "Reading XMR20 token history… 0%" did not move): scan progress redraws the token rows (the percentage) at
+ // most every 1.5 s; before, the rows were drawn only when a sync started or finished.
+ let progressDrawn=0;
+ const workerClient=(file,hooks={})=>createWorkerClient(file,{...hooks,onProgress:p=>{hooks.onProgress?.(p);if(p?.phase==='scan'&&Date.now()-progressDrawn>=1500){progressDrawn=Date.now();onChange();}},spawn:name=>new Worker(BASE+name)});
  const oneShot=(file,action,args)=>{const c=workerClient(file);return c.call(action,args).finally(()=>c.close());};
  // The journal is encrypted at rest with a key from the account's Monero phrase (the extension uses its vault password).
  const secret=()=>{const a=account();if(!a?.xmrSeed)throw Error('Unlock the Monero wallet first.');return journalSecret(a.xmrSeed);};
@@ -74,19 +119,22 @@ export function createWebsitePrivateWallet({account:fixed,signSol,onChange=()=>{
  const api=location.origin==='https://xmr20.org'?'https://api.xmr20.org':location.origin;
  const pf=createPrivateFormat({endpoint:api+'/api/private-bridge',node:api+'/api/private-node',
   signSol:async tx=>{const signed=await signSol(tx);if(!signed?.signatures?.some(s=>s.signature&&s.publicKey.toBase58()===account()?.sol))throw Error('The wallet did not sign with the connected account. Nothing was sent.');return signed;},
-  account,oneShot,workerClient,store,secret,show,on,run,toast,esc,amount,units,compactTokenBalance,importSol,same,$,
+  account,oneShot,workerClient,store:journalStore(fixed.xmr,secret),secret,show,on,run,toast,esc,amount,units,compactTokenBalance,importSol,same,$,
   render:()=>onChange(),onActivity,close,tokenIcon,usdOf,solBalance,$$,
   splitXmr:{prepare:async()=>{const n=nativeFor(account().xmr);await n.syncNow();return n.client.prepareSplit({node:n.node,carrierLookup:'local'});},
    checkCoins:async()=>{const n=nativeFor(account().xmr);return n.client.checkCarriers({node:n.node,carrierLookup:'node'});},
    relay:async review=>{const n=nativeFor(account().xmr);const sent=await n.client.relay({reviewId:review.id,node:n.node});void n.syncNow().catch(()=>{});return sent;}}});
+ // 29 Oct 2026 (owner: the receiving wallet "should say pending"): while no token screen is open and the page is visible, the
+ // token wallet checks again every 20 seconds (new blocks, and transfers waiting for this wallet), as the extension's home does.
+ const recheck=setInterval(()=>{if(!closed&&!busy&&!modal.open&&!document.hidden)void pf.refresh();},20000);
  return {
   pf,account,
   // A container that shows the token rows: its shadow root gets the extension's styles and is searched by the module.
   attach(root){roots.add(root);return()=>roots.delete(root);},
-  rowsHTML:()=>pf.rowsHTML(),bind:()=>pf.bind(),refresh:()=>pf.refresh(),syncStatus:()=>pf.syncStatus(),
+  rowsHTML:()=>pf.rowsHTML(),bind:()=>pf.bind(),refresh:()=>pf.refresh(),syncStatus:()=>pf.syncStatus(),receiveInfo:()=>pf.receiveInfo(),
   openBridge:(...a)=>pf.openBridge(...a),openSend:(...a)=>pf.openSend(...a),heldTokens:()=>pf.heldTokens(),portfolioRows:()=>pf.portfolioRows(),
   // Lock or disconnect: ends running tasks, closes the dialog, stops the workers and forgets the phrase.
-  dispose(){closed=true;epoch++;busy=false;close();pf.reset();host.remove();fixed={...fixed,xmrSeed:''};}
+  dispose(){closed=true;clearInterval(recheck);epoch++;busy=false;close();pf.reset();host.remove();fixed={...fixed,xmrSeed:''};}
  };
 }
 
@@ -103,7 +151,7 @@ export function openWebsitePrivateWallet({owner,address,seed,height,provider}){
  const account={id:websiteAccountId(owner,address),sol:owner,xmr:address,xmrSeed:seed,height:Number(height)||0};
  // Token artwork from the site's checked catalog images, as the extension's token list shows it.
  void loadTokenImages().then(map=>{images=map;notify();});
- current=createWebsitePrivateWallet({account,onChange:notify,onActivity:()=>window.dispatchEvent(new Event('xmr20-holdings-refresh')),solBalance:()=>solLamports,tokenIcon:mint=>images.get(mint)||null,signSol:async tx=>{provider.assertCurrent?.();return provider.signTransaction(tx);}});
+ current=createWebsitePrivateWallet({account,onChange:notify,onActivity:a=>{if(a?.kind==='deposit')recordBridgeDeposit(owner,a);window.dispatchEvent(new Event('xmr20-holdings-refresh'));},solBalance:()=>solLamports,tokenIcon:mint=>images.get(mint)||null,signSol:async tx=>{provider.assertCurrent?.();return provider.signTransaction(tx);}});
  notify();void current.refresh().finally(notify);return current;
 }
 // The open token wallet for this Solana + Monero pair, opening it with one approval from the connected wallet when needed
@@ -112,7 +160,7 @@ export async function ensureWebsitePrivateWallet({owner,address,provider}){
  const open=current?.account();if(open&&open.sol===owner&&open.xmr===address)return current;
  const context={owner,network:'mainnet',address};
  if(!provider?.signMessage||!moneroWalletVault().has(context))throw Error('Sync this Monero wallet once on the Monero tab, or import it with your Solana wallet connected. Bridged tokens arrive there.');
- const seed=await moneroWalletVault().load(context,provider);
+ const seed=await moneroWalletVault().load(context,provider,{session:true});
  return openWebsitePrivateWallet({owner,address,seed,height:nativeRestoreHeight(address),provider});
 }
 export function closeWebsitePrivateWallet(){if(!current)return;const c=current;current=null;c.dispose();notify();}
