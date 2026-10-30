@@ -67,9 +67,13 @@ function LiveWalletProvider({children}){
 
 function DemoWalletProvider({children}) {
  const [open,setOpen]=useState(true);
+ // &wallet-delay=<ms> (30 Oct 2026): the wallet connects after the page has rendered, as on a real visit (release 28's profile
+ // crash only happened then).
+ const delay=Number(new URLSearchParams(location.search).get('wallet-delay'))||0,[late,setLate]=useState(delay>0);
+ useEffect(()=>{if(!late)return;const t=setTimeout(()=>setLate(false),delay);return()=>clearTimeout(t);},[late,delay]);
  // ?wallet-preview=paired (29 Oct 2026): a sample linked Monero address (fresh, unfunded), for the profile page preview.
  // &wallet-owner=<Solana address> (30 Oct 2026): show that public wallet's balances (read-only preview).
- const value={owner:/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(new URLSearchParams(location.search).get('wallet-owner')||'')?new URLSearchParams(location.search).get('wallet-owner'):'11111111111111111111111111111111',token:null,provider:null,pair:new URLSearchParams(location.search).get('wallet-preview')==='paired'?{address:/^4[1-9A-HJ-NP-Za-km-z]{94}$/.test(new URLSearchParams(location.search).get('wallet-xmr')||'')?new URLSearchParams(location.search).get('wallet-xmr'):'4AdyMv7EaG59edEMjmaJprAt2DXh5SHKNNbfEZxzzW7f12D4ekMZniwiozY3TAoJGNZ6FzpyqWFfR6E2MjE9rSCG7GDV1Dm',network:'mainnet'}:null,loaded:true,open,setOpen,busy:false,error:'',solBalance:'90000000',balanceError:'',refreshBalance:()=>{},reload:async()=>{},checkPair:async()=>null,savePair:async()=>{throw Error('Visual preview only')},disconnect:()=>setOpen(false),connect:()=>setOpen(true)};
+ const value={owner:late?null:/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(new URLSearchParams(location.search).get('wallet-owner')||'')?new URLSearchParams(location.search).get('wallet-owner'):'11111111111111111111111111111111',token:null,provider:null,pair:!late&&new URLSearchParams(location.search).get('wallet-preview')==='paired'?{address:/^4[1-9A-HJ-NP-Za-km-z]{94}$/.test(new URLSearchParams(location.search).get('wallet-xmr')||'')?new URLSearchParams(location.search).get('wallet-xmr'):'4AdyMv7EaG59edEMjmaJprAt2DXh5SHKNNbfEZxzzW7f12D4ekMZniwiozY3TAoJGNZ6FzpyqWFfR6E2MjE9rSCG7GDV1Dm',network:'mainnet'}:null,loaded:true,open,setOpen,busy:false,error:'',solBalance:'90000000',balanceError:'',refreshBalance:()=>{},reload:async()=>{},checkPair:async()=>null,savePair:async()=>{throw Error('Visual preview only')},disconnect:()=>setOpen(false),connect:()=>setOpen(true)};
  return <Context.Provider value={value}>{children}<div style={{position:'fixed',bottom:8,left:12,zIndex:10,color:'#ff914b',fontSize:12}}>LOCAL DESIGN PREVIEW · Sample balance · Transactions disabled</div></Context.Provider>;
 }
 export function WalletProvider({children}) {
