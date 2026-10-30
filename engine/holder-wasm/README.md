@@ -7,6 +7,8 @@
 - builds and proves records: open and private transfers, Make private / Make open, bridge burns
 - builds the Monero "carrier" transactions that publish those records
 - saves scan progress
+- reports the block of every note it holds, and checks transfers still waiting in the Monero node's pool for this wallet,
+  without applying them (so wallets can show incoming tokens as Pending, then Confirming n/10)
 
 > **EXPERIMENTAL research code, not independently reviewed.** Private proofs use Penumbra's unchanged circuits and
 > its published proving keys. XMR20 ran no trusted setup of its own.
@@ -15,8 +17,8 @@
 
 | Path | What it is |
 |---|---|
-| `holder.wasm` | The built engine (`xmr20-holder-wasm 0.0.3-persist`, sha256 `dab8720b…c111e`). Byte-identical to the one in XMR20 Wallet 0.1.117 and on xmr20.org. |
-| `crate/` | The wasm crate (`xmr20-holder-wasm-persist`): `src/lib.rs` (token engine API) and `src/native.rs` (the Monero side: scanning your XMR and building carrier transactions). |
+| `holder.wasm` | The built engine (`xmr20-holder-wasm 0.0.4-incoming`, sha256 `50a44707…ce83f`). Byte-identical to the one in XMR20 Wallet 0.1.121 and on xmr20.org. |
+| `crate/` | The wasm crate (`xmr20-holder-wasm-incoming`): `src/lib.rs` (token engine API) and `src/native.rs` (the Monero side: scanning your XMR and building carrier transactions). |
 | `core/` | `xmr20-unshielded-core`: the token format (records, ledger rules, proofs over Penumbra's circuits). The bridge's indexer uses it too. |
 | `vendor/monero-wallet/` | A vendored copy of the `monero-wallet` crate, used to build Monero transactions. |
 | `vendor/penumbra-sdk-shielded-pool/` | Penumbra's `penumbra-sdk-shielded-pool` 2.1.1. Two files differ from upstream (`src/spend/proof.rs`, `src/output/proof.rs`): they make two constructors public. The constraints are unchanged. |
@@ -32,7 +34,7 @@ cd engine/holder-wasm/crate
 cargo build --release --target wasm32-unknown-unknown
 ```
 
-The output is `target/wasm32-unknown-unknown/release/xmr20_holder_wasm_persist.wasm`. Release builds take several
+The output is `target/wasm32-unknown-unknown/release/xmr20_holder_wasm_incoming.wasm`. Release builds take several
 minutes the first time.
 
 The rebuilt file works the same, but it is not expected to be byte-identical to `holder.wasm`. Rust embeds source

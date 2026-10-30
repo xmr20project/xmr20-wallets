@@ -3,6 +3,7 @@ import '../../engine/shared/native-send-page.css';
 import './website-native-page.css';
 import './website-xmr-split.css';
 import {fitWalletPanel} from './website-native-panel.js';
+import {saveXmrTx} from './xmr-tx-store.js';
 
 // 28 Oct 2026 (owner: "the "split" button should be to split the monero balance into smaller amounts, so that they can be used
 // for private transfers … from 2 to 20 slots (or however many they are able to) but require a minimum balance"; "to allow people
@@ -15,7 +16,7 @@ const xmr=raw=>{const n=BigInt(raw),f=String(n%1000000000000n).padStart(12,'0').
 const short=raw=>{const n=BigInt(raw),f=String(n%1000000000000n).padStart(12,'0').slice(0,6).replace(/0+$/,'');return String(n/1000000000000n)+(f?'.'+f:'');};
 const CARRIER_CHECK='Check your coins before splitting to protect any XMR20 tokens. This shares their transaction IDs with your selected Monero node; nothing is sent.';
 
-export default function WebsiteXmrSplit({client,node,balance,syncNow,onReviewing,onSent,onClose}){
+export default function WebsiteXmrSplit({address,client,node,balance,syncNow,onReviewing,onSent,onClose}){
  const wrap=useRef(null),alive=useRef(true);
  const unlocked=(()=>{try{return BigInt(balance?.unlockedRaw??'0');}catch{return 0n;}})();
  const locked=(()=>{try{const n=BigInt(balance?.balanceRaw??'0')-unlocked;return n>0n?n:0n;}catch{return 0n;}})();
@@ -50,8 +51,10 @@ export default function WebsiteXmrSplit({client,node,balance,syncNow,onReviewing
  const split=()=>run(async()=>{
   if(!review||Date.now()>=review.expires){setStep('form');setReview(null);throw Error('This review expired. Review the split again; nothing was sent.');}
   setMessage('Sending to your own address…');
-  try{const sent=await client.relay({reviewId:review.id,node});if(!alive.current)return;setResult({...review,hash:sent?.hash||review.hash});setStep('done');setMessage('');onSent?.();}
-  catch(e){if(e?.code==='xmr-not-submitted'){setStep('form');setReview(null);}else if(alive.current){setResult({...review,uncertain:true});setStep('done');}throw e;}
+  // 30 Oct 2026 (owner): the split is recorded on this device (Activity tab, Monero row) with its confirmations followed.
+  const row={kind:'split',hash:review.hash,coins:review.coins,feeRaw:review.feeRaw,at:Date.now(),status:'submitting'};saveXmrTx(address,row);
+  try{const sent=await client.relay({reviewId:review.id,node});saveXmrTx(address,{...row,hash:sent?.hash||row.hash,status:'submitted'},row.hash);window.dispatchEvent(new Event('xmr20-xmr-tx'));if(!alive.current)return;setResult({...review,hash:sent?.hash||review.hash});setStep('done');setMessage('');onSent?.();}
+  catch(e){saveXmrTx(address,{...row,status:e?.code==='xmr-not-submitted'?'not submitted':'uncertain'});if(e?.code==='xmr-not-submitted'){setStep('form');setReview(null);}else if(alive.current){setResult({...review,uncertain:true});setStep('done');}throw e;}
  });
  const back=()=>{if(step==='review'){void client.cancel().catch(()=>{});setStep('form');setReview(null);setMessage('');setError('');}else onClose();};
  const need='You need at least '+short(String(MIN_COIN*2n))+' unlocked XMR to split (0.0002 XMR per coin).';
