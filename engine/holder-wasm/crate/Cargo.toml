@@ -1,9 +1,9 @@
 [package]
-name = "xmr20-holder-wasm-persist"
+name = "xmr20-holder-wasm-incoming"
 version = "0.0.0"
 edition = "2021"
 publish = false
-description = "Holder-side token engine for the unshielded-by-default format: key derivation, local scanning of public and shielded notes, record building for public transfers, shield/unshield, two-part private transfers and burns, holder-funded Monero carriers. Compiled to wasm32 for the extension worker. UNREVIEWED synthetic-test code. 27 Oct 2026 candidate: adds saved scan progress (pool record log replay, native wallet snapshot) and per-block pool/native selection."
+description = "Holder-side token engine for the unshielded-by-default format: key derivation, local scanning of public and shielded notes, record building for public transfers, shield/unshield, two-part private transfers and burns, holder-funded Monero carriers. Compiled to wasm32 for the extension worker. UNREVIEWED synthetic-test code. 27 Oct 2026: saved scan progress (pool record log replay, native wallet snapshot) and per-block pool/native selection. 29 Oct 2026: the block height of every note and a read-only check of waiting (unconfirmed) transactions for incoming tokens."
 
 [lib]
 crate-type = ["cdylib", "rlib"]

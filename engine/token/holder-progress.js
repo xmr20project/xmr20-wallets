@@ -15,12 +15,17 @@ export async function progressKey(root,manifestSha256){
  return crypto.subtle.deriveKey({name:'HKDF',hash:'SHA-256',salt:enc.encode('XMR20-holder-scan-progress-v1'),info:enc.encode(manifestSha256)},material,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);
 }
 export async function accountTag(ownerKey,manifestSha256){return hex(await crypto.subtle.digest('SHA-256',enc.encode('XMR20-holder-scan-account|'+manifestSha256+'|'+ownerKey))).slice(0,32);}
-export function createProgressStore({manifestSha256,engineVersion,account,key}){
+// 29 Oct 2026: `compatible` lists earlier engines whose pool entries this engine can resume from (same record-log format; every
+// record is verified again on replay). Without it a new engine read the whole token history again on every browser (owner:
+// "the xmr20 token history is not appearing"). New progress is saved under this engine; Rescan forgets the earlier entries too.
+export function createProgressStore({manifestSha256,engineVersion,account,key,compatible=[]}){
  const poolId=`pool:${manifestSha256}:${engineVersion}`,nativeId=`native:${manifestSha256}:${account}`;
+ const earlierIds=compatible.filter(v=>v&&v!==engineVersion).map(v=>`pool:${manifestSha256}:${v}`);
  const aad=enc.encode(nativeId);
  return {
   async load(){
-   const [pool,sealed]=await Promise.all([run('readonly',s=>s.get(poolId)).catch(()=>null),run('readonly',s=>s.get(nativeId)).catch(()=>null)]);
+   let [pool,sealed]=await Promise.all([run('readonly',s=>s.get(poolId)).catch(()=>null),run('readonly',s=>s.get(nativeId)).catch(()=>null)]);
+   for(const id of earlierIds){if(pool&&Array.isArray(pool.log))break;pool=await run('readonly',s=>s.get(id)).catch(()=>null);}
    let native=null;
    if(sealed?.iv&&sealed?.data){try{native=JSON.parse(dec.decode(await crypto.subtle.decrypt({name:'AES-GCM',iv:sealed.iv,additionalData:aad},key,sealed.data)));}catch{native=null;}}
    return {pool:pool&&Array.isArray(pool.log)?pool:null,native};
@@ -30,6 +35,6 @@ export function createProgressStore({manifestSha256,engineVersion,account,key}){
    if(native){const iv=crypto.getRandomValues(new Uint8Array(12));const data=await crypto.subtle.encrypt({name:'AES-GCM',iv,additionalData:aad},key,enc.encode(JSON.stringify(native)));await run('readwrite',s=>s.put({iv,data,savedAt:Date.now()},nativeId));}
   },
   // Rescan: forget this account's outputs and the shared pool progress (every account rebuilds the pool once afterwards).
-  async clear(){await run('readwrite',s=>{s.delete(poolId);return s.delete(nativeId);});},
+  async clear(){await run('readwrite',s=>{s.delete(poolId);for(const id of earlierIds)s.delete(id);return s.delete(nativeId);});},
  };
 }

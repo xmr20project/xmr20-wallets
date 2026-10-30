@@ -5,12 +5,13 @@ import React,{createContext,useContext,useEffect,useRef,useState} from 'react';
 import bs58 from 'bs58';
 import {request,authRequest,setLaunchSession,walletSessionSlot} from './launch-api.js';
 import {savedNativeRestoreHeight,saveNativeRestoreHeight} from '../../engine/monero/native-wallet-client.js';
+import {moneroWalletVault} from './monero-wallet-vault.js';
 const Context=createContext(null),SLOT=walletSessionSlot;
 const readSolBalance=createPublicBalanceReader({endpoints:['/api/bridge-solana-read','https://solana-rpc.publicnode.com']});
 export const useWallet=()=>useContext(Context);
 function LiveWalletProvider({children}){
  const [owner,setOwner]=useState(null),[token,setToken]=useState(null),[provider,setProvider]=useState(null),[pair,setPair]=useState(null),[loaded,setLoaded]=useState(false),[open,setOpen]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(''),[connectionStep,setConnectionStep]=useState('');const epoch=useRef(0),inflight=useRef(false);
- function disconnect(){if(provider?.kind==='xmr20')void provider.disconnect().catch(()=>{});epoch.current++;balanceRevision.current++;setSolBalance(null);setBalanceError('');try{sessionStorage.removeItem(SLOT);}catch{}setLaunchSession(null);setToken(null);setOwner(null);setProvider(null);setPair(null);setLoaded(false);setOpen(false);setError('');}
+ function disconnect(){try{moneroWalletVault().forgetAll();}catch{}if(provider?.kind==='xmr20')void provider.disconnect().catch(()=>{});epoch.current++;balanceRevision.current++;setSolBalance(null);setBalanceError('');try{sessionStorage.removeItem(SLOT);}catch{}setLaunchSession(null);setToken(null);setOwner(null);setProvider(null);setPair(null);setLoaded(false);setOpen(false);setError('');}
  async function reload(){if(provider?.kind==='xmr20'){try{await provider.checkCurrent();setPair({address:provider.account.monero});setLoaded(true);}catch(e){setError(e.message);setLoaded(false);}return;}const revision=epoch.current;try{const a=await request('account');if(!a||!Object.hasOwn(a,'pair'))throw Error('Saved wallet lookup is incomplete. Retry before creating a wallet.');if(revision===epoch.current){setPair(a.pair);setError('');setLoaded(true);}}catch(e){if(revision===epoch.current){setError(e.message);setLoaded(false);}}}
  async function connect(kind,restore=null){if(inflight.current)return;inflight.current=true;const revision=++epoch.current;setBusy(true);setError('');setConnectionStep('Open your wallet to connect…');try{
   if(kind==='xmr20'){const p=createXmr20ExtensionClient();await p.connect();if(revision!==epoch.current)return;setLaunchSession(null);setToken(null);balanceRevision.current++;setSolBalance(null);setBalanceError('');setOwner(p.account.solana);setProvider(p);setPair(p.account.monero?{address:p.account.monero}:null);setLoaded(true);setOpen(true);return;}
@@ -66,7 +67,9 @@ function LiveWalletProvider({children}){
 
 function DemoWalletProvider({children}) {
  const [open,setOpen]=useState(true);
- const value={owner:'11111111111111111111111111111111',token:null,provider:null,pair:null,loaded:true,open,setOpen,busy:false,error:'',solBalance:'90000000',balanceError:'',refreshBalance:()=>{},reload:async()=>{},checkPair:async()=>null,savePair:async()=>{throw Error('Visual preview only')},disconnect:()=>setOpen(false),connect:()=>setOpen(true)};
+ // ?wallet-preview=paired (29 Oct 2026): a sample linked Monero address (fresh, unfunded), for the profile page preview.
+ // &wallet-owner=<Solana address> (30 Oct 2026): show that public wallet's balances (read-only preview).
+ const value={owner:/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(new URLSearchParams(location.search).get('wallet-owner')||'')?new URLSearchParams(location.search).get('wallet-owner'):'11111111111111111111111111111111',token:null,provider:null,pair:new URLSearchParams(location.search).get('wallet-preview')==='paired'?{address:/^4[1-9A-HJ-NP-Za-km-z]{94}$/.test(new URLSearchParams(location.search).get('wallet-xmr')||'')?new URLSearchParams(location.search).get('wallet-xmr'):'4AdyMv7EaG59edEMjmaJprAt2DXh5SHKNNbfEZxzzW7f12D4ekMZniwiozY3TAoJGNZ6FzpyqWFfR6E2MjE9rSCG7GDV1Dm',network:'mainnet'}:null,loaded:true,open,setOpen,busy:false,error:'',solBalance:'90000000',balanceError:'',refreshBalance:()=>{},reload:async()=>{},checkPair:async()=>null,savePair:async()=>{throw Error('Visual preview only')},disconnect:()=>setOpen(false),connect:()=>setOpen(true)};
  return <Context.Provider value={value}>{children}<div style={{position:'fixed',bottom:8,left:12,zIndex:10,color:'#ff914b',fontSize:12}}>LOCAL DESIGN PREVIEW · Sample balance · Transactions disabled</div></Context.Provider>;
 }
 export function WalletProvider({children}) {
