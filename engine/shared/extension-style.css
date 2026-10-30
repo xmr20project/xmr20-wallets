@@ -1,0 +1,185 @@
+:root{color-scheme:dark;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#f8f5f1;background:#090909;font-synthesis:none;--orange:#ff813d;--muted:#8c8985;--panel:#1a1918;--border:#292622}*{box-sizing:border-box}body{margin:0;min-width:360px;width:390px;min-height:600px}button,input,textarea,select{font:inherit}button,a,input,select,textarea{-webkit-tap-highlight-color:transparent}button{cursor:pointer;color:inherit;border:0}button:disabled{opacity:.45;cursor:wait}button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid var(--orange);outline-offset:3px}button:hover{filter:brightness(1.17)}a{color:var(--orange);text-decoration:none}svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.65;stroke-linecap:round;stroke-linejoin:round;vertical-align:middle}.shell{min-height:600px;position:relative;padding-bottom:78px}.top{height:78px;display:flex;align-items:center;gap:11px;padding:17px 22px;border-bottom:1px solid #24211e}.brand{width:39px;height:39px;background:var(--orange);color:#15100b;border-radius:14px;display:grid;place-items:center;font-size:19px;font-weight:900;letter-spacing:-4px;padding-right:4px}.account{flex:1;text-align:left;background:none;padding:0;overflow:hidden}.eyebrow{display:block;text-transform:uppercase;letter-spacing:2px;font-size:9px;font-weight:650;color:var(--muted);margin-bottom:5px}.account strong{font-size:15px;font-weight:600;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.account strong span{font-size:11px;color:var(--muted);margin-left:5px}.icon-btn{background:none;padding:6px;color:#a39d97}.hero{text-align:center;padding:29px 20px 22px}.network{font-size:10px;color:#bcb5ad;letter-spacing:1.4px;text-transform:uppercase}.dot{display:inline-block;background:var(--orange);width:5px;height:5px;border-radius:50%;margin-right:6px}.hero h1{font-size:53px;letter-spacing:-2.7px;font-weight:550;margin:11px 0 4px;line-height:1.12}.hero h1 .decimal{font-size:35px;color:#bbb5ac}.hero p{font-size:11px;color:var(--muted);margin:8px 0}.tag{font-size:10px;color:var(--orange);border:1px solid #56311e;background:#28190f;border-radius:5px;padding:3px 6px;display:inline-block}.actions{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:0 22px 27px}.action{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;border:1px solid #282420;border-radius:17px;height:83px;background:linear-gradient(145deg,#23211e,#191817);font-weight:550;font-size:12px;color:#c9c3bb}.action svg{color:var(--orange);width:25px;height:25px}.content{padding:0 22px}.tabs{display:flex;align-items:center;gap:21px;margin-bottom:15px}.tab{padding:0 0 8px;background:none;color:#89847e;font-size:16px;position:relative}.tab.active{color:#fff;font-weight:600}.tab.active:after{content:'';position:absolute;bottom:0;left:0;width:20px;height:2px;background:var(--orange)}.tabs .icon-btn{margin-left:auto;padding-bottom:11px}.asset{display:flex;align-items:center;gap:11px;width:100%;background:var(--panel);padding:14px;border-radius:15px;text-align:left;margin:8px 0;border:1px solid #211f1c}.coin{width:39px;height:39px;border-radius:50%;display:grid;place-items:center;flex-shrink:0;background:#2b1b10;color:var(--orange);font-size:19px;font-weight:700}.coin.sol{background:#272420;color:#e0c39e}.coin.xmr{background:#e97630;color:#fff}.asset-info{flex:1;min-width:0}.asset-info strong{display:block;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:550}.asset small{display:block;color:#918b82;font-size:10px;margin-top:5px}.asset-value{text-align:right;max-width:133px;overflow-wrap:anywhere;font-size:13px}.section-label{display:flex;justify-content:space-between;align-items:center;font-size:9px;text-transform:uppercase;color:#91867b;letter-spacing:1.6px;margin:21px 1px 10px}.empty{border:1px dashed #332c25;border-radius:14px;padding:17px;text-align:center;color:#9e9388;font-size:12px;line-height:1.6}.empty strong{color:#e5dacf;display:block;font-weight:500}.empty button{margin-top:12px}.subtle{font-size:10px;color:#888077;line-height:1.6}.status{margin:15px 0;display:flex;align-items:flex-start;gap:7px;font-size:10px;color:#9b9187;line-height:1.5}.status svg{width:13px;height:13px;flex-shrink:0;margin-top:1px}.bottom{position:fixed;bottom:0;width:390px;height:64px;background:#0c0c0cf7;backdrop-filter:blur(15px);border-top:1px solid #28221c;display:flex;align-items:center;justify-content:space-around;z-index:2}.nav{background:none;color:#746e65;display:flex;align-items:center;flex-direction:column;gap:5px;font-size:9px;padding:9px 18px}.nav.active{color:var(--orange)}.nav svg{width:21px;height:21px}.primary,.secondary{border-radius:10px;padding:12px 15px;font-size:12px;font-weight:650}.primary{background:var(--orange);color:#180e06}.secondary{background:#29241e;color:#d2c7bc}.wide{width:100%;margin-top:12px}.welcome{padding:38px 27px;text-align:center}.welcome .brand{width:65px;height:65px;margin:0 auto 24px;border-radius:21px;font-size:30px}.welcome h1{font-size:32px;letter-spacing:-1.3px;margin:14px 0}.welcome p{font-size:13px;color:#aaa097;line-height:1.7;margin:12px 0 25px}.welcome .subtle{margin:22px 0;font-size:11px}.text-btn{background:none;color:var(--orange);padding:12px;font-size:12px}dialog{background:#141210;color:#f8f5f1;width:calc(100% - 24px);max-width:390px;max-height:94vh;border:1px solid #413326;border-radius:19px;padding:21px;box-shadow:0 20px 80px #000a}dialog::backdrop{background:#000b;backdrop-filter:blur(4px)}.modal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}.modal-head h2{font-size:19px;letter-spacing:-.4px;margin:0}.modal-head button{font-size:22px;background:none;color:#a69788}label{display:block;font-size:11px;color:#bbae9f;margin-top:16px}input,textarea,select{width:100%;display:block;border:1px solid #3b3025;border-radius:9px;background:#090909;color:#f4eee6;padding:12px;margin-top:7px;font-size:12px;min-width:0}textarea{resize:vertical;min-height:82px}input[type=checkbox]{display:inline;width:auto;margin-right:7px}.error{font-size:12px;color:#ffb58a;line-height:1.5;margin:12px 0;overflow-wrap:anywhere}.error:empty{display:none}.address{word-break:break-all;background:#090909;border:1px solid #33291e;border-radius:9px;padding:12px;font-family:monospace;font-size:11px;line-height:1.6;user-select:all}.review-line{display:flex;justify-content:space-between;gap:15px;margin:14px 0;font-size:12px;color:#b4a797}.review-line strong{color:#f5e9dc;text-align:right}.receipt{padding:12px 0;border-bottom:1px solid #30271d;font-size:12px;line-height:1.6;overflow-wrap:anywhere}.receipt small{color:#938474}.page-title{font-size:24px;letter-spacing:-.6px;margin:24px 0 7px}.search{margin:17px 0}.secrets{user-select:all;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;line-height:1.8;background:#080808;padding:14px;border-radius:10px}.row-buttons{display:flex;gap:9px;flex-wrap:wrap;margin-top:15px}#toast{position:fixed;bottom:78px;left:24px;right:24px;max-width:342px;margin:auto;background:#36271a;border:1px solid #74421f;color:#ffd6b2;padding:13px;border-radius:12px;font-size:12px;text-align:center;opacity:0;pointer-events:none;transition:opacity .15s;z-index:5}#toast.visible{opacity:1}.busy{color:var(--orange);font-size:12px;line-height:1.6}.notice{background:#261b11;color:#c9a88a;padding:12px;border-radius:9px;font-size:11px;line-height:1.6;margin:15px 0}.split{display:flex;align-items:center;justify-content:space-between}.pill{font-size:9px;text-transform:uppercase;letter-spacing:.8px;color:#ae9177}.account-item{width:100%;text-align:left;margin:7px 0;background:#241d17;padding:12px;border-radius:10px}.account-item small{display:block;margin-top:5px;color:#ad9b89}.seed-check{font-size:12px;line-height:1.6}.spacer{height:12px}@media(min-width:500px){body{margin:32px auto;width:390px;min-height:690px;border:1px solid #33291f;border-radius:24px;overflow:hidden;box-shadow:0 20px 90px #000}.shell{min-height:690px}.bottom{position:sticky;margin-top:20px;width:100%;bottom:0}.shell{padding-bottom:0}.hero{padding-top:35px;padding-bottom:28px}dialog{max-width:360px}#toast{bottom:40px}}
+
+@media(max-width:499px){.top{height:68px;padding:12px 20px}.hero{padding:20px 20px 17px}.hero h1{font-size:47px}.actions{margin-bottom:21px}.action{height:75px}.asset{padding:12px}.section-label{margin-top:17px}.bottom{height:58px}.shell{padding-bottom:68px}.empty{padding:13px}.welcome{padding-top:30px}}
+
+/* Keep identity, amounts and navigation in distinct rows at popup widths. */
+.network{display:flex;align-items:center;justify-content:center;gap:7px}.network .dot{margin:0;flex-shrink:0}
+.content{min-width:0}.brand,.icon-btn{flex-shrink:0}.account{min-width:0}
+.section-label{gap:12px;line-height:1.5;flex-wrap:wrap}.section-label span:last-child{text-align:right}
+.asset-value{flex:0 1 132px;min-width:76px;line-height:1.4}.asset small{line-height:1.5}.asset-info strong{line-height:1.4}
+#search-results{display:grid;gap:12px;margin-bottom:18px}.inscription-card,.pending-card{min-width:0;border:1px solid #30281f;border-radius:14px;padding:16px;background:#171411;display:grid;gap:12px}
+.inscription-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;min-width:0}.inscription-heading strong{font-size:14px;line-height:1.45;overflow-wrap:anywhere}.inscription-heading .pill,.inscription-heading .tag{flex-shrink:0;max-width:90px;overflow-wrap:anywhere;line-height:1.5}
+.inscription-balance{font-size:14px;line-height:1.5;overflow-wrap:anywhere}.inscription-balance span{color:#9c9287;font-size:11px;margin-left:8px}
+.proof-link{display:inline-flex;align-items:center;gap:5px;width:fit-content;max-width:100%;white-space:nowrap;font-size:12px;line-height:1.6}
+.mint-field{display:grid;gap:6px;min-width:0;padding-top:11px;border-top:1px solid #31291f}.mint-field>span{font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#978878}.mint-field code{display:block;overflow-wrap:anywhere;word-break:break-all;white-space:normal;font-size:10px;line-height:1.7;color:#b3a393;user-select:all}
+.explorer-link{display:flex;align-items:center;justify-content:center;text-align:center;line-height:1.6;white-space:normal;margin:18px 0 8px;text-wrap:balance}
+.pending-section{display:grid;gap:10px}.pending-section .section-label{margin-bottom:0}.pending-card{background:#20170f;border-color:#51341d}.pending-amount{color:#ffb479;font-size:17px;font-weight:600;overflow-wrap:anywhere;line-height:1.5}.pending-transfer{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;font-size:10px;color:#bca18a;line-height:1.6}.pending-status{padding:10px 0;margin:0}.setting-field{margin:23px 0 18px;font-size:12px}.setting-field select{font-size:13px;padding:13px;cursor:pointer}
+.receipt{display:block;line-height:1.8}.receipt a{display:inline-flex;gap:5px;white-space:nowrap}.receipt small{display:inline-block;line-height:1.7;margin-top:4px}.review-line{flex-wrap:wrap}.review-line strong{overflow-wrap:anywhere;min-width:0}.modal-head h2{overflow-wrap:anywhere;line-height:1.4}
+@media(max-width:499px){body{width:390px;min-width:340px;max-width:100vw}.bottom{width:100%;max-width:390px}.shell{padding-bottom:88px}.content{padding-inline:20px}}
+@media(min-width:500px){body{overflow:visible}.shell{padding-bottom:0}.bottom{border-radius:0 0 24px 24px}}
+.portfolio-label{display:block;margin-top:17px;text-transform:uppercase;font-size:10px;letter-spacing:1.2px;color:#a79a8b}.hero .portfolio-total{font-size:38px;line-height:1.2;letter-spacing:-1.5px;overflow-wrap:anywhere;margin-top:7px}.portfolio-scope{display:block;font-size:9px;color:#8c8175;line-height:1.5;margin-top:7px}.asset .asset-usd{color:#edc5a5;font-size:11px;margin-top:6px}.inscription-usd{color:#edc5a5;font-size:12px;line-height:1.6}.valuation{border:1px solid #48321f;background:#21170f;padding:13px;margin:15px 0;border-radius:10px;font-size:13px}.valuation p{font-size:10px;color:#b8a18b;line-height:1.6;margin:7px 0 0}.hero p{line-height:1.5}
+[hidden]{display:none!important}.field-hint{font-size:11px;line-height:1.5;color:#ffb58a;margin:6px 0 0;overflow-wrap:anywhere}.field-hint:empty{display:none}input[aria-invalid=true]{border-color:#b86d3c}#link-source{font-size:12px}#link-existing{margin-top:12px}#swap-fields{margin-top:10px}
+.price-status{display:block;min-height:14px;margin-top:7px;font-size:9px;color:#a6907b;line-height:1.5}
+.token-section{min-width:0}.coin:has(.token-image){position:relative;overflow:hidden}.coin .token-image{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%}.coin-fallback{display:inline-block}
+
+.send-token-choice{display:flex;align-items:center;justify-content:space-between;gap:14px;text-align:left}.send-token-choice>span{min-width:0;overflow-wrap:anywhere}.send-token-choice strong{display:block}.send-token-choice small{display:block;color:var(--muted);font-size:10px;font-weight:400;margin-top:5px}.send-token-balance{text-align:right;max-width:55%;font-variant-numeric:tabular-nums}
+.approval{padding:24px}.approval .address{margin-top:8px}.approval pre{white-space:pre-wrap}.approval details{margin-top:18px;font-size:12px;color:#bbae9f}.approval select{margin-bottom:14px}
+
+/* Bridge feedback: actual requests, with a static reduced-motion path. */
+.joint-busy:not(:empty){display:flex;align-items:center;gap:9px;line-height:1.5}.joint-busy[data-loading="true"]:not(:empty)::before{content:"";width:14px;height:14px;flex:0 0 14px;border:2px solid #72543d;border-top-color:#ff813d;border-radius:50%;animation:joint-spin .8s linear infinite}.joint-busy[data-paused="true"]::before{animation-play-state:paused}.joint-elapsed{margin-left:auto;white-space:nowrap;font-variant-numeric:tabular-nums;color:#cbbeb0;font-size:12px}.joint-busy:empty{display:none}#joint-token{width:100%;min-width:0;background:#0b0907;color:#efe5d9;border:1px solid #493b2f;border-radius:10px;padding:12px;font:inherit;margin-bottom:16px}#joint-token:focus-visible{outline:2px solid #ffae68;outline-offset:3px}#joint-token:disabled{opacity:.6} @keyframes joint-spin{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){.joint-busy::before{animation:none!important}}
+
+.joint-wallet-pair{margin:0 0 16px;color:#cbbeb0}.joint-wallet-pair summary{cursor:pointer;text-decoration:underline;text-underline-offset:3px}.joint-wallet-pair .address{color:#efe5d9;overflow-wrap:anywhere}
+
+/* Exact amount shortcut shared by every send and bridge form. */
+.amount-label{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:20px 0 8px}.amount-label label{margin:0}.amount-max{flex:none;min-width:52px;min-height:36px;padding:6px 12px;border:1px solid var(--line,#3b3328);border-radius:10px;background:var(--surface,#211e18);color:var(--accent,#ff8133);font:inherit;font-size:13px;font-weight:700;cursor:pointer}.amount-max:hover:not(:disabled){background:#34271b}.amount-max:focus-visible{outline:2px solid #ff8133;outline-offset:3px}.amount-max:disabled{opacity:.45;cursor:default}
+/* Keep the established modal appearance; only its content scrolls. */
+dialog[open]:has(> .modal-body){--modal-inset:21px;display:flex;flex-direction:column;padding:0;overflow:hidden}
+dialog[open]:has(.joint-transferable){--modal-inset:22px}
+dialog:has(> .modal-body)>.modal-head{margin:var(--modal-inset) var(--modal-inset) 14px;padding:0;flex:none}
+dialog>.modal-body{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:0 var(--modal-inset)}
+dialog>.modal-foot{flex:none;padding:0 var(--modal-inset) var(--modal-inset);background:inherit}
+dialog>.modal-foot>.error{margin:10px 0 0}
+dialog>.modal-foot>.error:empty,dialog>.modal-foot>p.busy:empty{display:none}
+dialog>.modal-foot>p.subtle{margin:8px 0 0}
+.sync-track{height:4px;border-radius:4px;background:#241e18;overflow:hidden;margin:14px 0 8px}
+#sync-bar{height:100%;width:0;background:var(--orange);border-radius:4px;transition:width .4s ease}
+.amount-input::placeholder,input.amount-input::placeholder{color:#6f6a64;opacity:1}
+@media(max-width:380px){dialog[open]:has(.joint-transferable){--modal-inset:17px}}
+@media(prefers-reduced-motion:reduce){#sync-bar{transition:none}}
+
+.joint-transferable{font-size:14px;line-height:1.55;color:#efe5d9}
+.joint-transferable p{margin:16px 0}
+.joint-transferable h3{font-size:16px;margin:24px 0 12px}
+.joint-transferable .subtle,.joint-transferable .joint-limits{font-size:12px;color:#cbbeb0}
+.joint-transferable label{font-size:12px;color:#cbbeb0}
+.joint-transferable input,.joint-transferable select{font-size:14px;caret-color:#ffae68}
+.joint-transferable .primary,.joint-transferable .secondary,.joint-transferable .text-btn{font-size:13px;min-height:44px}
+.joint-transferable button:disabled{cursor:not-allowed}
+.joint-transferable details{margin-top:20px;color:#cbbeb0;font-size:13px}
+.joint-transferable summary{cursor:pointer;text-decoration:underline;text-underline-offset:4px}
+.joint-transferable strong{font-variant-numeric:tabular-nums}
+.joint-transferable a{display:inline-block;min-height:32px;padding-block:6px;color:#ffae68}
+.joint-transferable .address{overflow-wrap:anywhere;user-select:text}
+.joint-transferable ::selection{background:#ab4f15;color:#fff}
+.joint-transferable summary:focus-visible{outline:2px solid #ffae68;outline-offset:3px}
+
+.joint-transferable .joint-error{color:#ffae68;overflow-wrap:anywhere}
+.joint-transferable #progress:empty{display:none}
+.joint-waiting .joint-wait-label{font-size:1.05em;line-height:1.4}
+.joint-waiting .joint-wait-steps{list-style:none;padding:0;margin:18px 0;display:grid;gap:10px;font-size:.9em}
+.joint-wait-steps li{display:flex;justify-content:space-between;gap:16px;color:#cbbeb0}
+.joint-wait-steps li[data-state="current"]{color:#ffae68;font-weight:600}
+.joint-wait-steps li span:last-child{flex-shrink:0}
+.joint-busy[data-paused="true"]::before{animation-play-state:paused!important}
+
+/* Bridge surface: the paired token previews are the primary visual hierarchy. */
+dialog:has(.joint-transferable){background:#101010;border-color:#292929;padding:22px;max-width:420px}
+dialog:has(.joint-transferable) .modal-head{margin-bottom:8px}
+dialog:has(.joint-transferable) .modal-head h2{font-size:24px;letter-spacing:-.5px}
+dialog:has(.joint-transferable) .modal-head button{width:44px;height:44px;padding:0;color:#b8b5b1}
+.joint-transferable{color:#f5f3f0;line-height:1.5}
+.joint-transferable .bridge-intro{font-size:13px;color:#b3b0ab;margin:0 0 22px}
+.joint-transferable .bridge-token-panels{position:relative;margin:4px 0 20px;display:grid;gap:10px}
+.joint-transferable .bridge-token-panel{background:#202020;border-radius:22px;padding:18px;min-width:0}
+.joint-transferable .bridge-panel-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;color:#b7b4af;font-size:13px;margin-bottom:14px}
+.joint-transferable .bridge-panel-heading>span:last-child{color:#d1cec9;font-size:12px}
+.joint-transferable .bridge-panel-value{display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0;min-height:48px}
+.joint-transferable .bridge-panel-value input{background:transparent;border:0;border-radius:4px;box-shadow:none;margin:0;padding:8px 0;width:100%;min-width:0;flex:1;font-size:28px;line-height:1.25;font-weight:550;letter-spacing:-.5px;color:#faf8f5}
+.joint-transferable .bridge-amount{font-size:28px;line-height:1.25;letter-spacing:-.5px;font-weight:550;min-width:0;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+.joint-transferable .bridge-amount-compact{font-size:19px;letter-spacing:-.2px}
+.joint-transferable .bridge-token-chip{position:relative;display:flex;align-items:center;gap:9px;background:#383838;border-radius:30px;padding:6px 10px 6px 6px;flex-shrink:0;max-width:180px;min-height:44px}
+.joint-transferable .bridge-token-chip strong{font-size:13px;line-height:1.2;font-weight:650;min-width:0;overflow-wrap:anywhere}
+.joint-transferable .bridge-token-chip>svg{width:16px;height:16px;flex-shrink:0;fill:none;stroke:currentColor;stroke-width:1.8}
+.joint-transferable .bridge-token-chip select{position:absolute;inset:0;opacity:0;width:100%;height:100%;margin:0;padding:0;cursor:pointer}
+.joint-transferable .bridge-token-chip:focus-within{outline:2px solid #ff813d;outline-offset:3px}
+.joint-transferable .bridge-token-art{position:relative;width:32px;height:32px;flex:0 0 32px}
+.joint-transferable .bridge-token-art>img,.joint-transferable .bridge-token-initial{width:32px;height:32px;display:grid;place-items:center;border-radius:50%;object-fit:cover;background:#121212;color:#ffac78;font-size:12px;font-weight:650;overflow:hidden}
+.joint-transferable .bridge-network-badge{position:absolute;right:-3px;bottom:-3px;display:grid;place-items:center;width:18px;height:18px;background:#101010;color:#ff914e;border-radius:50%;border:2px solid #383838}
+.joint-transferable .bridge-network-badge svg{width:14px;height:14px}
+.joint-transferable .bridge-panel-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:32px;margin-top:12px;color:#b7b4af;font-size:11px;font-variant-numeric:tabular-nums}
+.joint-transferable .bridge-panel-foot>span{min-width:0;overflow-wrap:anywhere}
+.joint-transferable .bridge-panel-foot>span:last-child:not(:first-child){white-space:nowrap;color:#b7b4af;font-size:10px}
+.joint-transferable .bridge-max{background:#383838;color:#f0ebe5;border-radius:18px;padding:0 12px;min-height:44px;font-size:12px;flex-shrink:0}
+.joint-transferable .bridge-direction{position:absolute;inset:calc(50% - 21px) auto auto calc(50% - 21px);z-index:1}
+.joint-transferable .bridge-direction>button,.joint-transferable .bridge-direction>span{width:42px;height:42px;border-radius:50%;background:#ff813d;color:#160e07;display:grid;place-items:center;border:4px solid #101010;padding:6px}
+.joint-transferable .bridge-direction>button{width:44px;height:44px}
+.joint-transferable .bridge-direction svg{width:21px;height:21px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.joint-transferable .bridge-link-panels .bridge-panel-value{flex-wrap:wrap;gap:12px}
+.joint-transferable .bridge-link-panels .bridge-panel-value>.bridge-amount{flex:1 1 100%;font-size:25px;order:2}
+.joint-transferable .bridge-link-panels .bridge-token-chip{max-width:100%;background:#333}
+.joint-transferable .bridge-link-panels .bridge-panel-foot{margin-top:3px}
+.joint-transferable .bridge-link-intro h3{margin:22px 0 8px;font-size:17px}
+.joint-transferable .bridge-link-intro p,.joint-transferable .bridge-link-copy{font-size:13px;color:#bdb9b3;margin:0 0 18px;line-height:1.6}
+.joint-transferable .primary.wide{min-height:52px;border-radius:14px;font-size:15px;background:#ff813d;color:#1a0e06;font-weight:650;margin-top:16px}
+.joint-transferable .bridge-cancel{margin:6px 0 0;color:#bdb9b3;min-height:44px}
+.joint-transferable .bridge-fee-line{display:flex;justify-content:space-between;gap:12px;font-size:12px;color:#bdb9b3;margin:12px 0}
+.joint-transferable .bridge-fee-line>span:last-child{text-align:right;overflow-wrap:anywhere}
+.joint-transferable #j3-transaction-details{font-size:12px;margin:14px 0}
+.joint-transferable details>summary{display:flex;align-items:center;min-height:44px;gap:8px;list-style:none;text-decoration:none;color:#bdb9b3}
+.joint-transferable details>summary::-webkit-details-marker{display:none}
+.joint-transferable details>summary::after{content:'';width:7px;height:7px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(45deg);margin-left:auto;margin-right:4px}
+.joint-transferable details[open]>summary::after{transform:rotate(225deg)}
+.joint-transferable .bridge-secondary{border-top:1px solid #2a2a2a;margin-top:18px;padding-top:6px}
+.joint-transferable .bridge-secondary details{margin:0}
+.joint-transferable .bridge-secondary summary{font-size:12px;min-height:44px}
+.joint-transferable .bridge-secondary .text-btn{margin:0;color:#bdb9b3;font-size:12px;text-align:left;padding:10px 0}
+.joint-transferable #j3-actions{margin:12px 0 0}
+.joint-transferable #j3-actions summary{font-size:12px}
+.joint-transferable .bridge-sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}
+.joint-transferable #progress{font-size:12px}
+@media(max-width:380px){dialog:has(.joint-transferable){padding:17px}.joint-transferable .bridge-token-panel{padding:15px}.joint-transferable .bridge-token-chip{gap:6px;padding-right:8px;max-width:158px}.joint-transferable .bridge-token-chip strong{font-size:12px}.joint-transferable .bridge-amount,.joint-transferable .bridge-panel-value input{font-size:24px}.joint-transferable .bridge-amount-compact{font-size:17px}}
+@media(prefers-reduced-motion:reduce){.joint-transferable *{scroll-behavior:auto}}
+
+.joint-transferable .bridge-value-long{flex-wrap:wrap;gap:12px}.joint-transferable .bridge-value-long>input,.joint-transferable .bridge-value-long>.bridge-amount{flex:1 1 100%;order:2;font-size:24px;letter-spacing:-.3px}.joint-transferable .bridge-value-long>input{padding:0}.joint-transferable .bridge-value-long>.bridge-token-chip{margin-left:auto}
+
+/* Submitted wallet linking uses the full content width and ends at its status. */
+.joint-transferable.bridge-link-wait>h3{margin-top:0}
+.joint-transferable.bridge-link-wait .joint-waiting>p:last-child{margin-bottom:0}
+.joint-transferable .bridge-secondary[hidden]{display:none}
+/* Dedicated Monero send and token details, 0.1.51. */
+dialog:has(.monero-send) .modal-head{position:relative;justify-content:center;margin-bottom:16px;min-height:44px;padding-inline:30px}
+dialog:has(.monero-send) .modal-head h2{text-align:center;font-size:22px;overflow-wrap:anywhere}
+dialog:has(.monero-send) .modal-head button{position:absolute;right:-10px;top:0}
+.joint-transferable .monero-send-art{position:relative;width:72px;height:72px;margin:16px auto 28px;border-radius:50%;background:#242424;display:grid;place-items:center;color:#ffac78;font-size:24px;font-weight:650}
+.monero-send-art>img{width:72px;height:72px;border-radius:50%;object-fit:cover}
+.joint-transferable .monero-send-network{position:absolute;right:-3px;bottom:-3px;display:grid;place-items:center;width:25px;height:25px;background:#101010;border:2px solid #101010;border-radius:50%;color:#ff813d}
+.monero-send-network svg{width:21px;height:21px}
+.joint-transferable .monero-send-form textarea{display:block;box-sizing:border-box;resize:vertical;min-height:76px;width:100%;margin:0 0 12px;padding:16px;border:1px solid #303030;border-radius:12px;background:#191919;color:#f5f3f0;font:inherit;line-height:1.5;overflow-wrap:anywhere;caret-color:#ff813d}
+.joint-transferable .monero-send-form textarea::placeholder,.joint-transferable .monero-send-amount input::placeholder{color:#aaa6a0}
+.joint-transferable .monero-send-amount{display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid #303030;border-radius:12px;background:#191919;min-width:0}
+.joint-transferable .monero-send-amount input{box-sizing:border-box;flex:1;min-width:0;width:100%;margin:0;padding:8px 0;background:transparent;border:0;border-radius:4px;font-size:20px;line-height:1.5;color:#faf8f5;font-variant-numeric:tabular-nums}
+.joint-transferable .monero-send-amount>span{font-size:11px;max-width:95px;overflow-wrap:anywhere;color:#bdb9b3}
+.joint-transferable .monero-send-amount .bridge-max{padding-inline:12px;background:#303030}
+.joint-transferable .monero-send-available{margin:12px 0;text-align:right;color:#bdb9b3;font-size:12px;font-variant-numeric:tabular-nums}
+.joint-transferable .monero-send-help{margin:18px 0 0;line-height:1.6}
+.joint-transferable .monero-send-actions{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:32px}
+.joint-transferable .monero-send-actions>button,.joint-transferable .monero-send-actions>.primary.wide{margin:0;min-height:52px;border-radius:14px;font-size:15px}
+.joint-transferable .monero-send-actions .secondary{background:#262626;color:#f5f3f0}
+.joint-transferable .monero-send-summary{display:grid;gap:6px;text-align:center;margin:0 0 24px}
+.joint-transferable .monero-send-summary strong{font-size:26px;overflow-wrap:anywhere}
+.joint-transferable .monero-send-summary>span{color:#bdb9b3;font-size:12px}
+.monero-send textarea:focus-visible,.monero-send input:focus-visible,.monero-send button:focus-visible{outline:2px solid #ff813d;outline-offset:3px}
+.monero-send textarea:disabled,.monero-send input:disabled{opacity:.65}
+.monero-token-detail .page-title{font-size:30px;line-height:1.2;overflow-wrap:anywhere;margin:20px 0 12px;font-variant-numeric:tabular-nums}
+.monero-token-detail>label{display:block;margin:22px 0 8px;font-size:12px;color:#cbbeb0}
+.monero-token-detail>.address{margin:0;line-height:1.6;overflow-wrap:anywhere}
+.monero-token-detail>.primary{margin-top:22px}
+.monero-token-detail>.secondary{margin-top:12px}
+
+/* Compact send fields, 0.1.53. */
+.joint-transferable .monero-send-form textarea{resize:none;height:62px;min-height:62px;padding:6px 12px;font-size:11px;line-height:16px;overflow-y:auto}
+.joint-transferable .monero-send-amount{min-height:62px}
+.joint-transferable .monero-send-amount input{font-size:18px}
+/* 26 Oct 2026: return progress steps (extension popup and website bridge). */
+.bridge-steps{list-style:none;margin:14px 0 8px;padding:0;display:grid;gap:12px}
+.bridge-steps li{display:grid;grid-template-columns:14px 1fr;column-gap:10px;row-gap:4px;align-items:start;font-size:13px;line-height:1.35;color:#8c8985}
+.bridge-steps li>small,.bridge-steps li>a{grid-column:2;font-size:12px}
+.bridge-steps li>small{color:#8c8985}
+.bridge-step-dot{width:12px;height:12px;margin-top:2px;border-radius:50%;border:2px solid #3a3836;box-sizing:border-box}
+.bridge-steps li.done{color:#d9d3cb}.bridge-steps li.done .bridge-step-dot{background:#ff813d;border-color:#ff813d}
+.bridge-steps li.active{color:#f5e9dc;font-weight:600}.bridge-steps li.active .bridge-step-dot{border-color:#ff813d;animation:bridge-pulse 1.4s ease-in-out infinite}
+.bridge-steps li.active::after{content:"";grid-column:2;height:3px;border-radius:2px;background:linear-gradient(90deg,rgba(255,129,61,0),#ff813d,rgba(255,129,61,0));background-size:200% 100%;animation:bridge-shimmer 1.6s linear infinite}
+.bridge-steps li.blocked{color:#ffb58a;font-weight:600}.bridge-steps li.blocked .bridge-step-dot{border-color:#ffb58a;background:rgba(255,181,138,.15)}
+@keyframes bridge-pulse{0%,100%{box-shadow:0 0 0 0 rgba(255,129,61,.55)}50%{box-shadow:0 0 0 6px rgba(255,129,61,0)}}
+@keyframes bridge-shimmer{from{background-position:200% 0}to{background-position:-200% 0}}
+@media(prefers-reduced-motion:reduce){.bridge-steps li.active .bridge-step-dot,.bridge-steps li.active::after{animation:none}}

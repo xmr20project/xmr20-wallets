@@ -1,0 +1,32 @@
+{
+  "name": "@xmr20/web-wallet",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The xmr20.org website wallet (experimental)",
+  "scripts": {
+    "build": "node build.mjs",
+    "dev": "node dev-server.mjs",
+    "prepare-public": "node prepare-public.mjs"
+  },
+  "dependencies": {
+    "@noble/curves": "1.9.7",
+    "@noble/hashes": "1.8.0",
+    "@raydium-io/raydium-sdk-v2": "0.2.72-alpha",
+    "@solana/spl-token": "0.4.15",
+    "@solana/web3.js": "1.98.4",
+    "bn.js": "5.2.5",
+    "bs58": "6.0.0",
+    "buffer": "6.0.3",
+    "lucide-react": "0.468.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "5.2.0",
+    "esbuild": "0.28.2",
+    "monero-ts": "0.11.16",
+    "vite": "7.3.6"
+  },
+  "license": "MIT"
+}

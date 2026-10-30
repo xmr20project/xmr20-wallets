@@ -1,0 +1,47 @@
+{
+  "manifest_version": 3,
+  "name": "XMR20 Wallet — Bridge testing",
+  "version": "0.1.124",
+  "minimum_chrome_version": "120",
+  "description": "SOL, Monero and indexed XMR20 inscriptions. Local encrypted wallets and watch-only accounts.",
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "XMR20 Wallet"
+  },
+  "permissions": [
+    "storage",
+    "alarms",
+    "notifications"
+  ],
+  "host_permissions": [
+    "https://xmr20.org/*",
+    "https://api.xmr20.org/*",
+    "https://solana-rpc.publicnode.com/*",
+    "https://xmr-node.cakewallet.com/*",
+    "https://node.sethforprivacy.com/*",
+    "https://launch-mint-v1.raydium.io/*",
+    "https://api-v3.raydium.io/*",
+    "https://api.coingecko.com/*",
+    "http://127.0.0.1/*",
+    "http://127.0.0.1:8933/*"
+  ],
+  "content_security_policy": {
+    "extension_pages": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; object-src 'none'; style-src 'self'; img-src 'self' data:; connect-src 'self' https://xmr20.org https://api.xmr20.org https://solana-rpc.publicnode.com https://xmr-node.cakewallet.com:18081 https://node.sethforprivacy.com https://launch-mint-v1.raydium.io https://api-v3.raydium.io https://api.coingecko.com http://127.0.0.1:8928 http://127.0.0.1:8933 http://127.0.0.1:18941; worker-src 'self'; base-uri 'none'; form-action 'none'"
+  },
+  "icons": {
+    "16": "icons/16.png",
+    "48": "icons/48.png",
+    "128": "icons/128.png"
+  },
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAyUcXjhfZ/GI7PPgCGHtgb/ew3d0xElDUG31Xum2BZamUkelDJQHZAgVjvegMrozEumyloaN5UltEk98Vdij2xMfqydgbZRhGUy7WSR188Kod4ZofjN4efukd3UxH/wUGLdbqG2OOheHFsMk1wpAVqmeh7bQ2PTCViiw7pax94UXhXUyhcnuruTYVvC+5/hfRiel6kWn0nElgIa65lQx9z70qweQd24hqMF4w/IT0KHVtONhKY0W98g7gHn1Ghf1QSiy/W57swoooU2ovW+cJ7gZMZYWTMYl4CJUWs5UAZCrVqUwrFgS2xq+ZmKWq+wLJOP1+cCZLznhSW6HMA2hCXwIDAQAB",
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "externally_connectable": {
+    "matches": [
+      "https://xmr20.org/*",
+      "http://127.0.0.1/*"
+    ]
+  }
+}

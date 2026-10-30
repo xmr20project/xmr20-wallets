@@ -1,0 +1,308 @@
+/* XMR20 website wallet in the extension's design (owner, 28 Oct 2026: "more like the wallet we made from the chrome extension …
+   more compact … very premium"). Loaded after wallet.css; only restyles the wallet panel, no flow changes. */
+dialog.wallet-dialog{--wp-orange:#ff813d;--wp-text:#f8f5f1;--wp-muted:#8c8985;--wp-soft:#a79a8b;--wp-panel:#1a1918;--wp-line:#24211e;--wp-field:#121110;
+ width:min(440px,calc(100vw - 24px));max-width:none;max-height:min(780px,calc(100dvh - 24px));padding:0;border-radius:22px;border:1px solid #2b2724;
+ background:radial-gradient(130% 55% at 50% -8%,#24170f 0%,rgba(13,12,11,0) 62%),#0c0b0a;color:var(--wp-text);
+ font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:13px;line-height:1.45;box-shadow:0 40px 100px rgba(0,0,0,.65),0 0 0 1px rgba(255,129,61,.04);overflow:hidden}
+dialog.wallet-dialog[open]{display:flex;flex-direction:column;height:fit-content}
+dialog.wallet-dialog button{min-height:0}
+dialog.wallet-dialog::backdrop{background:rgba(6,6,6,.62);backdrop-filter:blur(6px)}
+dialog.wallet-dialog :is(button,input,select,textarea,label,p,h2,h3,h4,small,strong,span,summary,a){font-family:inherit;letter-spacing:normal}
+dialog.wallet-dialog :is(code,.address,.wallet-address-copy,.wallet-address-line,.wallet-address-block,.mono,[class*="address"] input,textarea){font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+
+/* Header: brand mark, label and account, close */
+dialog.wallet-dialog .wallet-dialog-head{display:flex;align-items:center;gap:11px;margin:0;padding:15px 16px 15px 18px;border-bottom:1px solid var(--wp-line)}
+dialog.wallet-dialog .wallet-brand{flex:none;width:36px;height:36px;border-radius:12px;background:var(--wp-orange);color:#15100b;display:grid;place-items:center;font-size:17px;font-weight:900;letter-spacing:-3px;padding-right:3px}
+dialog.wallet-dialog .wallet-dialog-head>div{flex:1;min-width:0}
+dialog.wallet-dialog .wallet-kicker{display:block;margin:0 0 4px;text-transform:uppercase;letter-spacing:2px;font-size:9px;font-weight:650;color:var(--wp-muted)}
+dialog.wallet-dialog .wallet-dialog-head h2{margin:0;font-size:15px;font-weight:650;letter-spacing:-.2px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+dialog.wallet-dialog .wallet-close{flex:none;width:34px;height:34px;padding:0;display:grid;place-items:center;border-radius:11px;background:#1b1917;border:1px solid #2b2724;color:#bdb6ae;font-size:18px;line-height:1}
+dialog.wallet-dialog .wallet-close:hover{color:#fff;border-color:#3b3129}
+
+/* Body: fixed switch, scrolling list, fixed footer */
+dialog.wallet-dialog .wallet-dialog-body{flex:0 1 auto;min-height:0;display:flex;flex-direction:column;padding:14px 16px 0;overflow:auto;scrollbar-width:thin;scrollbar-color:#2e2a26 transparent}
+dialog.wallet-dialog .wallet-panel-scroll{flex:0 1 auto;min-height:0;overflow:auto;margin:0 -16px;padding:0 16px 14px;scrollbar-width:thin;scrollbar-color:#2e2a26 transparent}
+dialog.wallet-dialog .wallet-chain-tabs{flex:none;display:grid;grid-template-columns:1fr 1fr;gap:4px;margin:0 0 12px;padding:4px;background:#141312;border:1px solid var(--wp-line);border-radius:14px}
+dialog.wallet-dialog .wallet-chain-tabs button{display:flex;align-items:center;justify-content:center;gap:7px;height:38px;margin:0;padding:0 10px;border-radius:10px;border:0;background:transparent;color:#8f8a84;font-size:13px;font-weight:650;box-shadow:none}
+dialog.wallet-dialog .wallet-chain-tabs button span{color:#77716b;font-size:12px;font-weight:500}
+dialog.wallet-dialog .wallet-chain-tabs button[aria-selected="true"]{background:#24211e;color:#fff;box-shadow:inset 0 0 0 1px #35302a}
+dialog.wallet-dialog .wallet-chain-tabs button[aria-selected="true"] span{color:#bdb6ae}
+dialog.wallet-dialog .wallet-tab-logo{width:18px;height:18px;border-radius:50%;object-fit:contain}
+dialog.wallet-dialog .wallet-foot{flex:none;display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 -16px;padding:11px 16px;border-top:1px solid var(--wp-line);background:rgba(10,9,8,.92)}
+dialog.wallet-dialog .wallet-foot .wallet-disconnect{margin:0!important;opacity:1;font-size:12px!important;padding:6px 0!important;background:none;border:0;color:#8f8a84;font-size:12px;font-weight:550;box-shadow:none}
+dialog.wallet-dialog .wallet-disconnect:hover{color:#fff}
+dialog.wallet-dialog .wallet-address-copy{margin:0;padding:6px 10px;border-radius:999px;background:#1a1816;border:1px solid #2b2724;color:#ff9b63;font-size:11.5px;box-shadow:none}
+dialog.wallet-dialog .wallet-address-copy span{margin-left:6px;color:#8f8a84;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+
+/* Asset rows (as the extension's token list) */
+dialog.wallet-dialog :is(.wallet-native-asset,.wallet-asset){display:flex;align-items:center;gap:11px;margin:0 0 8px;padding:12px 13px;background:var(--wp-panel);border:1px solid #221f1c;border-radius:15px;transition:border-color .15s}
+dialog.wallet-dialog :is(.wallet-native-asset,.wallet-asset):hover{border-color:#3a2d22}
+dialog.wallet-dialog :is(.wallet-native-icon,.wallet-asset-icon){flex:none;width:38px;height:38px;border-radius:50%;display:grid;place-items:center;overflow:hidden;background:#2b1b10;color:var(--wp-orange);font-weight:700;font-size:16px}
+dialog.wallet-dialog :is(.wallet-native-icon,.wallet-asset-icon) img{width:100%;height:100%;object-fit:cover}
+dialog.wallet-dialog .wallet-native-icon img[src$=".svg"]{width:26px;height:26px;object-fit:contain}
+dialog.wallet-dialog .wallet-native-icon{background:#15140f}
+dialog.wallet-dialog .wallet-native-asset>div,dialog.wallet-dialog .wallet-asset-info{flex:1;min-width:0}
+dialog.wallet-dialog .wallet-native-asset>div strong,dialog.wallet-dialog .wallet-asset-info a,dialog.wallet-dialog .wallet-asset-info strong{display:block;color:#fff;font-size:14px;font-weight:600;text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+dialog.wallet-dialog .wallet-native-asset small,dialog.wallet-dialog .wallet-asset-info small{display:block;margin-top:2px;color:var(--wp-muted);font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+dialog.wallet-dialog .wallet-native-asset>strong{font-size:15px;font-weight:650;color:#fff;white-space:nowrap}
+dialog.wallet-dialog .wallet-asset-usd{color:#dcb796;font-size:12.5px;font-weight:600;white-space:nowrap}
+dialog.wallet-dialog .wallet-dialog-body :is(.wallet-native-asset,.wallet-assets-head)>button{flex:none;width:30px;height:30px;margin:0;padding:0;display:grid;place-items:center;border-radius:10px;background:transparent;border:1px solid #2b2724;color:#a39b92;font-size:14px;box-shadow:none}
+dialog.wallet-dialog .wallet-asset-actions{display:flex;gap:6px;flex:none}
+dialog.wallet-dialog .wallet-asset-actions button{margin:0;padding:7px 11px;border-radius:999px;background:#24211e;border:1px solid #332e29;color:#efe9e2;font-size:11.5px;font-weight:600;box-shadow:none}
+dialog.wallet-dialog .wallet-asset-actions button:hover{border-color:var(--wp-orange);color:#fff}
+dialog.wallet-dialog .wallet-asset-wrap{margin:0}
+dialog.wallet-dialog .wallet-assets{margin:0}
+dialog.wallet-dialog .wallet-assets-head{display:flex;align-items:center;justify-content:space-between;margin:16px 1px 10px}
+dialog.wallet-dialog .wallet-dialog-body .wallet-assets-head h3{margin:0;font-size:9px;font-weight:650;letter-spacing:1.6px;text-transform:uppercase;color:#91867b}
+dialog.wallet-dialog .wallet-dialog-body .wallet-assets-head h3 span{margin-left:4px;color:#91867b;font-size:9px}
+dialog.wallet-dialog :is(.wallet-empty,.wallet-index-note){margin:6px 0 0;padding:14px;border:1px dashed #2e2a26;border-radius:14px;color:#9a938b;font-size:12px;text-align:center}
+
+/* Action tiles (as the extension's Send / Bridge / Receive) */
+dialog.wallet-dialog .wallet-actions-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(0,1fr));gap:10px;margin:0 0 16px}
+dialog.wallet-dialog .wallet-actions-row .wallet-tile{height:72px;margin:0;padding:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;border-radius:17px;border:1px solid #282420;background:linear-gradient(145deg,#23211e,#191817);color:#d8d1c9;font-size:12px;font-weight:600;box-shadow:none;text-align:center}
+dialog.wallet-dialog .wallet-actions-row .wallet-tile svg{width:22px;height:22px;color:var(--wp-orange)}
+dialog.wallet-dialog .wallet-actions-row .wallet-tile:hover{border-color:#4a3221;color:#fff}
+
+/* Buttons, fields and text inside every wallet flow */
+dialog.wallet-dialog .wallet-dialog-body button{border-radius:12px;font-weight:600}
+dialog.wallet-dialog .wallet-dialog-body :where(button){margin:6px 6px 0 0;background:#1f1d1b;border:1px solid #2e2a26;color:#ece6df;padding:10px 14px;font-size:12.5px;box-shadow:none}
+dialog.wallet-dialog .wallet-dialog-body :where(button):hover:not(:disabled){border-color:#4a3221}
+dialog.wallet-dialog .wallet-dialog-body :is(.wallet-primary,.wallet-setup-primary,button[type="submit"]):not(.wallet-tile){background:var(--wp-orange)!important;border-color:var(--wp-orange)!important;color:#180e06!important;font-weight:700}
+dialog.wallet-dialog .wallet-dialog-body button:disabled{opacity:.5;cursor:not-allowed}
+dialog.wallet-dialog .wallet-dialog-body label{display:flex;flex-direction:column;gap:6px;margin:10px 0 0;color:var(--wp-soft);font-size:11.5px;font-weight:550;text-transform:none;letter-spacing:normal}
+dialog.wallet-dialog .wallet-dialog-body label:has(>input[type="checkbox"]){flex-direction:row;align-items:center;gap:8px;color:#cfc8c0}
+dialog.wallet-dialog .wallet-dialog-body :is(input:not([type="checkbox"]):not([type="radio"]),select,textarea){width:100%;box-sizing:border-box;margin:0;padding:10px 12px;border-radius:12px;background:var(--wp-field);border:1px solid #2b2724;color:#f6f1eb;font-size:13px;font-weight:500;line-height:1.35;box-shadow:none}
+dialog.wallet-dialog .wallet-dialog-body :is(input,select,textarea):focus{outline:none;border-color:rgba(255,129,61,.55);box-shadow:0 0 0 3px rgba(255,129,61,.12)}
+dialog.wallet-dialog .wallet-dialog-body input[type="checkbox"]{accent-color:var(--wp-orange);width:15px;height:15px}
+dialog.wallet-dialog .wallet-dialog-body :is(h3,h4){margin:4px 0 6px;color:#fff;font-size:15px;font-weight:650;letter-spacing:-.2px}
+dialog.wallet-dialog .wallet-dialog-body :is(p,.small){color:#a59e96;font-size:12px;line-height:1.5}
+dialog.wallet-dialog .wallet-dialog-body .small{font-size:11.5px;color:#958e86}
+dialog.wallet-dialog .wallet-dialog-body .form-error{color:#ff9a8a;font-size:12px}
+dialog.wallet-dialog .wallet-dialog-body [role="status"]{color:#cfa98b}
+dialog.wallet-dialog .wallet-dialog-body details{margin:8px 0 0;border:1px solid #24211e;border-radius:14px;background:#141312}
+dialog.wallet-dialog .wallet-dialog-body details>summary{list-style:none;cursor:pointer;padding:11px 13px;color:#d6cfc7;font-size:12.5px;font-weight:600}
+dialog.wallet-dialog .wallet-dialog-body details>summary::-webkit-details-marker{display:none}
+dialog.wallet-dialog .wallet-dialog-body details>summary::after{content:"›";float:right;color:#8f8a84;transition:transform .15s}
+dialog.wallet-dialog .wallet-dialog-body details[open]>summary::after{transform:rotate(90deg)}
+dialog.wallet-dialog .wallet-dialog-body details>:not(summary){margin-left:13px;margin-right:13px}
+dialog.wallet-dialog .wallet-dialog-body details>:last-child:not(summary){margin-bottom:13px}
+dialog.wallet-dialog .wallet-dialog-body details.wallet-height>summary{font-weight:550;color:#bdb6ae}
+dialog.wallet-dialog .wallet-dialog-body details.wallet-height>summary span{color:#8f8a84}
+dialog.wallet-dialog .wallet-dialog-body details.wallet-height>summary em{float:right;font-style:normal;color:var(--wp-orange);font-weight:600;margin-right:6px}
+dialog.wallet-dialog .wallet-dialog-body details.wallet-height>summary::after{content:none}
+/* 28 Oct 2026 (owner: "the 'change' … is too close to the other text"): the row is a flex line, so the float never applied.
+   Change is pinned to the right with 16px before it; the description wraps on its own side when the window is narrow. */
+dialog.wallet-dialog.wallet-dialog .wallet-dialog-body details.wallet-height>summary{display:flex;align-items:flex-start;gap:16px}
+dialog.wallet-dialog.wallet-dialog .wallet-dialog-body details.wallet-height>summary span.wallet-height-text{flex:1 1 auto;min-width:0;color:inherit}
+dialog.wallet-dialog.wallet-dialog .wallet-dialog-body details.wallet-height>summary em{float:none;flex:none;margin:0 6px 0 0}
+
+/* Panels opened inside the list (bridge, swap, send, import, setup) read as one card */
+dialog.wallet-dialog .wallet-dialog-body :is(.wallet-action-sheet,.wallet-import,.wallet-setup-panel,.native-unlock){margin:8px 0 0;padding:14px;border-radius:16px;background:#151413;border:1px solid #24211e}
+dialog.wallet-dialog .wallet-dialog-body :is(.wallet-action-sheet,.wallet-import,.wallet-setup-panel) :is(.wallet-import,.native-wallet){padding:0;border:0;background:none}
+dialog.wallet-dialog .wallet-dialog-body .wallet-action-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 8px}
+dialog.wallet-dialog .wallet-dialog-body .wallet-action-head :is(h3,h4){margin:0}
+dialog.wallet-dialog .wallet-dialog-body .wallet-action-head button{width:30px;height:30px;padding:0!important;display:grid;place-items:center}
+dialog.wallet-dialog .wallet-dialog-body :is(.wallet-address-block,.wallet-address-line,pre){padding:10px 12px;border-radius:12px;background:#0b0a09;border:1px solid #24211e;color:#e6e0d9;font-size:11.5px;line-height:1.5;overflow-wrap:anywhere;white-space:normal}
+
+/* Not connected: wallet choices */
+dialog.wallet-dialog .wallet-options{display:grid;gap:8px;margin:12px 0}
+dialog.wallet-dialog .wallet-options button{display:flex!important;align-items:center;gap:12px;height:52px;padding:0 14px!important;border-radius:14px!important;background:var(--wp-panel)!important;border:1px solid #2a2622!important;color:#fff!important;font-size:13.5px!important;font-weight:600}
+dialog.wallet-dialog .wallet-options button:hover{border-color:#4a3221!important}
+dialog.wallet-dialog .wallet-options img{width:26px;height:26px;border-radius:8px;object-fit:contain}
+
+/* XMR20 Open/Private rows from the token engine */
+dialog.wallet-dialog .xmr20-private-rows{display:block;margin:0 0 2px}
+@media (max-width:520px){dialog.wallet-dialog{width:100vw;max-height:calc(100dvh - 12px);border-radius:22px 22px 0 0;border-bottom:0;margin:auto 0 0}dialog.wallet-dialog[open]{height:fit-content}}
+
+/* Form actions stay at the bottom of the panel while the form scrolls (primary, Cancel, error) */
+dialog.wallet-dialog .wallet-dialog-body .wallet-form-actions{position:sticky;bottom:-14px;z-index:2;display:grid;grid-template-columns:1fr auto;gap:8px;margin:12px -14px -14px;padding:12px 14px 14px;background:linear-gradient(180deg,rgba(21,20,19,0),#151413 26%);border-radius:0 0 16px 16px}
+dialog.wallet-dialog .wallet-dialog-body .wallet-form-actions button{margin:0;height:42px}
+dialog.wallet-dialog .wallet-dialog-body .wallet-form-actions [role="alert"]{grid-column:1/-1;margin:0;color:#ff9a8a}
+/* Monero tab with no wallet yet: full-width choices */
+dialog.wallet-dialog .wallet-dialog-body :is([role="tabpanel"]>button.wallet-primary,.wallet-library>button){display:flex;align-items:center;justify-content:center;width:100%;height:46px;margin:8px 0 0}
+dialog.wallet-dialog .wallet-dialog-body{padding-bottom:16px}
+dialog.wallet-dialog .wallet-dialog-body:has(>.wallet-foot){padding-bottom:0}
+/* Monero tab: XMR20 rows first; no "no tokens" note when they are there; Native XMR and backup as rows */
+dialog.wallet-dialog .wallet-library:has(.xmr20-private-rows[data-rows="1"]) .wallet-assets .wallet-empty{display:none}
+dialog.wallet-dialog .wallet-dialog-body .wallet-selector{margin:0 0 10px}
+dialog.wallet-dialog .wallet-dialog-body :is(.native-xmr-details,.wallet-advanced){margin:8px 0 0;padding:0;border:1px solid #221f1c;border-radius:15px;background:var(--wp-panel)}
+dialog.wallet-dialog .wallet-dialog-body :is(.native-xmr-details,.wallet-advanced)>summary{display:flex;align-items:center;gap:11px;min-height:0;padding:12px 13px;border:0;color:#fff;font:600 14px/1.3 Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+dialog.wallet-dialog .wallet-dialog-body .native-xmr-details>summary::before{content:"";flex:none;width:38px;height:38px;border-radius:50%;background:#15140f url("/wallet/brand/monero.svg") center/22px no-repeat}
+dialog.wallet-dialog .wallet-dialog-body .wallet-advanced>summary{color:#cfc8c0;font-size:13px}
+dialog.wallet-dialog .wallet-dialog-body :is(.native-xmr-details,.wallet-advanced)>summary::after{margin-left:auto;float:none}
+dialog.wallet-dialog .wallet-dialog-body :is(.native-xmr-details,.wallet-advanced)>:not(summary){margin:0 13px 13px}
+dialog.wallet-dialog .wallet-dialog-body .native-xmr-details .native-wallet{margin:0 13px 13px;padding:0;border:0;background:none}
+dialog.wallet-dialog.wallet-dialog .wallet-dialog-body details.wallet-advanced,dialog.wallet-dialog.wallet-dialog .wallet-dialog-body details.wallet-advanced>summary{background:var(--wp-panel)}
+/* 28 Oct 2026 (owner: "there is a box that sticks out … it should just be a bubble box"): the summary's background is rounded
+   like the box (15px, inside its 1px border) instead of poking out at the top. An explicit radius: a summary inherits from the
+   details element's built-in slot, not from the box. */
+dialog.wallet-dialog.wallet-dialog .wallet-dialog-body :is(.native-xmr-details,.wallet-advanced)>summary{border-radius:14px}
+dialog.wallet-dialog .wallet-dialog-body details:not(.wallet-height)>summary::after{content:"";float:none;width:7px;height:7px;margin-left:auto;margin-right:4px;border-right:1.5px solid #8f8a84;border-bottom:1.5px solid #8f8a84;transform:rotate(-45deg);transition:transform .15s}
+dialog.wallet-dialog .wallet-dialog-body details:not(.wallet-height)[open]>summary::after{transform:rotate(45deg)}
+dialog.wallet-dialog .wallet-dialog-body details:not(.native-xmr-details):not(.wallet-advanced):not(.wallet-height)>summary{display:flex;align-items:center}
+dialog.wallet-dialog.wallet-dialog .wallet-dialog-body :is(.native-xmr-details,.wallet-advanced)>summary:hover{background:transparent;color:#fff}
+dialog.wallet-dialog.wallet-dialog .wallet-dialog-body :is(.native-xmr-details,.wallet-advanced):hover{border-color:#3a2d22}
+
+/* Monero coin row (XMR balance, status, Sync), first on the Monero tab */
+dialog.wallet-dialog .wallet-dialog-body .native-wallet.wallet-coin{margin:0 0 8px;padding:0;border:0;background:none}
+dialog.wallet-dialog .wallet-coin-row{margin:0}
+dialog.wallet-dialog .wallet-coin-icon{background:transparent}
+dialog.wallet-dialog .wallet-coin-icon img{width:100%!important;height:100%!important;object-fit:cover!important}
+dialog.wallet-dialog .wallet-coin-value{text-align:right;white-space:nowrap}
+dialog.wallet-dialog .wallet-coin-value strong{display:block;color:#fff;font-size:14px;font-weight:650}
+dialog.wallet-dialog .wallet-coin-value small{display:block;margin-top:2px;color:var(--wp-muted);font-size:11px}
+dialog.wallet-dialog .wallet-dialog-body .wallet-coin-sync{flex:none;margin:0 0 0 4px;height:32px;padding:0 13px;border-radius:999px;background:rgba(255,129,61,.12);border:1px solid rgba(255,129,61,.35);color:#ffb488;font-size:12px}
+dialog.wallet-dialog .wallet-dialog-body .wallet-coin-sync[aria-label]{width:32px;padding:0;background:transparent;border-color:#2b2724;color:#a39b92}
+dialog.wallet-dialog .wallet-dialog-body .wallet-coin-lock{margin:6px 0 0;padding:4px 2px;background:none;border:0;color:#8f8a84;font-size:11.5px}
+dialog.wallet-dialog .wallet-dialog-body .native-wallet .native-unlock{margin-top:8px}
+dialog.wallet-dialog .wallet-dialog-body .native-wallet>p{margin:6px 2px 0}
+
+/* Row actions (Send / Bridge) appear on hover in place of the price, without a box behind them */
+dialog.wallet-dialog .wallet-asset{position:relative}
+dialog.wallet-dialog .wallet-dialog-body .wallet-asset .wallet-asset-actions{background:transparent;box-shadow:none;padding:0;right:13px}
+dialog.wallet-dialog .wallet-asset .wallet-asset-usd{transition:opacity .12s}
+@media (hover:hover) and (pointer:fine){
+ dialog.wallet-dialog .wallet-asset:is(:hover,:focus-within) .wallet-asset-usd{opacity:0}
+ dialog.wallet-dialog .wallet-asset:is(:hover,:focus-within):has(.wallet-asset-actions) .wallet-asset-info{max-width:calc(100% - 190px)}
+}
+
+/* A soft glow follows the pointer across rows and tiles (as on the Updates cards; position set by wallet-menu.jsx) */
+dialog.wallet-dialog :is(.wallet-asset,.wallet-native-asset,.wallet-actions-row .wallet-tile,.wallet-options button,.wallet-dialog-body .wallet-advanced){isolation:isolate}
+dialog.wallet-dialog :is(.wallet-native-asset,.wallet-actions-row .wallet-tile,.wallet-options button,.wallet-dialog-body .wallet-advanced){position:relative}
+dialog.wallet-dialog :is(.wallet-asset,.wallet-native-asset,.wallet-actions-row .wallet-tile,.wallet-options button,.wallet-dialog-body .wallet-advanced)::after{content:'';position:absolute;z-index:-1;inset:0;border-radius:inherit;background:radial-gradient(240px circle at var(--ux-x,50%) var(--ux-y,0),rgba(242,147,92,.12),transparent 55%);opacity:0;transition:opacity .35s ease;pointer-events:none}
+@media (hover:hover) and (pointer:fine){dialog.wallet-dialog :is(.wallet-asset,.wallet-native-asset,.wallet-actions-row .wallet-tile,.wallet-options button,.wallet-dialog-body .wallet-advanced):hover::after{opacity:1}}
+
+/* Address boxes look like the form fields (owner, 28 Oct: the black square box in Bridge) */
+dialog.wallet-dialog.wallet-dialog .wallet-dialog-body :is(code.address,.address:not(input),.wallet-address-block,.wallet-address-line,pre){display:block;box-sizing:border-box;width:100%;margin:8px 0 0;padding:11px 13px;border-radius:12px;background:var(--wp-field);border:1px solid #2b2724;box-shadow:none;color:#e6e0d9;font-size:12px;line-height:1.5;letter-spacing:.2px;overflow-wrap:anywhere;word-break:break-all;white-space:normal}
+/* Previously bridged tokens check: a neutral bridge icon (no token artwork until a token is found) */
+dialog.wallet-dialog .wallet-check-icon{background:#1f1b18;color:var(--wp-orange)}
+dialog.wallet-dialog .wallet-check-icon svg{width:18px;height:18px}
+/* Header address of the tab in view; Copy appears on hover (always shown on touch screens) */
+dialog.wallet-dialog .wallet-dialog-head h2 .wallet-head-address{display:inline-flex;align-items:center;gap:9px;max-width:100%;margin:0;padding:0;min-height:0;background:none;border:0;border-radius:0;color:#fff;font:inherit;letter-spacing:inherit;cursor:pointer;box-shadow:none}
+dialog.wallet-dialog .wallet-dialog-head h2 .wallet-head-address em{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:999px;background:rgba(255,129,61,.12);border:1px solid rgba(255,129,61,.3);color:#ff9b63;font-style:normal;font-size:11px;font-weight:600;letter-spacing:0;opacity:0;transform:translateX(-4px);transition:opacity .15s,transform .15s}
+dialog.wallet-dialog .wallet-dialog-head h2 .wallet-head-address em svg{width:12px;height:12px}
+dialog.wallet-dialog .wallet-dialog-head h2 .wallet-head-address:is(:hover,:focus-visible) em{opacity:1;transform:none}
+@media (hover:none){dialog.wallet-dialog .wallet-dialog-head h2 .wallet-head-address em{opacity:1;transform:none}}
+/* 28 Oct 2026 (owner): on the Monero tab the header shows the normal and the private address side by side, labelled Normal and
+   Private; a click copies, and Copy shows next to the label on hover (always on touch screens). */
+dialog.wallet-dialog .wallet-dialog-head h2.wallet-head-pair{display:flex;align-items:flex-end;gap:16px;overflow:visible;white-space:normal}
+dialog.wallet-dialog .wallet-head-col{display:flex;flex-direction:column;align-items:flex-start;flex:1 1 0;min-width:0;width:auto;margin:0;padding:0;min-height:0;background:none;border:0;border-radius:0;box-shadow:none;color:#fff;font:inherit;letter-spacing:inherit;text-align:left;cursor:pointer}
+dialog.wallet-dialog .wallet-head-col+.wallet-head-col{align-items:flex-end;text-align:right}
+dialog.wallet-dialog .wallet-head-col .wallet-kicker{display:flex;align-items:center;gap:6px;min-height:16px;margin:0 0 3px}
+dialog.wallet-dialog .wallet-head-col em{display:inline-flex;align-items:center;gap:3px;padding:1px 6px;border-radius:999px;background:rgba(255,129,61,.12);border:1px solid rgba(255,129,61,.3);color:#ff9b63;font-style:normal;font-size:9.5px;font-weight:600;letter-spacing:0;text-transform:none;opacity:0;transition:opacity .15s ease}
+dialog.wallet-dialog .wallet-head-col em svg{width:10px;height:10px}
+dialog.wallet-dialog .wallet-head-col:is(:hover,:focus-visible) em{opacity:1}
+@media (hover:none){dialog.wallet-dialog .wallet-head-col em{opacity:1}}
+dialog.wallet-dialog .wallet-head-value{display:block;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+dialog.wallet-dialog .wallet-head-col.pending{cursor:default}
+dialog.wallet-dialog .wallet-head-col.pending .wallet-head-value{color:var(--wp-muted);font-weight:500}
+dialog.wallet-dialog .wallet-head-col+.wallet-head-col .wallet-kicker{flex-direction:row-reverse}
+@media (max-width:420px){dialog.wallet-dialog .wallet-dialog-head h2.wallet-head-pair{gap:10px}dialog.wallet-dialog .wallet-head-value{font-size:14px}}
+@media (max-width:360px){dialog.wallet-dialog .wallet-head-value{font-size:13px}}
+
+/* Close: a centred X icon (the × character sat off-centre) */
+dialog.wallet-dialog .wallet-close svg{width:18px;height:18px;stroke-width:2.2;display:block}
+dialog.wallet-dialog .wallet-dialog-head .wallet-close{padding:0!important;margin:0!important;place-items:center;justify-content:center}
+
+/* Bridge screen (the bridge module's own panels) in the wallet's colours, with the same pointer glow (owner, 28 Oct) */
+dialog.wallet-dialog .joint-transferable{color:var(--wp-text)}
+dialog.wallet-dialog .joint-transferable :is(.bridge-intro,.bridge-link-intro p,.bridge-link-copy,.bridge-fee-line,.bridge-panel-heading,.bridge-panel-foot,.bridge-panel-foot>span:last-child:not(:first-child)){color:#a59e96}
+dialog.wallet-dialog .joint-transferable .bridge-intro{margin:0 0 14px;font-size:12.5px}
+dialog.wallet-dialog .joint-transferable .bridge-token-panels{margin:4px 0 14px;gap:8px}
+dialog.wallet-dialog .joint-transferable .bridge-token-panel{position:relative;isolation:isolate;background:var(--wp-panel);border:1px solid #221f1c;border-radius:18px;padding:15px 16px;transition:border-color .15s}
+dialog.wallet-dialog .joint-transferable .bridge-token-panel:hover{border-color:#3a2d22}
+dialog.wallet-dialog .joint-transferable .bridge-panel-heading{margin-bottom:10px;font-size:12px}
+dialog.wallet-dialog .joint-transferable .bridge-panel-heading>span:last-child{color:#cfc8c0}
+/* The amount is a large frameless number, not a boxed field */
+dialog.wallet-dialog.wallet-dialog .wallet-dialog-body .joint-transferable .bridge-panel-value input{background:transparent;border:0;border-radius:4px;box-shadow:none;padding:6px 0;font-size:26px;font-weight:600;letter-spacing:-.5px;color:#faf8f5}
+dialog.wallet-dialog.wallet-dialog .wallet-dialog-body .joint-transferable .bridge-panel-value input:focus{box-shadow:none;border:0}
+dialog.wallet-dialog .joint-transferable :is(.bridge-token-chip,.bridge-max){background:#24211e;border:1px solid #332e29;color:#f0ebe5}
+dialog.wallet-dialog .joint-transferable .bridge-link-panels .bridge-token-chip{background:#24211e}
+dialog.wallet-dialog .joint-transferable .bridge-max:hover:not(:disabled){border-color:var(--wp-orange)}
+dialog.wallet-dialog .joint-transferable :is(.bridge-token-art>img,.bridge-token-initial){background:#121110}
+dialog.wallet-dialog .joint-transferable .bridge-network-badge{background:#0c0b0a;border-color:#24211e}
+dialog.wallet-dialog .joint-transferable :is(.bridge-direction>button,.bridge-direction>span){border-color:#151413}
+dialog.wallet-dialog .joint-transferable .primary.wide{min-height:48px;border-radius:14px;font-size:14px}
+dialog.wallet-dialog .joint-transferable .bridge-cancel{border-radius:12px;background:#1f1d1b;border:1px solid #2e2a26;color:#ece6df}
+dialog.wallet-dialog :is(.joint-transferable,.website-transferable) .review-line{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid #24211e;color:#a59e96;font-size:12.5px}
+dialog.wallet-dialog :is(.joint-transferable,.website-transferable) .review-line strong{color:#f6f1eb;font-weight:600}
+dialog.wallet-dialog :is(.joint-transferable,.website-transferable) :is(.joint-wait-steps li,.bridge-steps li){color:#bdb6ae}
+dialog.wallet-dialog .joint-transferable .bridge-token-panel::after{content:'';position:absolute;z-index:-1;inset:0;border-radius:inherit;background:radial-gradient(240px circle at var(--ux-x,50%) var(--ux-y,0),rgba(242,147,92,.12),transparent 55%);opacity:0;transition:opacity .35s ease;pointer-events:none}
+@media (hover:hover) and (pointer:fine){dialog.wallet-dialog .joint-transferable .bridge-token-panel:hover::after{opacity:1}}
+/* The bridge stylesheet restyles any dialog that contains it (flat #101010, 22px padding): keep the wallet's own panel */
+dialog.wallet-dialog.wallet-dialog:has(.joint-transferable){width:min(440px,calc(100vw - 24px));padding:0;max-width:none;border-color:#2b2724;background:radial-gradient(130% 55% at 50% -8%,#24170f 0%,rgba(13,12,11,0) 62%),#0c0b0a}
+dialog.wallet-dialog.wallet-dialog .wallet-dialog-body .joint-transferable .bridge-direction>button{border-radius:50%;padding:6px;margin:0}
+dialog.wallet-dialog.wallet-dialog .wallet-dialog-body .joint-transferable .bridge-max{border-radius:999px;padding:0 14px;margin:0}
+
+/* Monero setup choice: full-width buttons, the same size and place as the Monero tab's Import/Set up buttons */
+dialog.wallet-dialog.wallet-dialog .wallet-dialog-body .wallet-setup-panel{margin:0;padding:0;border:0;background:none}
+dialog.wallet-dialog .wallet-dialog-body .wallet-setup-panel>h3{margin:2px 0 4px}
+dialog.wallet-dialog .wallet-dialog-body .wallet-setup-panel>p{margin:0 0 6px}
+dialog.wallet-dialog.wallet-dialog .wallet-dialog-body :is(.wallet-setup-primary,.wallet-setup-import){display:flex;align-items:center;justify-content:center;width:100%;height:46px;margin:8px 0 0;padding:0 14px;border-radius:12px;font-size:13px}
+
+/* Bridge to Monero: token chooser and the SOL / progress / error card */
+dialog.wallet-dialog.wallet-dialog .wallet-dialog-body .wallet-choose-row{display:flex;align-items:center;gap:11px;width:100%;margin:8px 0 0;padding:11px 13px;border-radius:15px;background:var(--wp-panel);border:1px solid #221f1c;color:#fff;text-align:left;position:relative;isolation:isolate}
+dialog.wallet-dialog .wallet-choose-row>svg{width:18px;height:18px;color:var(--wp-orange);flex:none}
+dialog.wallet-dialog .wallet-choose-row:hover{border-color:#3a2d22}
+dialog.wallet-dialog .wallet-choose-row::after{content:'';position:absolute;z-index:-1;inset:0;border-radius:inherit;background:radial-gradient(240px circle at var(--ux-x,50%) var(--ux-y,0),rgba(242,147,92,.12),transparent 55%);opacity:0;transition:opacity .35s ease;pointer-events:none}
+@media (hover:hover) and (pointer:fine){dialog.wallet-dialog .wallet-choose-row:hover::after{opacity:1}}
+dialog.wallet-dialog .wallet-bridge-note h3{margin:0}
+dialog.wallet-dialog.wallet-dialog .wallet-dialog-body .wallet-copy-address{width:100%;height:42px;margin:8px 0 0;border-radius:12px;background:rgba(255,129,61,.12);border:1px solid rgba(255,129,61,.35);color:#ffb488;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
+dialog.wallet-dialog .wallet-action-head button svg{width:16px;height:16px}
+dialog.wallet-dialog.wallet-dialog .wallet-dialog-body .wallet-coin-lockbtn{width:32px;padding:0;display:grid;place-items:center;background:transparent;border-color:#2b2724;color:#a39b92}
+dialog.wallet-dialog .wallet-coin-lockbtn svg{width:15px;height:15px}
+
+/* Older bridge engine screens (the "Previously bridged tokens" check, EXTREMIST send/bridge) in the wallet palette */
+dialog.wallet-dialog .website-native-page{background:transparent;color:var(--wp-text)}
+dialog.wallet-dialog.wallet-dialog .website-native-page #native-send{background:#151413;border:1px solid #24211e;border-radius:16px;padding:14px;margin:0;min-height:0;color:var(--wp-text);font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+dialog.wallet-dialog.wallet-dialog .website-native-page #native-send *{font-family:inherit}
+dialog.wallet-dialog .website-native-page #native-send .native-send-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 10px}
+dialog.wallet-dialog.wallet-dialog .website-native-page #native-send h1{margin:0;font-size:16px;font-weight:650;letter-spacing:-.2px;color:#fff}
+dialog.wallet-dialog .website-native-page #native-send p{color:#a59e96;font-size:12.5px;line-height:1.5}
+dialog.wallet-dialog.wallet-dialog .website-native-page #native-send :is(.native-send-head button,button.native-secondary,.native-send-actions button:not(.native-primary)){min-height:38px;padding:0 14px;border-radius:12px;background:#1f1d1b;border:1px solid #2e2a26;color:#ece6df;font-size:12.5px;font-weight:600}
+dialog.wallet-dialog.wallet-dialog .website-native-page #native-send button.native-primary{min-height:42px;border-radius:12px;background:var(--wp-orange);border-color:var(--wp-orange);color:#180e06;font-size:13px;font-weight:700}
+dialog.wallet-dialog.wallet-dialog .website-native-page #native-send #native-start-height{border-radius:12px;background:var(--wp-field);border:1px solid #2b2724;color:#f6f1eb;font-size:13px}
+/* Size to content (at most the panel height the engine page measures), so short screens have no empty gap */
+dialog.wallet-dialog.wallet-dialog .website-native-page.native-popup-root{height:auto}
+dialog.wallet-dialog.wallet-dialog .website-native-page.native-popup-root>div,dialog.wallet-dialog.wallet-dialog .website-native-page.native-popup-root #native-send{flex:0 1 auto}
+/* 28 Oct 2026 (owner: "remove the black box … behind cancel and review"): the footer keeps its place under the form but takes the
+   window's colour; the extension's black footer (#080808, its popup's background) and its divider are not used here. */
+dialog.wallet-dialog.wallet-dialog .website-native-page #native-send .native-send-footer{background:transparent;border-top:0}
+/* 28 Oct 2026 (owner: "all the boxes should be consistently sized, as the monero box … wallet backup and import xmr wallet
+   should be the same format … and the same size"): Previously bridged's Check fits the row height of the Monero and SOL boxes;
+   Import XMR wallet is a row like Wallet backup (same box, text, size), with + where the chevron is. */
+dialog.wallet-dialog.wallet-dialog .wallet-native-holdings .wallet-native-check{min-height:0;height:32px;padding:0 14px;border-radius:999px;font-size:12px}
+dialog.wallet-dialog.wallet-dialog .wallet-dialog-body .wallet-library>.wallet-row-button{display:flex;align-items:center;justify-content:space-between;align-self:stretch;width:100%;box-sizing:border-box;min-height:0;margin:8px 0 0;padding:12px 13px;border:1px solid #221f1c;border-radius:15px;background:var(--wp-panel);color:#cfc8c0;font:600 13px/1.3 Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;text-align:left;box-shadow:none}
+dialog.wallet-dialog.wallet-dialog .wallet-dialog-body .wallet-library>.wallet-row-button::before{content:none}
+dialog.wallet-dialog.wallet-dialog .wallet-dialog-body .wallet-library>.wallet-row-button::after{content:'+';position:static;inset:auto;z-index:auto;opacity:1;background:none;margin-right:2px;color:#8f8a84;font-size:17px;font-weight:400;line-height:1}
+dialog.wallet-dialog.wallet-dialog .wallet-dialog-body .wallet-library>.wallet-row-button:hover{border-color:#3a2d22;color:#fff}
+dialog.wallet-dialog.wallet-dialog .wallet-dialog-body .wallet-library>details.wallet-advanced>summary{box-sizing:border-box;min-height:44px}
+dialog.wallet-dialog.wallet-dialog .wallet-dialog-body .wallet-library>.wallet-row-button{height:46px}
+/* 28 Oct 2026 (owner): the wallet's start (creation) block in Wallet backup. */
+dialog.wallet-dialog .monero-start-block{display:grid;gap:8px;margin-bottom:12px}
+dialog.wallet-dialog .monero-start-block p{margin:0}
+dialog.wallet-dialog .monero-start-block strong{color:#fff;font-weight:600}
+dialog.wallet-dialog .monero-start-block>button{justify-self:start}
+
+/* Hidden wallet tab panels stay mounted (the Monero wallet keeps running) but take no space. */
+dialog.wallet-dialog [role="tabpanel"][hidden]{display:none!important}
+
+/* 28 Oct 2026 (owner): tapping the Monero row opens Send XMR. */
+dialog.wallet-dialog .wallet-coin-send{cursor:pointer}
+dialog.wallet-dialog .wallet-coin-send:focus-visible{outline:2px solid var(--wp-orange);outline-offset:2px}
+
+/* 28 Oct 2026 (owner: "make each connect wallet tile slightly bigger, and less gap space between them ... it should feel very
+   premium"): taller wallet tiles set close together, larger marks on a soft ring, a quiet arrow that warms on hover. */
+dialog.wallet-dialog .wallet-dialog-body>p:first-of-type:has(+ .wallet-options),dialog.wallet-dialog .wallet-dialog-body>p:has(+ .wallet-options){margin:2px 0 14px;color:var(--wp-soft);font-size:13px;line-height:1.5}
+dialog.wallet-dialog .wallet-options{gap:6px;margin:0 0 14px}
+dialog.wallet-dialog .wallet-options button{position:relative;height:62px;margin:0!important;padding:0 44px 0 14px!important;gap:14px;border-radius:16px!important;background:linear-gradient(180deg,#1e1c1a,#181716)!important;border:1px solid #2b2724!important;font:600 15px/1.2 var(--font-display,inherit)!important;letter-spacing:-.01em;box-shadow:inset 0 1px 0 rgba(255,255,255,.035);transition:border-color .18s ease,transform .18s ease,box-shadow .18s ease}
+dialog.wallet-dialog .wallet-options img{width:36px;height:36px;border-radius:11px;box-shadow:0 0 0 1px rgba(255,255,255,.07),0 4px 10px rgba(0,0,0,.35)}
+dialog.wallet-dialog .wallet-options button::before{content:'';position:absolute;right:16px;top:50%;width:8px;height:8px;border-right:1.6px solid currentColor;border-top:1.6px solid currentColor;transform:translateY(-50%) rotate(45deg);opacity:.32;transition:opacity .18s ease,right .18s ease,color .18s ease}
+@media (hover:hover) and (pointer:fine){
+ dialog.wallet-dialog .wallet-options button:hover:not(:disabled){border-color:#4a3221!important;transform:translateY(-1px);box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 8px 22px rgba(0,0,0,.35)}
+ dialog.wallet-dialog .wallet-options button:hover:not(:disabled)::before{opacity:.9;right:13px;color:var(--wp-orange)}
+}
+dialog.wallet-dialog .wallet-options button:active:not(:disabled){transform:scale(.99)}
+dialog.wallet-dialog .wallet-options button:focus-visible{outline:2px solid var(--wp-orange);outline-offset:2px}
+dialog.wallet-dialog .wallet-options button:disabled{opacity:.55}
+@media (max-width:420px){dialog.wallet-dialog .wallet-options button{height:60px}}

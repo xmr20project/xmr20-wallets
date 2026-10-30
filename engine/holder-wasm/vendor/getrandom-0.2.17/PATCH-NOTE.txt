@@ -1,0 +1,8 @@
+Vendored copy of getrandom 0.2.17 (crates.io) with one change for the XMR20
+holder wasm test build: the "js" feature no longer pulls wasm-bindgen/js-sys and
+the js backend branch in src/lib.rs is disabled, so that the "custom" backend
+(randomness supplied by the worker through crypto.getRandomValues) is used on
+wasm32-unknown-unknown. Penumbra crates enable getrandom/js unconditionally for
+wasm32; this module is built without the wasm-bindgen CLI. Host builds are
+unaffected (OS backend). Not a security change to the RNG source: the bytes
+still come from the browser's crypto.getRandomValues.
