@@ -1,0 +1,36 @@
+[package]
+name = "xmr20-unshielded-core"
+version = "0.0.0"
+edition = "2021"
+publish = false
+description = "XMR20 token format v0.2-experimental: public (unshielded) ledger records, shield/unshield boundaries and two-part private transfers over Penumbra's published circuits and keys. Shared by the roles binary and the holder wasm engine. UNREVIEWED research code."
+
+[dependencies]
+anyhow = "1"
+blake2b_simd = "=1.0.5"
+decaf377-ka = "=2.1.1"
+ark-ff = "=0.4.2"
+ark-groth16 = "=0.4.0"
+ark-relations = "=0.4.0"
+ark-serialize = "=0.4.2"
+ark-snark = "=0.4.0"
+decaf377 = {version = "=0.10.1", features = ["r1cs"]}
+decaf377-rdsa = "=0.11.0"
+penumbra-sdk-asset = {version = "=2.1.1", default-features = false}
+penumbra-sdk-keys = {version = "=2.1.1", default-features = false}
+penumbra-sdk-shielded-pool = {version = "=2.1.1", default-features = false}
+penumbra-sdk-proof-params = {version = "=2.1.1", default-features = false}
+penumbra-sdk-tct = {version = "=2.1.1", default-features = false}
+penumbra-sdk-sct = {version = "=2.1.1", default-features = false}
+penumbra-sdk-proto = {version = "=2.1.1", default-features = false}
+rand_core = {version = "=0.6.4", features = ["getrandom"]}
+serde = {version = "1", features = ["derive"]}
+serde_json = "1"
+sha2 = "0.10"
+hex = "0.4"
+zeroize = "=1.8.2"
+
+[patch.crates-io]
+penumbra-sdk-shielded-pool = {path = "../vendor/penumbra-sdk-shielded-pool"}
+
+[workspace]

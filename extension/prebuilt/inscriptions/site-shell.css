@@ -1,0 +1,34 @@
+/* The same header geometry on static pages and the asynchronously loaded Launch app.
+   These scoped overrides must win over both legacy and application stylesheets. */
+html{scrollbar-gutter:stable}
+:is(body>header,#root>.launch-site-header){
+ box-sizing:border-box!important;display:flex!important;align-items:center!important;justify-content:flex-start!important;
+ width:100%!important;max-width:none!important;height:68px!important;min-height:68px!important;margin:0!important;
+ padding:12px 32px!important;gap:24px!important;flex-wrap:nowrap!important;background:#232529!important;border-bottom:1px solid #36383d!important;
+}
+:is(body>header,#root>.launch-site-header)::after{content:none!important}
+:is(body>header,#root>.launch-site-header)>nav[aria-label="Main navigation"],.launch-site-header>.launch-header-actions{display:contents!important}
+:is(body>header,#root>.launch-site-header) .network{display:none!important}
+:is(body>header,#root>.launch-site-header)>.wordmark{order:0!important;flex:none!important;margin:0!important;font:800 23px/1.3 var(--font-display)!important;letter-spacing:-1px!important;color:#e1e2e4!important;white-space:nowrap}
+:is(body>header,#root>.launch-site-header)>.wordmark span{color:#ff914f!important}
+:is(body>header,#root>.launch-site-header)>.wordmark sup{font:11px var(--font-mono)!important;letter-spacing:0!important;margin-left:5px!important;color:#9c9fa6!important;vertical-align:super}
+:is(body>header,#root>.launch-site-header)>nav[aria-label="Main navigation"]>a{order:1!important;flex:none!important;margin:0!important;padding:0!important;width:auto!important;min-height:0!important;font:14px/1.4 var(--font-ui)!important;white-space:nowrap;color:#e7e8eb!important;text-decoration:none}
+:is(body>header,#root>.launch-site-header)>nav[aria-label="Main navigation"]>a[href="/launch/"]{order:1!important;margin-left:0!important;color:#ff914f!important}
+:is(body>header,#root>.launch-site-header)>#xmr20-wallet-root,.launch-site-header .launch-header-actions>.wallet-nav{order:4!important;flex:none!important;margin:0 0 0 auto!important}
+:is(body>header,#root>.launch-site-header) .wallet-trigger{box-sizing:border-box!important;display:flex!important;align-items:center!important;gap:9px!important;width:auto!important;height:44px!important;min-height:44px!important;padding:10px 14px!important;margin:0!important;border:1px solid #41454b!important;border-radius:5px!important;font:12px/22px var(--font-ui)!important;background:#232529!important;color:#e7e8eb!important;white-space:nowrap}
+body:has(>#root>.launch-site-header) .wrap{box-sizing:border-box;width:100%;max-width:none;margin:0;padding:0 32px}
+body:has(>#root>.launch-site-header) .wrap>main{width:100%;max-width:none;margin:0;padding:28px 0 0}
+#root>.launch-site-header~.wrap .launch-heading{margin:0 0 20px!important;padding:0!important}
+#root>.launch-site-header~.wrap .launch-heading h1{font:700 34px/1.2 var(--font-display)!important;letter-spacing:-1px!important;margin:0!important}
+@media(max-width:760px){
+ :is(body>header,#root>.launch-site-header){padding:12px 20px!important;gap:20px!important}
+ body:has(>#root>.launch-site-header) .wrap{padding:0 20px}
+}
+@media(max-width:640px){
+ :is(body>header,#root>.launch-site-header){height:auto!important;flex-wrap:wrap!important;gap:14px!important}
+ :is(body>header,#root>.launch-site-header)::after{content:""!important;order:0!important;flex-basis:100%!important;height:0!important}
+ :is(body>header,#root>.launch-site-header)>.wordmark{margin-right:auto!important}
+ :is(body>header,#root>.launch-site-header)>#xmr20-wallet-root,.launch-site-header .launch-header-actions>.wallet-nav{order:0!important}
+ body:has(>#root>.launch-site-header) .wrap>main{padding-top:24px}
+ #root>.launch-site-header~.wrap .launch-heading h1{font-size:32px!important}
+}

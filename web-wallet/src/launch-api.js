@@ -1,0 +1,11 @@
+import {launchRequestTimeoutMs} from './launch-reservation-status.js';
+import {createWalletHttp} from './wallet-http.js';
+let session=null;
+const send=createWalletHttp();
+const standalone=import.meta.env.VITE_XMR20_WALLET_ONLY==='1';
+const endpoint=standalone?'/api/wallet':import.meta.env.VITE_XMR20_PUBLIC_LAUNCH==='1'?'/api/legacy-launch':'/api/launch';
+const authEndpoint=standalone?'/api/wallet-auth':import.meta.env.VITE_XMR20_PUBLIC_LAUNCH==='1'?'/api/legacy-launch-auth':'/api/launch-auth';
+export const walletSessionSlot='xmr20-wallet-session:'+endpoint;
+export const setLaunchSession=token=>{session=token;};
+export const request=(action='catalog',data={},token=session)=>send(endpoint,{...data,action,token},action==='account'||action==='launchBalance'?12000:action==='catalog'?20000:launchRequestTimeoutMs(action));
+export const authRequest=(action,data)=>send(authEndpoint,{...data,action},12000);
