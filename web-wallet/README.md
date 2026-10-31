@@ -10,6 +10,10 @@ as the extension and the CLI ([`../engine`](../engine)).
 
 Open **https://xmr20.org** and click **Connect wallet**. That's all. Nothing to download.
 
+On **https://xmr20.org/market/** the same **Connect wallet** trades on the Monero Market (experimental): once you are
+signed in, the market connects to this wallet, and every approval appears in the wallet's own dialog on that page. Sales
+of your listings are approved automatically while that page stays open.
+
 Browser data is kept per website. A Monero wallet you create on xmr20.org stays in that browser. To use it somewhere
 else, use **Show recovery phrase** in the wallet and import the phrase there.
 
@@ -38,6 +42,9 @@ This writes `web-wallet/dist/`, served at `/wallet/` on xmr20.org, with the live
 `prepare-public.mjs` copies the engine's browser files into `public/` first:
 
 - `public/xmr20-private/`: the token workers, `holder.wasm`, the parameter manifest and the Monero library
+- `public/xmr20-market/`: the market wallet's token worker, `holder.wasm`, the parameter manifest and the Monero library
+  (the same engine files; the live site still serves wallet 0.1.125's token worker in `xmr20-private/`, without the market
+  operations, and 0.1.127's in `xmr20-market/`)
 - `public/monero-native/`: the Monero worker
 - `public/monero-wallet/`: the Monero library and the older bridge's offline signer
 
@@ -56,6 +63,9 @@ This folder holds the wallet part on its own.
   your receive address), splitting XMR into coins, and this browser's own XMR sends and splits with their confirmations.
 - `src/profile-page.jsx`, `src/profile-store.js`: the profile page (portfolio, wallet, activity). The profile itself is
   kept in this browser only.
+- `src/market-website-wallet.jsx`, `src/market-website-bridge.js`, `src/market-website.js`, `src/market-website-ui.js`: the
+  Monero Market's website wallet. `wallet-entry.jsx` mounts it on pages that have `#xmr20-market-root` (the market page).
+  It runs the shared market host (`../engine/shared/market-host.js`) on the token worker, one account per browser tab.
 - `src/wxmr-bridge.js`, `src/website-wxmr-bridge.jsx`, `src/website-wxmr-send.jsx`: XMR ⇄ wXMR through the wxmr.io
   bridge (a public Solana program run by the wXMR team) and sending wXMR.
 - `src/solana-chain-holdings.js`, `src/site-prices.js`: Solana token balances read from the chain, and display prices

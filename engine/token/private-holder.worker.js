@@ -21,10 +21,20 @@ import {checkManifest,createParameterLoader,createIndexedDbCache} from './holder
 import {createCarrierBuilder,createDistributionStore} from './holder-carrier.js';
 import {progressKey,accountTag,createProgressStore} from './holder-progress.js';
 import {signCertificate} from './address-cert.js';
+// MONERO MARKET candidate (29 Oct 2026): market ops are compiled in only for the offline lab build (market origin pinned).
+import {createMarketWorker} from './market-worker.js';
+// The reader's palette-map codec, for the wallet's own NFT ledger (anchored NFT sales, 30 Oct 2026).
+import mapcodec from './market-mapcodec.cjs';// browser copy of the reader's codec (Uint8Array instead of Buffer; tests/codec-browser.test.mjs)
+const MONERO_MARKET=typeof __XMR20_MONERO_MARKET__==='string'&&__XMR20_MONERO_MARKET__.length>0;
+// Test builds only (stagenet/lab, 30 Oct 2026): a shorter finality depth so a trade can be tried in minutes; the engine refuses < 10.
+const MARKET_FINALITY=MONERO_MARKET&&typeof __XMR20_MONERO_MARKET_FINALITY__==='number'?__XMR20_MONERO_MARKET_FINALITY__:0;
 for(const name of ['log','info','warn','error','debug'])console[name]=()=>{};
 const hexToBytes=h=>Uint8Array.from(h.match(/../g),x=>parseInt(x,16));
 const PINNED_MANIFEST_SHA256=typeof __PARAMS_MANIFEST_SHA256__==='string'?__PARAMS_MANIFEST_SHA256__:null;
-let engine=null,scanner=null,backend='',params=null,loader=null,carrier=null,tokenAddress='',network=null,progress=null;const paramLog=[];
+let engine=null,scanner=null,backend='',params=null,loader=null,carrier=null,tokenAddress='',network=null,progress=null,market=null,marketJournalKey=null;const paramLog=[];
+// The market journal's sealing key: HKDF over the account root (like the scan-progress key), handed to the wallet's market
+// window as a non-extractable AES-GCM key. The root itself is wiped right after derivation, as before.
+async function marketJournalKeyOf(root,manifestSha256){const m=await crypto.subtle.importKey('raw',root,'HKDF',false,['deriveKey']);return crypto.subtle.deriveKey({name:'HKDF',hash:'SHA-256',salt:new TextEncoder().encode('XMR20-market-journal-v1'),info:new TextEncoder().encode(manifestSha256)},m,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);}
 const post=(id,progress)=>self.postMessage({id,progress});
 // 27 Oct 2026: scan progress belongs to the CURRENT sync call (the scanner is created during 'open', whose id is finished by then).
 let scanCallId=null;
@@ -59,6 +69,7 @@ self.onmessage=async({data})=>{if(typeof data?.id!=='string')return;const {id,ac
    // key on this ledger is signed here with the spend key (it never leaves the worker) and published by the wallet (address-cert.js).
    // The private receiving address is not part of it.
    let addressCertificate=null;try{addressCertificate=signCertificate({monero:data.owner,ownerKey:d.ownerKey,domain:shipped.manifest.ledgerDomain,spendKey:root,network:manifestKind==='stagenet'?'stagenet':'mainnet'});}catch{addressCertificate=null;}
+   if(MONERO_MARKET)marketJournalKey=await marketJournalKeyOf(root,shipped.sha256);
    root.fill(0);root=null;
 
    loader=createParameterLoader({manifest:shipped.manifest,engine,baseUrl:backend,cache:createIndexedDbCache(),onProgress:p=>post(id,p),log:e=>{paramLog.push({at:Date.now(),...e});if(paramLog.length>50)paramLog.shift();}});
@@ -81,12 +92,15 @@ self.onmessage=async({data})=>{if(typeof data?.id!=='string')return;const {id,ac
    // Saved scan progress: the shared pool log and this account's sealed native outputs; the account's own outputs are scanned
    // from its first height (the creation height the wallet saved for it), never below the pool start.
    // 29 Oct 2026: the 0.0.4 engine resumes from progress the 0.0.3 engine saved (same pool record log, re-verified on replay).
-   progress=createProgressStore({manifestSha256:shipped.sha256,engineVersion:engine.call({op:'version'}).engine,account:await accountTag(d.ownerKey,shipped.sha256),key:sealKey,compatible:['xmr20-holder-wasm 0.0.3-persist']});
+   // 31 Oct 2026 (0.1.125): the market engine 0.0.6 resumes from the 0.0.4 engine's progress too (lots off: identical records).
+   progress=createProgressStore({manifestSha256:shipped.sha256,engineVersion:engine.call({op:'version'}).engine,account:await accountTag(d.ownerKey,shipped.sha256),key:sealKey,compatible:['xmr20-holder-wasm 0.0.3-persist','xmr20-holder-wasm 0.0.4-incoming']});
    const saved=await progress.load().catch(()=>({pool:null,native:null}));network.resumed={pool:saved.pool?.tip??null,native:saved.native?saved.native.state.blocks-1:null};
    scanner=createChainScanner(engine,{rpc:data.rpc,genesis:net.genesis,network:kind,startHeight:network.startHeight,nativeStartHeight:Number(data.nativeStartHeight)||0,saved,onCheckpoint:p=>progress.save(p),lookahead:typeof __XMR20_SCAN_LOOKAHEAD__!=='undefined'?__XMR20_SCAN_LOOKAHEAD__:32,onProgress:p=>post(scanCallId||id,{...p,text:`Scanning the ${kind==='stagenet'?'stagenet':kind==='mainnet'?'Monero':'test'} chain locally · block ${p.height} of ${p.target}`})});
    // monerod sanity checks ON off the fakechain (normal validation); only the tiny offline chain cannot satisfy them.
    carrier=createCarrierBuilder({engine,rpc:data.rpc,onProgress:p=>post(id,p),sanityChecks:kind!=='offline-fakechain',distributionStore:createDistributionStore(kind+':'+(net.genesis||''))});
-   tokenAddress=d.tokenAddress;result={tokenAddress,addressCertificate,shieldedAddress:d.shieldedAddress,ownerKey:d.ownerKey,nativeAddress,scheme:d.scheme,domain:shipped.manifest.ledgerDomain,network,parameters:{label:shipped.manifest.label,manifestSha256:shipped.sha256,pinnedInBuild:shipped.pinned,files:Object.fromEntries(Object.entries(shipped.manifest.files).map(([k,v])=>[k,{bytes:v.bytes,sha256:v.sha256}]))},engine:engine.call({op:'version'})};break;}
+   if(MONERO_MARKET&&MARKET_FINALITY)engine.call({op:'marketProfile',finalityDepth:MARKET_FINALITY});
+   if(MONERO_MARKET)market=createMarketWorker({engine,scanner,rpc:data.rpc,mapcodec,nftStart:network.startHeight});
+   tokenAddress=d.tokenAddress;result={tokenAddress,addressCertificate,...(MONERO_MARKET?{marketJournalKey,market:engine.call({op:'marketProfile'})}:{}),shieldedAddress:d.shieldedAddress,ownerKey:d.ownerKey,nativeAddress,scheme:d.scheme,domain:shipped.manifest.ledgerDomain,network,parameters:{label:shipped.manifest.label,manifestSha256:shipped.sha256,pinnedInBuild:shipped.pinned,files:Object.fromEntries(Object.entries(shipped.manifest.files).map(([k,v])=>[k,{bytes:v.bytes,sha256:v.sha256}]))},engine:engine.call({op:'version'})};break;}
   case 'sync':{if(!scanner)throw Error('Not open');scanCallId=id;let s;try{s=await scanner.sync();}finally{scanCallId=null;}if(Array.isArray(data.reserveKeyImages))engine.call({op:'nativeReserve',keyImages:data.reserveKeyImages});result={...engine.call({op:'status'}),scan:s,native:engine.call({op:'nativeStatus',exclude:data.reserveKeyImages||[]})};
    // 29 Oct 2026: tokens waiting in the node's pool for this wallet (read-only; a failed check never fails the sync).
    try{const w=await scanner.waiting();result.incoming=Array.isArray(w?.incoming)?w.incoming:[];}catch{result.incoming=null;}break;}
@@ -123,7 +137,7 @@ self.onmessage=async({data})=>{if(typeof data?.id!=='string')return;const {id,ac
   case 'viewingKey':result=engine.call({op:'viewingKey'});break;// explicit user action only
   case 'clearProgress':if(progress)await progress.clear();result={cleared:true};break;
   case 'close':if(engine)engine.call({op:'close'});result={closed:true};setTimeout(()=>self.close(),10);break;
-  default:throw Error('Unknown action');
+  default:if(MONERO_MARKET&&market&&/^(market|nft)[A-Z]/.test(action)){result=await market.call(action,data);break;}throw Error('Unknown action');
  }
  self.postMessage({id,result});
  }catch(e){self.postMessage({id,error:String(e?.message||e).slice(0,600)});}finally{if(data)data.seed='';}};
