@@ -9,6 +9,9 @@
 //! and verifying keys (penumbra.rs). This crate runs no Groth16 setup of its own.
 //! Disclosure rule: no record contains a native Monero output key, key image, ring position,
 //! native amount or mask; public ownership is a derived decaf377-rdsa key (keys.rs).
+//! MONERO MARKET candidate copy (29 Oct 2026, research/monero-market-20261029): adds anchored Open notes
+//! (market.rs). XA1/XL1 records DO carry a native key image (the anchor): an explicit, flagged deviation
+//! from the rule above, pending owner review. Every existing record and plain note is unchanged.
 use anyhow::{ensure, Result};
 use penumbra_sdk_asset::{asset, Value};
 use serde::{Deserialize, Serialize};
@@ -17,6 +20,7 @@ use sha2::{Digest, Sha256};
 pub mod keys;
 pub mod ledger;
 pub mod manifest;
+pub mod market;
 pub mod payload;
 pub mod penumbra;
 pub mod pool;
@@ -25,6 +29,8 @@ pub mod public;
 pub mod shield;
 pub mod transport;
 pub use payload::Payload;
+#[cfg(test)]
+mod market_tests;
 #[cfg(test)]
 mod tests;
 

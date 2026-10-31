@@ -1,15 +1,21 @@
 [package]
-name = "xmr20-holder-wasm-incoming"
+name = "xmr20-holder-wasm-market"
 version = "0.0.0"
 edition = "2021"
 publish = false
-description = "Holder-side token engine for the unshielded-by-default format: key derivation, local scanning of public and shielded notes, record building for public transfers, shield/unshield, two-part private transfers and burns, holder-funded Monero carriers. Compiled to wasm32 for the extension worker. UNREVIEWED synthetic-test code. 27 Oct 2026: saved scan progress (pool record log replay, native wallet snapshot) and per-block pool/native selection. 29 Oct 2026: the block height of every note and a read-only check of waiting (unconfirmed) transactions for incoming tokens."
+description = "MONERO MARKET candidate (29 Oct 2026, research/monero-market-20261029): anchored lots and the two-party whole-lot sale on top of the 0.0.4-incoming engine. Holder-side token engine for the unshielded-by-default format: key derivation, local scanning of public and shielded notes, record building for public transfers, shield/unshield, two-part private transfers and burns, holder-funded Monero carriers. Compiled to wasm32 for the extension worker. UNREVIEWED synthetic-test code. 27 Oct 2026: saved scan progress (pool record log replay, native wallet snapshot) and per-block pool/native selection. 29 Oct 2026 candidate: the block height of every note and a read-only check of waiting (unconfirmed) transactions for incoming tokens."
+
+[features]
+# TEST-ONLY attacker operations for the offline settlement tests (a dishonest seller's modified software, an unaware wallet,
+# controlled ring sampling). Built into a SEPARATELY NAMED copy (bin/xmr20_holder_wasm_market_lab_adversary.wasm); never in
+# the wallet engine.
+lab-adversary = []
 
 [lib]
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-xmr20-unshielded-core = {path = "../core"}
+xmr20-unshielded-core = {package = "xmr20-market-core", path = "../core"}
 anyhow = "1"
 ark-groth16 = "=0.4.0"
 ark-serialize = "=0.4.2"
@@ -28,6 +34,9 @@ zeroize = "=1.8.2"
 monero-wallet = {path = "../vendor/monero-wallet", default-features = false, features = ["std", "compile-time-generators"]}
 rand_chacha = "=0.3.1"
 curve25519-dalek = "=4.1.3"
+# MONERO MARKET candidate (30 Oct 2026): NFT carriers (raw deflate) and listing/record hashes for anchored NFT sales.
+miniz_oxide = {version = "=0.9.1", default-features = false, features = ["with-alloc"]}
+sha2 = "=0.10.9"
 
 [patch.crates-io]
 getrandom = {path = "../vendor/getrandom-0.2.17"}

@@ -33,7 +33,8 @@ export function createNativePopupChannel(runtime=chrome.runtime){
 export function attachNativePopupPorts({chrome,dispatch,revoke,uuid=()=>crypto.randomUUID()}){
  const live=new Set();
  chrome.runtime.onConnect.addListener(port=>{
-  if(port.name!==NATIVE_POPUP_PORT||!isWalletPopup(port.sender,chrome.runtime)){port.disconnect();return;}
+  if(port.name!==NATIVE_POPUP_PORT)return;// other named ports (the Monero Market window's) belong to their own listener
+  if(!isWalletPopup(port.sender,chrome.runtime)){port.disconnect();return;}
   const id=uuid(),sender={...port.sender,nativePopupId:id};live.add(id);
   port.onDisconnect.addListener(()=>{live.delete(id);void Promise.resolve(revoke(id)).catch(()=>{});});
   port.onMessage.addListener(envelope=>{

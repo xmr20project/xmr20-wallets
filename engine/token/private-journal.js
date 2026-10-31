@@ -30,31 +30,35 @@ export const JOURNAL_KEY='xmr20-private-journal',SALT_KEY='xmr20-private-journal
 // proof of exclusion and tests must inject a lock implementation.
 // Without a lock implementation (plain Node, no `locks` injected) writes are REFUSED unless the caller opts into the lease with
 // allowLeaseFallback:true (tests of the legacy path only).
-export function createPrivateJournal({store,subtle=crypto.subtle,random=b=>crypto.getRandomValues(b),locks=globalThis.navigator?.locks??null,lockName=JOURNAL_KEY+'-lock',allowLeaseFallback=false}){
+// MONERO MARKET candidate (29 Oct 2026): the same box format and write discipline under another storage slot (`journalKey`, `saltKey`,
+// `aad`), and `unlockWithKey` for a box sealed by a key the token worker derives from the account root (no password here).
+export function createPrivateJournal({store,subtle=crypto.subtle,random=b=>crypto.getRandomValues(b),locks=globalThis.navigator?.locks??null,journalKey=JOURNAL_KEY,saltKey=SALT_KEY,aad=AAD,lockName=journalKey+'-lock',allowLeaseFallback=false}){
  let key=null;const exclusionMode=locks?'web-locks':allowLeaseFallback?'lease-fallback':'refused';
  const exclusive=fn=>{if(locks)return locks.request(lockName,{mode:'exclusive'},()=>fn());if(!allowLeaseFallback)return Promise.reject(Error('Journal writes refused: no cross-context exclusive lock is available in this context (navigator.locks missing and no lock implementation injected).'));return fn();};
- async function unlock(password){let salt=await store.get(SALT_KEY);if(!salt){salt=b64(random(new Uint8Array(32)));await store.set(SALT_KEY,salt);}
+ async function unlock(password){let salt=await store.get(saltKey);if(!salt){salt=b64(random(new Uint8Array(32)));await store.set(saltKey,salt);}
   const material=await subtle.importKey('raw',enc.encode(password),'PBKDF2',false,['deriveKey']);key=await subtle.deriveKey({name:'PBKDF2',hash:'SHA-256',iterations:600000,salt:un64(salt)},material,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);}
  function lock(){key=null;}
+ function unlockWithKey(k){if(!(k instanceof CryptoKey)||k.algorithm?.name!=='AES-GCM'||k.extractable)throw Error('A non-extractable AES-GCM key is required');key=k;}
  const empty=()=>({version:1,token:'',accounts:{}});
- async function read(){if(!key)throw Error('Journal locked');const box=await store.get(JOURNAL_KEY);if(!box)return empty();
-  try{const plain=await subtle.decrypt({name:'AES-GCM',iv:un64(box.iv),additionalData:enc.encode(AAD)},key,un64(box.ciphertext));const d=JSON.parse(dec.decode(plain));if(d.version!==1||typeof d.accounts!=='object')throw Error();d.token=box.token;return d;}
+ async function read(){if(!key)throw Error('Journal locked');const box=await store.get(journalKey);if(!box)return empty();
+  try{const plain=await subtle.decrypt({name:'AES-GCM',iv:un64(box.iv),additionalData:enc.encode(aad)},key,un64(box.ciphertext));const d=JSON.parse(dec.decode(plain));if(d.version!==1||typeof d.accounts!=='object')throw Error();d.token=box.token;return d;}
   catch{throw Error('Saved private-operation journal could not be read with this password.');}}
  // Writes are serialized within this window (a heartbeat write must never race the
  // 'built' write of the same operation) and guarded across windows by a short
  // lease key with read-back: the lease is taken before the read-modify-write and
  // released after it, so another window's write cannot be lost in between.
- let chain=Promise.resolve();const LOCK=JOURNAL_KEY+'-lease';
+ let chain=Promise.resolve();const LOCK=journalKey+'-lease';
  function write(mutate){const p=chain.then(()=>exclusive(()=>writeNow(mutate)));chain=p.catch(()=>{});return p;}
  async function lease(){const me=b64(random(new Uint8Array(8)));for(let i=0;i<60;i++){const cur=await store.get(LOCK);if(!cur||cur.until<Date.now()){await store.set(LOCK,{owner:me,until:Date.now()+3000});const back=await store.get(LOCK);if(back?.owner===me)return me;}await new Promise(r=>setTimeout(r,50));}throw Error('Another wallet window is writing; try again.');}
  async function writeNow(mutate){if(!key)throw Error('Journal locked');const me=locks?null:await lease();try{
   for(let attempt=0;attempt<6;attempt++){const current=await read();const next=JSON.parse(JSON.stringify(current));const result=await mutate(next)??next;const token=b64(random(new Uint8Array(12)));const iv=random(new Uint8Array(12));
-   const body={version:1,accounts:next.accounts};const ciphertext=b64(await subtle.encrypt({name:'AES-GCM',iv,additionalData:enc.encode(AAD)},key,enc.encode(JSON.stringify(body))));
-   await store.set(JOURNAL_KEY,{version:1,token,iv:b64(iv),ciphertext,previous:current.token||''});
-   const check=await store.get(JOURNAL_KEY);if(check?.token===token)return result;}
+   // MONERO MARKET candidate: the `market` namespace is kept beside `accounts` when present (absent -> identical bytes as before).
+   const body={version:1,accounts:next.accounts,...(next.market&&typeof next.market==='object'?{market:next.market}:{})};const ciphertext=b64(await subtle.encrypt({name:'AES-GCM',iv,additionalData:enc.encode(aad)},key,enc.encode(JSON.stringify(body))));
+   await store.set(journalKey,{version:1,token,iv:b64(iv),ciphertext,previous:current.token||''});
+   const check=await store.get(journalKey);if(check?.token===token)return result;}
   throw Error('Another wallet window is writing; try again.');}finally{if(me){const cur=await store.get(LOCK);if(cur?.owner===me)await store.set(LOCK,null);}}}
  const account=(j,addr)=>(j.accounts[addr]??={pending:{},claims:{},history:[]});
- return {unlock,lock,read,write,account,exclusionMode,get unlocked(){return Boolean(key);}};
+ return {unlock,unlockWithKey,lock,read,write,account,exclusionMode,get unlocked(){return Boolean(key);}};
 }
 // Note commitments currently reserved by live operations (any window).
 export function reservedCommitments(acc,except=null){const out=new Set();for(const [id,p] of Object.entries(acc.pending||{})){if(id===except)continue;if(['selected','quoted','built','signed','broadcasting','uncertain','published','mined','missing','conflicted','refused'].includes(p.status))for(const c of p.reserved||[])out.add(c);}return out;}

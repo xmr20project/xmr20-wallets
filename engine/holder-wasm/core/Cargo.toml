@@ -1,9 +1,9 @@
 [package]
-name = "xmr20-unshielded-core"
+name = "xmr20-market-core"
 version = "0.0.0"
 edition = "2021"
 publish = false
-description = "XMR20 token format v0.2-experimental: public (unshielded) ledger records, shield/unshield boundaries and two-part private transfers over Penumbra's published circuits and keys. Shared by the roles binary and the holder wasm engine. UNREVIEWED research code."
+description = "MONERO MARKET candidate copy (anchored Open notes XA1/XL1) of the XMR20 token format v0.2-experimental: public (unshielded) ledger records, shield/unshield boundaries and two-part private transfers over Penumbra's published circuits and keys. Shared by the roles binary and the holder wasm engine. UNREVIEWED research code."
 
 [dependencies]
 anyhow = "1"

@@ -70,4 +70,4 @@ const stamp=async dir=>{for(const e of await readdir(dir,{withFileTypes:true})){
 await stamp(stage);await utimes(stage,when,when);
 const zip=join(dist,name+'.zip');execFileSync('zip',['-qrX',zip,name],{cwd:dist,env:{...process.env,TZ:'UTC'}});
 const sha=createHash('sha256').update(await readFile(zip)).digest('hex');
-console.log(`${zip}\nsha256 ${sha}\n${Object.keys(picked).length} locked packages; engine files identical to XMR20 Wallet 0.1.124.`);
+console.log(`${zip}\nsha256 ${sha}\n${Object.keys(picked).length} locked packages; engine files identical to XMR20 Wallet 0.1.128.`);
