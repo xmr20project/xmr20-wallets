@@ -1,9 +1,13 @@
-import {siteSender,siteSigningRequest,publicAccount,publicMoneroAccount,bridgeLaunch,MARKET_READ_ORIGIN} from './site-policy.js';
+import {siteSender,siteSigningRequest,publicAccount,publicMoneroAccount,bridgeLaunch,MARKET_READ_ORIGIN,MONERO_MARKET_ORIGIN} from './site-policy.js';
 import {MARKET_ORIGIN,marketLaunch} from './market-policy.js';
 import {isWalletPopup} from './native-popup-channel.js';
 const SLOT='xmr20-site-connection';
 // Requests and grants are RAM-only and scoped to one tab/document and unlock session.
-export function createSiteBroker({chrome,readSession,unlock,readVault,sign,signCustody=null,jointBridge=false,nativeMarket=false,nativePopupAlive=()=>false,now=Date.now,uuid=()=>crypto.randomUUID()}){
+// MONERO MARKET candidate (29 Oct 2026): `moneroMarket` enables the pinned market origin (site-policy MONERO_MARKET_ORIGIN), the
+// packaged market window (market-wallet.html) and the forwarding of bounded market.* requests to it over `marketHosts`.
+export function createSiteBroker({chrome,readSession,unlock,readVault,sign,signCustody=null,jointBridge=false,nativeMarket=false,moneroMarket=false,marketHosts=null,nativePopupAlive=()=>false,now=Date.now,uuid=()=>crypto.randomUUID()}){
+ moneroMarket=Boolean(moneroMarket&&MONERO_MARKET_ORIGIN&&marketHosts);
+ const MW=()=>chrome.runtime.getURL('market-wallet.html');
  const storage=chrome.storage.session;
  const load=async()=> (await storage.get(SLOT))[SLOT]||{grants:{},requests:{}};
  const save=state=>storage.set({[SLOT]:state});
@@ -20,11 +24,14 @@ export function createSiteBroker({chrome,readSession,unlock,readVault,sign,signC
  }
  async function clean(state){for(const [id,r]of Object.entries(state.requests)){if(r.expires<=now()){delete state.requests[id];continue;}if(!r.result&&!r.error){try{await chrome.windows.get(r.windowId);}catch{r.error='Request cancelled.';}}}const s=await readSession();for(const [id,g]of Object.entries(state.grants))if(!s||g.sessionId!==s.id)delete state.grants[id];return s;}
  async function external(m,sender){
-  const source=siteSender(sender,{jointBridge,nativeMarket});if(m?.channel!=='xmr20-site')throw Error('Unsupported request.');
+  const source=siteSender(sender,{jointBridge,nativeMarket,moneroMarket});if(m?.channel!=='xmr20-site')throw Error('Unsupported request.');
+  const moneroMarketSource=moneroMarket&&source.origin===MONERO_MARKET_ORIGIN;
+  // A dedicated lab origin may only use the market actions; when the market page lives on the site itself, the site's own actions stay available.
+  if(moneroMarketSource&&MONERO_MARKET_ORIGIN!=='https://xmr20.org'&&!['ping','connectMonero','status','disconnect','result','openMoneroMarket','market'].includes(m.action))throw Error('Use XMR20 Wallet to review market operations.');
   if(source.origin===MARKET_READ_ORIGIN&&!['ping','connect','status','disconnect','result'].includes(m.action))throw Error('The local market may only connect and read the public account.');
-  if(source.origin===MARKET_ORIGIN&&!['ping','connect','connectMonero','status','disconnect','result','openMarket'].includes(m.action))throw Error('Use XMR20 Wallet to review market operations.');
-  if(m.action==='connectMonero'&&(!nativeMarket||source.origin!==MARKET_ORIGIN))throw Error('Monero connection is only available to the configured market.');
-  if(m.action==='ping')return {name:'XMR20 Wallet',version:chrome.runtime.getManifest().version,jointBridge,nativeMarket};
+  if(source.origin===MARKET_ORIGIN&&!['ping','connect','connectMonero','status','disconnect','result','openMarket',...(moneroMarket?['openMoneroMarket','market']:[])].includes(m.action))throw Error('Use XMR20 Wallet to review market operations.');
+  if(m.action==='connectMonero'&&!(nativeMarket&&source.origin===MARKET_ORIGIN)&&!moneroMarketSource)throw Error('Monero connection is only available to the configured market.');
+  if(m.action==='ping')return {name:'XMR20 Wallet',version:chrome.runtime.getManifest().version,jointBridge,nativeMarket,moneroMarket};
   const state=await load(),session=await clean(state),grant=state.grants[key(source)];await save(state);
   if(m.action==='disconnect'){delete state.grants[key(source)];for(const [id,r]of Object.entries(state.requests))if(same(r,source))delete state.requests[id];for(const [id,r]of Object.entries(state.markets||{}))if(same(r,source))delete state.markets[id];await save(state);return true;}
   if(m.action==='status')return grant?{account:grant.account}:null;
@@ -33,6 +40,26 @@ export function createSiteBroker({chrome,readSession,unlock,readVault,sign,signC
    if(r.result||r.error){delete state.requests[m.requestId];await save(state);if(r.error)throw Error(r.error);if(!session||r.sessionId!==session.id)throw Error('Wallet locked. Connect again.');return {done:true,value:r.result};}
    try{await chrome.windows.get(r.windowId);}catch{delete state.requests[m.requestId];await save(state);throw Error('Request cancelled.');}
    return {done:false};
+  }
+  if(m.action==='openMoneroMarket'){
+   if(!moneroMarketSource||!grant||!session||grant.sessionId!==session.id||!grant.account.monero||session.activeId!==grant.account.id)throw Error('Connect the selected XMR20 Wallet account to this market first.');
+   state.markets??={};await pruneMarkets(state,session);
+   const mine=Object.values(state.markets).find(r=>r.kind==='monero-market'&&same(r,source));
+   if(mine)return {opened:true,account:grant.account,existing:true};
+   if(Object.keys(state.markets).length)throw Error('Continue or close the existing XMR20 Wallet market window first.');
+   const id=uuid(),window=await chrome.windows.create({url:MW()+'?request='+id,type:'popup',width:420,height:760});
+   state.markets[id]={...source,id,kind:'monero-market',market:{view:'monero-market'},account:grant.account,moneroOnly:true,sessionId:session.id,windowId:window.id,approvalTabId:window.tabs[0].id};await save(state);
+   return {opened:true,account:grant.account};
+  }
+  if(m.action==='market'){
+   if(!moneroMarketSource||!grant||!session||grant.sessionId!==session.id||session.activeId!==grant.account.id)throw Error('Connect the selected XMR20 Wallet account to this market first.');
+   state.markets??={};await pruneMarkets(state,session);await save(state);
+   const r=Object.values(state.markets).find(r=>r.kind==='monero-market'&&same(r,source)&&r.sessionId===session.id&&r.account.id===grant.account.id);
+   if(!r)throw Error('Open the market in XMR20 Wallet first.');
+   if(typeof m.method!=='string'||!/^[a-zA-Z]{1,24}$/.test(m.method)||(m.id!==undefined&&!/^[A-Za-z0-9_-]{1,96}$/.test(String(m.id)))||(m.body!==undefined&&(typeof m.body!=='object'||m.body===null||JSON.stringify(m.body).length>4096)))throw Error('Malformed market request.');
+   const reply=await marketHosts.request(r.id,{method:m.method,id:m.id,body:m.body},45000);
+   if(reply.error)throw Object.assign(Error(reply.error),{status:reply.status});
+   return reply.value;
   }
   if(m.action==='openMarket'){
    if(!nativeMarket||source.origin!==MARKET_ORIGIN||!grant||!session||grant.sessionId!==session.id||!grant.account.monero||session.activeId!==grant.account.id)throw Error('Connect the selected XMR20 Wallet account to this market first.');
@@ -45,7 +72,7 @@ export function createSiteBroker({chrome,readSession,unlock,readVault,sign,signC
    state.markets[id]={...source,id,market,account:grant.account,moneroOnly:grant.moneroOnly===true,sessionId:session.id,windowId:window.id,approvalTabId:window.tabs[0].id};await save(state);
    return {opened:true,account:grant.account};
   }
-  if(!['connect',...(nativeMarket?['connectMonero']:[]),'signIn',...(jointBridge?['openBridge']:[])].includes(m.action))throw Error('Use the extension to send or approve transactions.');
+  if(!['connect',...(nativeMarket||moneroMarket?['connectMonero']:[]),'signIn',...(jointBridge?['openBridge']:[])].includes(m.action))throw Error('Use the extension to send or approve transactions.');
   if(grant?.moneroOnly&&['signIn','openBridge'].includes(m.action))throw Error('This Monero connection does not authorize Solana operations.');
   if(Object.values(state.requests).some(r=>!r.result&&!r.error))throw Error('Finish or close the open wallet request first.');
   if(m.action==='signIn'){if(!grant)throw Error('Connect your wallet first.');siteSigningRequest(m.message,grant.account,now(),source.origin);}
@@ -72,10 +99,11 @@ export function createSiteBroker({chrome,readSession,unlock,readVault,sign,signC
    state.markets[id]={id,internal:true,inline:true,nativePopupId:sender.nativePopupId,approvalTabId:sender.tab?.id??null,market:{view:conversion?'convert':m.action==='openNativeBridge'?'redeem':'send'},account:conversion?publicAccount(a):publicMoneroAccount(a),moneroOnly:!conversion,sessionId:session.id};await save(state);
    return {opened:true,requestId:id,account:conversion?publicAccount(a):publicMoneroAccount(a)};
   }
-  if(nativeMarket&&sender.id===chrome.runtime.id&&(sender.url?.split('?')[0]===chrome.runtime.getURL('market.html')||popupSender(sender)&&['marketView','marketCheck','marketKeys','marketSignCustody','marketClose'].includes(m.action))){
+  const marketWalletSender=moneroMarket&&sender.id===chrome.runtime.id&&sender.url?.split('?')[0]===MW()&&sender.frameId===0;
+  if((nativeMarket||moneroMarket)&&sender.id===chrome.runtime.id&&(sender.url?.split('?')[0]===chrome.runtime.getURL('market.html')||marketWalletSender||popupSender(sender)&&['marketView','marketCheck','marketKeys','marketSignCustody','marketClose'].includes(m.action))){
    const state=await load(),session=await clean(state),r=state.markets?.[m.requestId],grant=r&&state.grants[key(r)];
    const alive=()=>!r?.inline||nativePopupAlive(r.nativePopupId);
-   const bound=r?.inline?popupSender(sender)&&sender.nativePopupId===r.nativePopupId&&alive()&&(sender.tab?.id??null)===r.approvalTabId:sender.url?.split('?')[0]===chrome.runtime.getURL('market.html')&&sender.frameId===0&&sender.tab?.id===r?.approvalTabId;
+   const bound=r?.kind==='monero-market'?marketWalletSender&&sender.tab?.id===r.approvalTabId:r?.inline?popupSender(sender)&&sender.nativePopupId===r.nativePopupId&&alive()&&(sender.tab?.id??null)===r.approvalTabId:sender.url?.split('?')[0]===chrome.runtime.getURL('market.html')&&sender.frameId===0&&sender.tab?.id===r?.approvalTabId;
    if(!r||!bound||!session||r.sessionId!==session.id||session.activeId!==r.account.id||!r.internal&&(grant?.sessionId!==session.id||grant.account.id!==r.account.id||grant.account.solana!==r.account.solana||grant.account.monero!==r.account.monero))throw Error('Market wallet changed or locked. Reopen from your wallet.');
    if(!r.internal){const tab=await chrome.tabs.get(r.tabId);if(new URL(tab.url).origin!==r.origin)throw Error('The requesting market has changed.');}
    if(m.action==='marketClose'){delete state.markets[m.requestId];await save(state);return true;}
@@ -158,5 +186,11 @@ export function createSiteBroker({chrome,readSession,unlock,readVault,sign,signC
  async function revokeNativePopup(id){
   const state=await load();for(const [key,r]of Object.entries(state.markets||{}))if(r.inline&&r.nativePopupId===id)delete state.markets[key];await save(state);
  }
- return {external,internal,revokeTab,revokeNativePopup};
+ // The market window's runtime port is accepted only for the window the broker opened for that request (same tab).
+ async function hostBound(requestId,sender){
+  if(!moneroMarket||typeof requestId!=='string')return false;
+  const state=await load(),session=await clean(state),r=state.markets?.[requestId];
+  return Boolean(r&&r.kind==='monero-market'&&session&&r.sessionId===session.id&&sender?.url?.split('?')[0]===MW()&&sender.tab?.id===r.approvalTabId);
+ }
+ return {external,internal,revokeTab,revokeNativePopup,hostBound};
 }

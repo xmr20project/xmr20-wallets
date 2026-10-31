@@ -42,6 +42,40 @@ Private transfers need 2 XMR coins in your wallet. The wallet's **Enable private
 Monero screen) splits your XMR into a few coins once, so you are ready. An incoming transfer shows as **Pending**,
 then **Confirming n/10**, until it has 10 Monero confirmations.
 
+## Buying and selling on the Monero Market (experimental)
+
+The [Monero Market](https://xmr20.org/market/) trades **whole lots** of XMR20 for XMR, on Monero. One Monero transaction
+pays the seller and delivers the lot to the buyer. On the market page you trade with the xmr20.org website wallet
+(**Connect wallet**, top right). The Chrome extension 0.1.128 carries the same market code (a market window and a
+background runner); the live page offers the site's own wallet.
+
+- **Selling.** Open XMR20 on the market, go to **Sell**, enter a quantity and a total price in XMR (it starts at the
+  Solana price, shown in $), and approve in your wallet. Your wallet moves that exact amount from your Open balance into
+  a *lot* and lists it. Everyone sees it as **Listing soon** right away, then it is listed once the lot is in a Monero
+  block. Buyers can pay once the lot has 25 confirmations; until then it shows **Tradeable in about N min**.
+- **Buying.** Pick a lot, press **Buy** and approve the exact total in your wallet. The seller's wallet checks the same
+  transaction and approves it too (automatically while their page or extension is open).
+- **Why lots have an anchor.** A lot can only move in a transaction that also spends one specific Monero output, its
+  *anchor*. A second sale of the same lot would spend that output twice, which Monero refuses, so a lot cannot be sold
+  twice. The wallet makes its anchors early, as ordinary 0-XMR payments to itself, and names one only when it makes a
+  lot. An anchor made at the moment of the sale would point out which coin in the transaction is the real one (the
+  "black marble" problem Mordinals has); a spare made earlier does not. The first lot from a wallet therefore takes about
+  20 minutes (Monero unlocks a new output after 10 blocks); after that the wallet keeps a spare ready.
+- **Balances.** From Monero block 3,796,100 every XMR20 wallet and the bridge apply the lot rules, so tokens in a lot
+  never count twice.
+
+The settlement is experimental and has not had an independent security review. Trade small amounts.
+
+## What's new (31 October 2026)
+
+- **Monero Market** (above): the market engine (`xmr20-holder-wasm 0.0.6-market-experimental`, built with the mainnet
+  start block 3,796,100) in all three wallets.
+- **Chrome extension 0.1.128**: the market's wallet code (market window, background runner that approves sales,
+  pending lots announced as "Listing soon"). The live market page connects the website wallet.
+- **Website wallet** (xmr20.org): **Connect wallet** on https://xmr20.org/market/ is the site's own wallet; it trades
+  from the page.
+- **CLI 0.4.0**: the same engine, so balances apply the lot rules.
+
 ## What's new (30 October 2026)
 
 - **Chrome extension 0.1.124**: while a Make private / Make open / send is on its way, your balance only drops by the
@@ -56,9 +90,9 @@ then **Confirming n/10**, until it has 10 Monero confirmations.
 The [Releases page](https://github.com/xmr20project/xmr20-wallets/releases) has files you can use without building
 anything:
 
-- **`XMR20-Wallet-0.1.124.zip`**: the Chrome extension, exactly the build that was tested. Unzip it and load it in
+- **`XMR20-Wallet-0.1.128.zip`**: the Chrome extension, exactly the build that was tested. Unzip it and load it in
   `chrome://extensions` ([steps](extension/README.md#install-from-a-tester-zip)).
-- **`xmr20-cli-0.3.0.zip`**: the terminal wallet with its engine already built. You need Node.js 22, then
+- **`xmr20-cli-0.4.0.zip`**: the terminal wallet with its engine already built. You need Node.js 22, then
   `npm install`, `npm run setup` and `./xmr20` ([steps](cli/README.md#ready-made-download)).
 - **`SHA256SUMS.txt`**: each file's fingerprint, so you can check that your download is complete and unchanged.
 
@@ -132,7 +166,7 @@ instead of `./xmr20`. All commands are explained in [`cli/README.md`](cli/README
 
 - `npm run build:engine` puts the engine's browser files in `engine/dist/`. The extension, the website wallet and the CLI
   each copy them from there. The build checks that these files are byte-for-byte the same as in the installed wallet
-  0.1.124.
+  0.1.128 (one known exception: a 2-character esbuild flag in the token worker, explained in `engine/build.mjs`).
 - The XMR20 token engine runs in the browser: the extension popup, the xmr20.org page, or the CLI's private headless
   Chromium. Your keys never leave your computer. Scanning, proving and signing happen locally.
 

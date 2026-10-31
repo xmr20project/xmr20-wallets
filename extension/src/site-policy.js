@@ -5,11 +5,14 @@ import {MARKET_ORIGIN} from './market-policy.js';
 export const SITE_ORIGIN='https://xmr20.org';
 export const LOCAL_ORIGIN='http://127.0.0.1:8893';
 export const MARKET_READ_ORIGIN='http://127.0.0.1:8897';
+// MONERO MARKET candidate (29 Oct 2026): the pinned market page origin, compiled in (offline lab builds only; null elsewhere).
+// Offline lab: a loopback page origin. Stagenet test build (29 Oct): the site itself, https://xmr20.org, where the hidden test page lives.
+export const MONERO_MARKET_ORIGIN=typeof __XMR20_MONERO_MARKET__==='string'&&(/^http:\/\/127\.0\.0\.1:\d{2,5}$/.test(__XMR20_MONERO_MARKET__)||__XMR20_MONERO_MARKET__==='https://xmr20.org')?__XMR20_MONERO_MARKET__:null;
 const allowedOrigins=new Set([SITE_ORIGIN,LOCAL_ORIGIN]);
-export function siteSender(sender,{jointBridge=false,nativeMarket=false}={}){
+export function siteSender(sender,{jointBridge=false,nativeMarket=false,moneroMarket=false}={}){
  if(sender?.id||sender?.frameId!==0||!Number.isInteger(sender?.tab?.id)||typeof sender.documentId!=='string')throw Error('Website connection not allowed.');
  const origin=new URL(sender.url).origin;
- if((!allowedOrigins.has(origin)&&origin!==MARKET_READ_ORIGIN&&!(nativeMarket&&origin===MARKET_ORIGIN)&&!(jointBridge&&origin==='http://127.0.0.1:8925'))||sender.origin!==origin)throw Error('Website connection not allowed.');
+ if((!allowedOrigins.has(origin)&&origin!==MARKET_READ_ORIGIN&&!(nativeMarket&&origin===MARKET_ORIGIN)&&!(moneroMarket&&MONERO_MARKET_ORIGIN&&origin===MONERO_MARKET_ORIGIN)&&!(jointBridge&&origin==='http://127.0.0.1:8925'))||sender.origin!==origin)throw Error('Website connection not allowed.');
  return {origin,tabId:sender.tab.id,documentId:sender.documentId};
 }
 export function signInMessage(message,wallet,now=Date.now(),origin=SITE_ORIGIN){

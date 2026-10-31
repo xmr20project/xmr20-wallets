@@ -3,6 +3,7 @@ engine/dist/
 extension/dist/
 web-wallet/dist/
 web-wallet/public/xmr20-private/
+web-wallet/public/xmr20-market/
 web-wallet/public/monero-native/
 web-wallet/public/monero-wallet/joint-transferable.worker.js
 web-wallet/public/monero-wallet/monero-0.11.16.js
