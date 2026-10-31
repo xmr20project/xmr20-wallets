@@ -9,7 +9,7 @@ pub const EXTRA_LIMIT: usize = 1060;
 pub const CHUNK: usize = 254;
 /// Largest record that still fits: 1,060 - 33 (tx pubkey) - 4 chunks x (tag 1 + len 2 + marker 1) = 1,011.
 pub const MAX_RECORD: usize = 1011;
-pub const MAGICS: [&[u8; 4]; 7] = [
+pub const MAGICS: [&[u8; 4]; 9] = [
     crate::public::MAGIC_TRANSFER,
     crate::public::MAGIC_CREDIT,
     crate::public::MAGIC_BURN,
@@ -17,6 +17,8 @@ pub const MAGICS: [&[u8; 4]; 7] = [
     crate::shield::MAGIC_UNSHIELD,
     crate::private2::MAGIC_A,
     crate::private2::MAGIC_B,
+    crate::market::MAGIC_ANCHORED,
+    crate::market::MAGIC_SALE,
 ];
 pub fn known_magic(b: &[u8]) -> bool {
     b.len() >= 4 && MAGICS.iter().any(|m| b.starts_with(*m))

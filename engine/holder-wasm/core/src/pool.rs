@@ -20,7 +20,7 @@ use serde::Serialize;
 use serde_json::{json, Value as J};
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::{keys::owner_vk, ledger::Ledger, private2, public, shield, transport, PublicOutput};
+use crate::{keys::owner_vk, ledger::Ledger, market, private2, public, shield, transport, PublicOutput};
 
 pub struct Vks {
     pub spend: PreparedVerifyingKey<Bls12_377>,
@@ -34,6 +34,9 @@ pub struct PublicNote {
     pub owner: String,
     pub height: u64,
     pub txid: String,
+    /// MARKET candidate: native key image every consuming carrier must spend (None = plain note).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub anchor: Option<String>,
 }
 #[derive(Clone, Serialize)]
 pub struct Credit {
@@ -92,6 +95,9 @@ pub struct Pool {
     pub accepted: usize,
     pub rejected: usize,
     pub pending_records: usize,
+    /// First height at which XA1/XL1 apply (`market::activation`); None = never (fails closed: a reader that does not set it
+    /// behaves like one without the market rules).
+    pub market_from: Option<u64>,
 }
 fn hx(b: &[u8]) -> String {
     hex::encode(b)
@@ -114,6 +120,7 @@ impl Pool {
             accepted: 0,
             rejected: 0,
             pending_records: 0,
+            market_from: None,
         }
     }
     pub fn domain(&self) -> [u8; 32] {
@@ -121,12 +128,19 @@ impl Pool {
     }
     // ---- public helpers
     /// Resolve the inputs of a public record: all must exist, be unspent, share the asset and the owner.
-    fn take_inputs(&self, inputs: &[[u8; 32]], asset: &str) -> Result<(VerificationKey<SpendAuth>, u128)> {
+    /// MARKET candidate: an ANCHORED input is only resolved when the record's own native carrier spends
+    /// its anchor key image (`native` = the carrier's input key images). Every record kind that consumes
+    /// public notes (XP1, XR1, XS1, XA1, XL1) resolves its inputs here, so no consumption path skips it.
+    fn take_inputs(&self, inputs: &[[u8; 32]], asset: &str, native: &[[u8; 32]]) -> Result<(VerificationKey<SpendAuth>, u128)> {
         let mut owner: Option<[u8; 32]> = None;
         let mut total = 0u128;
         for id in inputs {
             let n = self.notes.get(id).ok_or_else(|| anyhow::anyhow!(if self.spent_notes.contains(id) { "Public input already spent" } else { "Unknown public input" }))?;
             ensure!(n.asset == asset, "Input asset differs from the record asset");
+            if let Some(a) = &n.anchor {
+                let ki: [u8; 32] = hex::decode(a)?.try_into().map_err(|_| anyhow::anyhow!("anchor"))?;
+                ensure!(native.contains(&ki), "Anchored input: the carrier does not spend its anchor key image");
+            }
             let o: [u8; 32] = hex::decode(&n.owner)?.try_into().unwrap();
             match owner {
                 None => owner = Some(o),
@@ -149,16 +163,53 @@ impl Pool {
                 continue;
             }
             let id = public::note_id(record_id, i as u16);
-            self.notes.insert(id, PublicNote { asset: asset.to_string(), amount: o.amount, owner: hx(&o.owner), height, txid: txid.to_string() });
+            self.notes.insert(id, PublicNote { asset: asset.to_string(), amount: o.amount, owner: hx(&o.owner), height, txid: txid.to_string(), anchor: None });
             ids.push(hx(&id));
         }
         ids
     }
+    fn create_anchored(&mut self, record_id: &[u8; 32], asset: &str, outs: &[market::AnchoredOutput], txid: &str, height: u64) -> Vec<String> {
+        let mut ids = vec![];
+        for (i, o) in outs.iter().enumerate() {
+            let id = public::note_id(record_id, i as u16);
+            self.notes.insert(id, PublicNote { asset: asset.to_string(), amount: o.amount, owner: hx(&o.owner), height, txid: txid.to_string(), anchor: o.anchor().map(|a| hx(&a)) });
+            ids.push(hx(&id));
+        }
+        ids
+    }
+    // ---- MARKET candidate records
+    fn anchored(&mut self, b: &[u8], txid: &str, height: u64, domain: &[u8; 32], native: &[[u8; 32]]) -> Result<J> {
+        let t = market::Anchored::decode(b)?;
+        let asset = hx(&t.asset.to_bytes());
+        let (owner, total_in) = self.take_inputs(&t.inputs, &asset, native)?;
+        ensure!(total_in == t.total_out()?, "Anchored transfer does not conserve value");
+        t.verify_sig(&owner, domain)?;
+        self.spend_inputs(&t.inputs);
+        let rid = public::record_id(b);
+        let ids = self.create_anchored(&rid, &asset, &t.outputs, txid, height);
+        Ok(json!({"asset":asset,"inputs":t.inputs.len(),"outputs":ids,"owner":hx(&owner.to_bytes()),"anchored":t.outputs.iter().filter(|o|o.anchor().is_some()).count()}))
+    }
+    fn sale(&mut self, b: &[u8], txid: &str, height: u64, domain: &[u8; 32], native: &[[u8; 32]]) -> Result<J> {
+        let s = market::Sale::decode(b)?;
+        let asset = hx(&s.asset.to_bytes());
+        let lot = self.notes.get(&s.lot).ok_or_else(|| anyhow::anyhow!(if self.spent_notes.contains(&s.lot) { "Lot already spent" } else { "Unknown lot" }))?;
+        ensure!(lot.anchor.is_some(), "Lot is not an anchored note");
+        ensure!(lot.amount == s.quantity, "Whole lot only: quantity differs from the lot note");
+        let (owner, total_in) = self.take_inputs(&[s.lot], &asset, native)?;
+        ensure!(total_in == u128::from(s.quantity), "Sale does not conserve value");
+        ensure!(owner.to_bytes() != s.buyer, "Buyer must differ from the seller");
+        s.verify_sig(&owner, domain)?;
+        self.spend_inputs(&[s.lot]);
+        let rid = public::record_id(b);
+        let out = market::AnchoredOutput { owner: s.buyer, amount: s.quantity, anchor: s.buyer_anchor };
+        let ids = self.create_anchored(&rid, &asset, &[out], txid, height);
+        Ok(json!({"asset":asset,"lot":hx(&s.lot),"quantity":s.quantity.to_string(),"seller":hx(&owner.to_bytes()),"buyer":hx(&s.buyer),"offer":hx(&s.offer),"terms":hx(&s.terms),"outputs":ids,"buyerAnchored":s.buyer_anchor().is_some()}))
+    }
     // ---- record admission
-    fn transfer(&mut self, b: &[u8], txid: &str, height: u64, domain: &[u8; 32]) -> Result<J> {
+    fn transfer(&mut self, b: &[u8], txid: &str, height: u64, domain: &[u8; 32], native: &[[u8; 32]]) -> Result<J> {
         let t = public::Transfer::decode(b)?;
         let asset = hx(&t.asset.to_bytes());
-        let (owner, total_in) = self.take_inputs(&t.inputs, &asset)?;
+        let (owner, total_in) = self.take_inputs(&t.inputs, &asset, native)?;
         ensure!(total_in == t.total_out()?, "Public transfer does not conserve value");
         t.verify_sig(&owner, domain)?;
         self.spend_inputs(&t.inputs);
@@ -178,12 +229,12 @@ impl Pool {
         self.credits.insert(c.binding, Credit { kind: c.kind, asset: asset.clone(), amount: c.amount, owner: hx(&c.owner), txid: txid.to_string(), height });
         Ok(json!({"asset":asset,"kind":c.kind,"amount":c.amount.to_string(),"binding":hx(&c.binding),"outputs":ids}))
     }
-    fn burn(&mut self, b: &[u8], txid: &str, height: u64, domain: &[u8; 32]) -> Result<J> {
+    fn burn(&mut self, b: &[u8], txid: &str, height: u64, domain: &[u8; 32], native: &[[u8; 32]]) -> Result<J> {
         let x = public::Burn::decode(b)?;
         let asset = hx(&x.asset.to_bytes());
         let tid: [u8; 32] = hex::decode(txid)?.try_into().map_err(|_| anyhow::anyhow!("txid"))?;
         ensure!(!self.redemptions.contains_key(&tid), "Redemption carrier already indexed");
-        let (owner, total_in) = self.take_inputs(&x.inputs, &asset)?;
+        let (owner, total_in) = self.take_inputs(&x.inputs, &asset, native)?;
         ensure!(total_in == x.total_out()?, "Burn does not conserve value");
         ensure!(x.change.owner == owner.to_bytes(), "Burn change must return to the owner");
         x.verify_sig(&owner, domain)?;
@@ -194,10 +245,10 @@ impl Pool {
         self.redemptions.insert(tid, Redemption { asset: asset.clone(), amount: x.amount, binding: hx(&x.binding), owner: hx(&owner.to_bytes()), txid: txid.to_string(), height });
         Ok(json!({"asset":asset,"amount":x.amount.to_string(),"binding":hx(&x.binding),"change":ids}))
     }
-    fn shield(&mut self, b: &[u8], txid: &str, height: u64, vks: &Vks, domain: &[u8; 32]) -> Result<J> {
+    fn shield(&mut self, b: &[u8], txid: &str, height: u64, vks: &Vks, domain: &[u8; 32], native: &[[u8; 32]]) -> Result<J> {
         let s = shield::Shield::decode(b)?;
         let asset = hx(&s.asset.to_bytes());
-        let (owner, total_in) = self.take_inputs(&s.inputs, &asset)?;
+        let (owner, total_in) = self.take_inputs(&s.inputs, &asset, native)?;
         ensure!(total_in == s.total_out(), "Shield does not conserve value");
         ensure!(s.change.owner == owner.to_bytes(), "Shield change must return to the owner");
         ensure!(!self.ledger.commitment_exists(&s.out.payload), "Output commitment already exists");
@@ -308,7 +359,12 @@ impl Pool {
     }
     /// Called with native-consensus-validated carriers in canonical chain order.
     /// Result: {"record":"accepted"|"rejected"|"pending"|"ignored", "kind":…, …}
+    /// Without the carrier's key images no anchored note can be consumed (fails closed).
     pub fn apply(&mut self, wire: Option<&[u8]>, txid: &str, height: u64, vks: &Vks) -> J {
+        self.apply_carrier(wire, txid, height, &[], vks)
+    }
+    /// MARKET candidate: `native` = the carrier's input key images, in transaction order.
+    pub fn apply_carrier(&mut self, wire: Option<&[u8]>, txid: &str, height: u64, native: &[[u8; 32]], vks: &Vks) -> J {
         let Some(b) = wire else {
             return json!({"record":"ignored"});
         };
@@ -321,17 +377,25 @@ impl Pool {
             m if m == public::MAGIC_BURN => "public-burn",
             m if m == shield::MAGIC_SHIELD => "shield",
             m if m == shield::MAGIC_UNSHIELD => "unshield",
+            m if m == market::MAGIC_ANCHORED => "anchored-transfer",
+            m if m == market::MAGIC_SALE => "lot-sale",
             m if m == private2::MAGIC_A => "private-part-a",
             _ => "private-part-b",
         };
+        // Byte-for-byte the answer of a reader without the market rules (unknown magic), so old and new readers agree below H.
+        if matches!(kind, "anchored-transfer" | "lot-sale") && !self.market_from.is_some_and(|h| height >= h) {
+            return json!({"record":"ignored"});
+        }
         let domain = self.ledger.domain;
         let mut candidate = self.clone();
         let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| match kind {
-            "public-transfer" => candidate.transfer(b, txid, height, &domain),
+            "public-transfer" => candidate.transfer(b, txid, height, &domain, native),
             "public-credit" => candidate.credit(b, txid, height, &domain, &vks.issuer),
-            "public-burn" => candidate.burn(b, txid, height, &domain),
-            "shield" => candidate.shield(b, txid, height, vks, &domain),
+            "public-burn" => candidate.burn(b, txid, height, &domain, native),
+            "shield" => candidate.shield(b, txid, height, vks, &domain, native),
             "unshield" => candidate.unshield(b, txid, height, vks, &domain),
+            "anchored-transfer" => candidate.anchored(b, txid, height, &domain, native),
+            "lot-sale" => candidate.sale(b, txid, height, &domain, native),
             _ => candidate.part(b, txid, height, vks, &domain),
         }))
         .unwrap_or_else(|_| Err(anyhow::anyhow!("Malformed record")));

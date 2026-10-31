@@ -28,6 +28,12 @@ use xmr20_unshielded_core::{
 use zeroize::Zeroizing;
 
 pub mod native;
+// MONERO MARKET candidate (30 Oct 2026): anchored NFT sales on XMR20-NFT-V2 (records, carrier, SigV2 verification).
+pub mod nft_v2;
+// MONERO MARKET candidate (29 Oct 2026): engine-level market operations (anchored lots, offers, whole-lot sales).
+mod market_ops;
+// MONERO MARKET candidate (30 Oct 2026): anchored NFT sales (engine side).
+mod nft_ops;
 
 // ------------------------------------------------------------ randomness (wasm host import)
 #[cfg(target_arch = "wasm32")]
@@ -48,6 +54,12 @@ fn host_random(buf: &mut [u8]) -> Result<(), getrandom::Error> {
 getrandom::register_custom_getrandom!(host_random);
 
 // ------------------------------------------------------------ parameters
+/// A fresh ledger pool for this manifest's network, with the market rules from their activation height (core `market::activation`).
+fn fresh_pool(domain: [u8; 32], manifest: &Manifest) -> pool::Pool {
+    let mut p = pool::Pool::new(domain);
+    p.market_from = core::market::activation(&manifest.network.kind);
+    p
+}
 pub struct Params {
     pub config: Config,
     pub domain: [u8; 32],
@@ -89,7 +101,8 @@ pub struct Engine {
     tip: u64,
     // Saved scan progress: every XMR20 record extra the pool did not ignore, in applied order (replayed through the same
     // verification on restore), and the last block height whose extras were applied.
-    pool_log: Vec<(u64, String, Vec<u8>)>,
+    // MARKET candidate: each entry also keeps the carrier's input key images (anchored notes need them on replay).
+    pool_log: Vec<(u64, String, Vec<u8>, Vec<[u8; 32]>)>,
     pool_tip: Option<u64>,
     // 29 Oct 2026: the block height and transaction of every note commitment the pool added (shielded notes report their
     // height, so a wallet can show "Confirming n/10" for tokens it received). Rebuilt with the pool on replay and reset.
@@ -97,6 +110,7 @@ pub struct Engine {
     spend_pk: Option<ProvingKey<Bls12_377>>,
     output_pk: Option<ProvingKey<Bls12_377>>,
     native: Option<native::NativeWallet>,
+    market: market_ops::MarketState,
 }
 fn txt<'a>(v: &'a J, k: &str) -> Result<&'a str> {
     v[k].as_str().context(format!("Text field {k}"))
@@ -202,7 +216,8 @@ impl Engine {
     fn select_public(&self, asset: asset::Id, amount: u128, exclude: &std::collections::BTreeSet<[u8; 32]>) -> Result<(Vec<[u8; 32]>, u128)> {
         ensure!(amount > 0, "Positive amount required");
         let a = hex::encode(asset.to_bytes());
-        let mut notes: Vec<([u8; 32], u64)> = self.pool()?.notes_of_owner(&self.owner_key()?).into_iter().filter(|(_, n)| n.asset == a).map(|(id, n)| (bytes32(&id).unwrap(), n.amount)).filter(|(id, _)| !exclude.contains(id)).collect();
+        // MARKET candidate: anchored lots are never picked for an ordinary send (they need their anchor input; cancel the lot first).
+        let mut notes: Vec<([u8; 32], u64)> = self.pool()?.notes_of_owner(&self.owner_key()?).into_iter().filter(|(_, n)| n.asset == a && n.anchor.is_none()).map(|(id, n)| (bytes32(&id).unwrap(), n.amount)).filter(|(id, _)| !exclude.contains(id)).collect();
         notes.sort_by_key(|(_, v)| std::cmp::Reverse(*v));
         let available: u128 = notes.iter().map(|(_, v)| u128::from(*v)).sum();
         ensure!(available >= amount, "Insufficient unreserved public balance of this asset: {available} available");
@@ -263,12 +278,12 @@ impl Engine {
             _ => self.output_pk.is_some(),
         }
     }
-    fn apply_extra(&mut self, height: u64, txid: String, extra: &[u8]) -> Result<J> {
+    fn apply_extra(&mut self, height: u64, txid: String, extra: &[u8], native: &[[u8; 32]]) -> Result<J> {
         let wire = transport::unframe(extra).ok().flatten();
         let p = self.params.as_ref().context("params")?;
         let pool = self.pool.as_mut().context("params")?;
         let before = pool.ledger.history.len();
-        let result = pool.apply(wire.as_deref(), &txid, height, &p.vks);
+        let result = pool.apply_carrier(wire.as_deref(), &txid, height, native, &p.vks);
         if result["record"] == "ignored" {
             return Ok(json!({"record":"ignored"}));
         }
@@ -276,7 +291,7 @@ impl Engine {
         for cm in added {
             self.note_origin.insert(cm, (height, txid.clone()));
         }
-        self.pool_log.push((height, txid.clone(), extra.to_vec()));
+        self.pool_log.push((height, txid.clone(), extra.to_vec(), native.to_vec()));
         let id = hex::encode(core::hash(wire.as_deref().unwrap()));
         let info = RecordInfo { height, txid, status: result["record"].as_str().unwrap_or("?").into(), kind: result["kind"].clone(), error: result["error"].as_str().map(String::from), detail: result["detail"].clone() };
         self.records.insert(id.clone(), info.clone());
@@ -418,7 +433,7 @@ impl Engine {
     }
     pub fn call(&mut self, q: &J) -> Result<J> {
         match txt(q, "op")? {
-            "version" => Ok(json!({"scheme":SCHEME,"protocol":PROTOCOL,"engine":"xmr20-holder-wasm 0.0.4-incoming","parameterManifest":MANIFEST_FORMAT,"domainLabel":DOMAIN_LABEL,"records":{"public":"XP1","credit":"XC1","burn":"XR1","shield":"XS1","unshield":"XU1","privateA":"XMA","privateB":"XMB"},"parameters":self.params.as_ref().map(|p|json!({"label":p.manifest.label,"domain":p.config.domain,"spendLoaded":self.spend_pk.is_some(),"outputLoaded":self.output_pk.is_some()}))})),
+            "version" => Ok(json!({"scheme":SCHEME,"protocol":PROTOCOL,"engine":"xmr20-holder-wasm 0.0.6-market-experimental","market":market_ops::MARKET_PROTOCOL_INFO,"parameterManifest":MANIFEST_FORMAT,"domainLabel":DOMAIN_LABEL,"records":{"public":"XP1","credit":"XC1","burn":"XR1","shield":"XS1","unshield":"XU1","privateA":"XMA","privateB":"XMB","anchored":"XA1","sale":"XL1"},"parameters":self.params.as_ref().map(|p|json!({"label":p.manifest.label,"domain":p.config.domain,"spendLoaded":self.spend_pk.is_some(),"outputLoaded":self.output_pk.is_some()}))})),
             "derive" => {
                 let mut root = Zeroizing::new(bytes32(txt(q, "root")?)?);
                 let account = q["account"].as_u64().unwrap_or(0) as u32;
@@ -456,7 +471,7 @@ impl Engine {
                 let manifest: Manifest = serde_json::from_value(q["manifest"].clone()).context("Parameter manifest")?;
                 let served: Option<Config> = if q["served"].is_null() { None } else { Some(serde_json::from_value(q["served"].clone()).context("served configuration")?) };
                 let p = Params::new(manifest, served)?;
-                self.pool = Some(pool::Pool::new(p.domain));
+                self.pool = Some(fresh_pool(p.domain, &p.manifest));
                 self.note_origin.clear();
                 self.records.clear();
                 self.pool_log.clear();
@@ -469,8 +484,8 @@ impl Engine {
                 Ok(json!({"domain":domain}))
             }
             "reset" => {
-                let d = self.params()?.domain;
-                self.pool = Some(pool::Pool::new(d));
+                let fresh = fresh_pool(self.params()?.domain, &self.params()?.manifest);
+                self.pool = Some(fresh);
                 self.note_origin.clear();
                 self.records.clear();
                 self.pool_log.clear();
@@ -496,7 +511,7 @@ impl Engine {
                     Some(n) if apply_native => n.apply_block(height as usize, txt(q, "block")?, &txs)?,
                     Some(_) => {
                         let (_, parsed) = native::parse_block(height as usize, txt(q, "block")?, &txs)?;
-                        (parsed.iter().map(|tx| (hex::encode(tx.hash()), tx.prefix().extra.clone())).collect(), json!({"skipped":true}))
+                        (parsed.iter().map(|tx| (hex::encode(tx.hash()), tx.prefix().extra.clone(), native::key_images(tx))).collect(), json!({"skipped":true}))
                     }
                     None => {
                         let mut out = vec![];
@@ -504,15 +519,15 @@ impl Engine {
                             let b = hex::decode(hex_tx)?;
                             let tx = monero_wallet::transaction::Transaction::read(&mut b.as_slice()).map_err(|e| anyhow::anyhow!("Transaction: {e}"))?;
                             ensure!(hex::encode(tx.hash()) == *txid, "Transaction hash mismatch");
-                            out.push((txid.clone(), tx.prefix().extra.clone()));
+                            out.push((txid.clone(), tx.prefix().extra.clone(), native::key_images(&tx)));
                         }
                         (out, json!(null))
                     }
                 };
                 let mut records = vec![];
                 if apply_pool {
-                    for (txid, extra) in extras {
-                        let r = self.apply_extra(height, txid, &extra)?;
+                    for (txid, extra, kis) in extras {
+                        let r = self.apply_extra(height, txid, &extra, &kis)?;
                         if r["record"] != "ignored" {
                             records.push(r);
                         }
@@ -524,14 +539,14 @@ impl Engine {
             }
             "poolSnapshot" => Ok(json!({
                 "tip": self.pool_tip,
-                "log": self.pool_log.iter().map(|(h, txid, extra)| json!({"height": h, "txid": txid, "extra": hex::encode(extra)})).collect::<Vec<_>>()
+                "log": self.pool_log.iter().map(|(h, txid, extra, kis)| json!({"height": h, "txid": txid, "extra": hex::encode(extra), "inputs": kis.iter().map(hex::encode).collect::<Vec<_>>()})).collect::<Vec<_>>()
             })),
             // Rebuilds the pool from a saved record log: a fresh pool, every record re-verified in its saved order.
             "poolRestore" => {
                 let tip = q["tip"].as_u64().context("tip")?;
                 let entries = q["log"].as_array().context("log")?;
-                let d = self.params()?.domain;
-                self.pool = Some(pool::Pool::new(d));
+                let fresh = fresh_pool(self.params()?.domain, &self.params()?.manifest);
+                self.pool = Some(fresh);
                 self.note_origin.clear();
                 self.records.clear();
                 self.pool_log.clear();
@@ -540,7 +555,14 @@ impl Engine {
                     let height = e["height"].as_u64().context("height")?;
                     ensure!(height >= last && height <= tip, "Saved record log out of order");
                     last = height;
-                    let r = self.apply_extra(height, txt(e, "txid")?.to_string(), &hex::decode(txt(e, "extra")?)?)?;
+                    // A record log saved by an engine without carrier inputs (0.0.4 and earlier) cannot be replayed under the
+                    // anchored rules once they apply: refuse it then, so the scanner starts over from the chain instead of
+                    // rejecting valid sales. Below the activation height (mainnet until H is set) nothing needs the inputs, so
+                    // an upgraded wallet keeps its saved progress (31 Oct 2026).
+                    let active = self.pool.as_ref().and_then(|p| p.market_from).is_some_and(|h| height >= h);
+                    ensure!(!active || !e["inputs"].is_null(), "Saved record log has no carrier inputs (saved by an older engine); rescanning");
+                    let kis = if e["inputs"].is_null() { vec![] } else { hexlist(&e["inputs"])? };
+                    let r = self.apply_extra(height, txt(e, "txid")?.to_string(), &hex::decode(txt(e, "extra")?)?, &kis)?;
                     ensure!(r["record"] != "ignored", "Saved record log holds a non-record");
                 }
                 self.pool_tip = Some(tip);
@@ -592,7 +614,8 @@ impl Engine {
                 let mask = q["feeRate"]["mask"].as_str().context("feeRate.mask")?.parse::<u64>()?;
                 let fee_rate = monero_wallet::interface::FeeRate::new(per_weight, mask).context("Invalid fee rate")?;
                 let distribution: Vec<u64> = q["distribution"].as_array().context("distribution")?.iter().map(|v| v.as_u64().context("distribution entry")).collect::<Result<_>>()?;
-                let exclude = hexset(&q["exclude"])?;
+                let mut exclude = hexset(&q["exclude"])?;
+                exclude.extend(self.anchors_in_use());
                 self.native.as_mut().context("No native wallet")?.quote(kind, wire_len, fee_rate, distribution, &exclude)
             }
             "carrierOuts" => {
@@ -621,7 +644,8 @@ impl Engine {
                 let height = q["height"].as_u64().context("height")?;
                 let txid = txt(q, "txid")?.to_string();
                 let extra = hex::decode(txt(q, "extra")?)?;
-                let r = self.apply_extra(height, txid, &extra)?;
+                let kis = if q["inputs"].is_null() { vec![] } else { hexlist(&q["inputs"])? };
+                let r = self.apply_extra(height, txid, &extra, &kis)?;
                 self.pool_tip = Some(self.pool_tip.map_or(height, |t| t.max(height)));
                 self.tip = self.tip.max(height);
                 Ok(r)
@@ -640,7 +664,7 @@ impl Engine {
                     ensure!(hex::encode(tx.hash()) == *txid, "Transaction hash mismatch");
                     if let Some(w) = transport::unframe(&tx.prefix().extra).ok().flatten() {
                         if transport::known_magic(&w) {
-                            wires.push((txid.clone(), w));
+                            wires.push((txid.clone(), w, native::key_images(&tx)));
                         }
                     }
                 }
@@ -661,13 +685,13 @@ impl Engine {
                 let mut todo = wires;
                 for _pass in 0..2 {
                     let mut retry = vec![];
-                    for (txid, w) in todo {
+                    for (txid, w, kis) in todo {
                         let (sh0, pb0) = (shielded_of(&candidate)?, public_of(&candidate));
-                        let r = candidate.apply(Some(&w), &txid, height, &p.vks);
+                        let r = candidate.apply_carrier(Some(&w), &txid, height, &kis, &p.vks);
                         match r["record"].as_str() {
                             Some("accepted") => accepted += 1,
                             Some("rejected") => {
-                                retry.push((txid, w));
+                                retry.push((txid, w, kis));
                                 continue;
                             }
                             _ => continue,
@@ -717,7 +741,7 @@ impl Engine {
                     "ownerKey":self.owner_key.map(hex::encode),
                     "canSpend":self.key.is_some(),
                     "tip":self.tip,
-                    "public":{"balances":public_balances.iter().map(|(a,v)|(a.clone(),v.to_string())).collect::<BTreeMap<_,_>>(),"notes":public_notes.iter().map(|(id,n)|json!({"id":id,"asset":n.asset,"amount":n.amount.to_string(),"height":n.height,"txid":n.txid})).collect::<Vec<_>>()},
+                    "public":{"balances":public_balances.iter().map(|(a,v)|(a.clone(),v.to_string())).collect::<BTreeMap<_,_>>(),"notes":public_notes.iter().map(|(id,n)|json!({"id":id,"asset":n.asset,"amount":n.amount.to_string(),"height":n.height,"txid":n.txid,"anchored":n.anchor.is_some()})).collect::<Vec<_>>()},
                     "shielded":{"balances":shielded.iter().map(|(a,v)|(a.clone(),v.to_string())).collect::<BTreeMap<_,_>>(),"notes":owned.iter().filter(|o|!o.spent&&u128::from(o.note.amount())>0).map(|o| self.note_json(o)).collect::<Vec<_>>(),"spent":owned.iter().filter(|o|o.spent).map(|o| self.note_json(o)).collect::<Vec<_>>(),"zeroNotes":owned.iter().filter(|o|!o.spent&&u128::from(o.note.amount())==0).count()},
                     // Backwards-compatible aliases for callers that read the shielded view only.
                     "balances":shielded.iter().map(|(a,v)|(a.clone(),v.to_string())).collect::<BTreeMap<_,_>>(),
@@ -757,7 +781,9 @@ impl Engine {
                     return Ok(last);
                 }
                 let wire = hex::decode(txt(q, "wire")?)?;
-                Ok(candidate.apply(Some(&wire), &hex::encode([0u8; 32]), self.tip + 1, &p.vks))
+                // Optional carrier key images (anchored notes are only admissible with them; without, this fails closed).
+                let kis = if q["inputs"].is_null() { vec![] } else { hexlist(&q["inputs"])? };
+                Ok(candidate.apply_carrier(Some(&wire), &hex::encode([0u8; 32]), self.tip + 1, &kis, &p.vks))
             }
             "close" => {
                 self.key = None;
@@ -767,6 +793,8 @@ impl Engine {
                 self.native = None;
                 Ok(json!({"closed":true}))
             }
+            other if other.starts_with("market") => self.market_call(other, q),
+            other if other.starts_with("nft") => self.nft_call(other, q),
             other => anyhow::bail!("Unknown engine op {other}"),
         }
     }

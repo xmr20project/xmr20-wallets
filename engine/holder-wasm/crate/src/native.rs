@@ -55,6 +55,10 @@ use std::{
 };
 use zeroize::Zeroizing;
 
+// MONERO MARKET candidate (29 Oct 2026): anchored carriers and the two-party whole-lot sale transaction.
+#[path = "native_market.rs"]
+pub mod market;
+
 pub const RING: u8 = 16;
 pub const COINBASE_LOCK: usize = 60; // CRYPTONOTE_MINED_MONEY_UNLOCK_WINDOW
 pub const DEFAULT_LOCK: usize = 10; // CRYPTONOTE_DEFAULT_TX_SPENDABLE_AGE
@@ -66,6 +70,33 @@ pub const DUMMY_AMOUNT: u64 = 0;
 // candidates (a 1-input/2-output carrier with a 996-byte record weighs about 2,500 bytes).
 pub const MIN_CARRIER_WEIGHT: u64 = 1_500;
 pub const ILLUSTRATIVE_MAINNET_PER_BYTE: u64 = 20_000; // for the popup's "mainnet would be about" line only
+// MONERO MARKET option C (30 Oct 2026): a dedicated ANCHOR key pair, derived one-way from the spend key under its own
+// domains. New 0 XMR anchors are paid to this pair's address. An ordinary Monero wallet restored from the same seed scans
+// with the standard view key and compares against the standard spend key (and its subaddresses), so it never detects an
+// anchor and can never spend one by accident and freeze a lot (SETTLEMENT.md T7). Anchors are looked for only in blocks
+// that carry an XA1/XL1 record or an NFT carrier (every anchor is created by one), so ordinary scanning costs nothing extra.
+pub const ANCHOR_SPEND_DOMAIN: &[u8] = b"XMR20-MARKET-ANCHOR-SPEND-V1";
+pub const ANCHOR_VIEW_DOMAIN: &[u8] = b"XMR20-MARKET-ANCHOR-VIEW-V1";
+fn anchor_scalar(domain: &[u8], spend: &DS) -> DS {
+    let mut b = Vec::with_capacity(domain.len() + 32);
+    b.extend_from_slice(domain);
+    b.extend_from_slice(&spend.to_bytes());
+    DS::from_bytes_mod_order(keccak256(&b))
+}
+/// True when a transaction can create an anchor: it carries an XA1/XL1 token record or an XMR20-NFT-V2 carrier
+/// (nft_anchor / nft_sale; NFT carriers are rare, so scanning every one costs little).
+/// True when a transaction carries any XMR20 record (token framing) or an XMR20-NFT-V2 carrier: its outputs are publicly
+/// XMR20-related (spare anchors are never funded from them).
+pub fn carries_xmr20(tx: &Transaction) -> bool {
+    let extra = &tx.prefix().extra;
+    matches!(transport::unframe(extra), Ok(Some(_))) || matches!(crate::nft_v2::extract(extra), Ok(Some(_)))
+}
+pub fn carries_anchor_record(tx: &Transaction) -> bool {
+    use xmr20_unshielded_core::market::{MAGIC_ANCHORED, MAGIC_SALE};
+    let extra = &tx.prefix().extra;
+    matches!(transport::unframe(extra), Ok(Some(r)) if r.len() >= 4 && (r[..4] == MAGIC_ANCHORED[..] || r[..4] == MAGIC_SALE[..]))
+        || matches!(crate::nft_v2::extract(extra), Ok(Some(_)))
+}
 
 fn image(sk: Scalar) -> [u8; 32] {
     let s: DS = sk.into();
@@ -81,6 +112,10 @@ fn dummy_address() -> MoneroAddress {
 }
 fn hex32(b: [u8; 32]) -> String {
     hex::encode(b)
+}
+/// The input key images of a transaction, in transaction order (the carrier's native inputs for the token pool).
+pub fn key_images(tx: &Transaction) -> Vec<[u8; 32]> {
+    tx.prefix().inputs.iter().filter_map(|i| match i { Input::ToKey { key_image, .. } => Some(key_image.to_bytes()), _ => None }).collect()
 }
 
 // Minimal executor: the cached RPC below never returns Pending, so one poll completes.
@@ -179,6 +214,11 @@ pub struct Owned {
     pub height: usize,
     pub coinbase: bool,
     pub txid: [u8; 32],
+    // Option C: found with the dedicated anchor key (spent with the anchor spend key). Older anchors (option A) are false.
+    pub anchor_key: bool,
+    // Spare anchors (31 Oct 2026): whether the creating transaction carried an XMR20 record or NFT carrier. Such outputs are
+    // publicly XMR20-related, so they never fund a spare anchor. None = saved before this field existed (unknown).
+    pub carrier: Option<bool>,
 }
 struct PendingQuote {
     id: String,
@@ -195,6 +235,10 @@ pub struct NativeWallet {
     spend: Zeroizing<Scalar>,
     pair: ViewPair,
     scanner: Scanner,
+    // Option C: the dedicated anchor key pair and its scanner (run only on blocks carrying XA1/XL1).
+    anchor_spend: Zeroizing<Scalar>,
+    anchor_pair: ViewPair,
+    anchor_scanner: Scanner,
     rct_outputs: u64,
     outputs: BTreeMap<[u8; 32], Owned>,
     spent: BTreeMap<[u8; 32], (usize, [u8; 32])>,
@@ -203,6 +247,13 @@ pub struct NativeWallet {
     quotes: BTreeMap<String, PendingQuote>,
     pub tip: usize,
     pub blocks: usize,
+    // MARKET candidate: in-progress multi-input constructions (anchored carriers, sale drafts, seller rings).
+    builds: BTreeMap<String, market::Building>,
+    // Lab-adversary builds only: cap the height decoys are sampled at (ring control for deep-reorg tests).
+    pub decoy_cap: Option<usize>,
+    // MONERO ACCOUNTS (30 Oct 2026): the account service's market wallet lists lots whose price is paid to the service's XMR
+    // wallet. To check a buyer's payment to THAT address the seller scans with its view key (it can see, not spend).
+    payout_view: Option<(String, Scanner)>,
 }
 impl NativeWallet {
     // Standard Monero key schedule from the 32-byte private spend key: view = Hs(spend).
@@ -213,7 +264,21 @@ impl NativeWallet {
         let view = Scalar::from(DS::from_bytes_mod_order(keccak256(root)));
         let spend_pub: DS = spend.into();
         let pair = ViewPair::new(Point::from(G * spend_pub), Zeroizing::new(view)).map_err(|e| anyhow::anyhow!("View pair: {e:?}"))?;
-        Ok(Self { spend: Zeroizing::new(spend), scanner: Scanner::new(pair.clone()), pair, rct_outputs: 0, outputs: BTreeMap::new(), spent: BTreeMap::new(), seen_keys: BTreeSet::new(), reserved: BTreeSet::new(), quotes: BTreeMap::new(), tip: 0, blocks: 0 })
+        let a_spend = anchor_scalar(ANCHOR_SPEND_DOMAIN, &spend_pub);
+        let a_view = anchor_scalar(ANCHOR_VIEW_DOMAIN, &spend_pub);
+        ensure!(a_spend != DS::ZERO && a_view != DS::ZERO, "Degenerate anchor key");
+        let anchor_pair = ViewPair::new(Point::from(G * a_spend), Zeroizing::new(Scalar::from(a_view))).map_err(|e| anyhow::anyhow!("Anchor view pair: {e:?}"))?;
+        Ok(Self { spend: Zeroizing::new(spend), scanner: Scanner::new(pair.clone()), pair, anchor_spend: Zeroizing::new(Scalar::from(a_spend)), anchor_scanner: Scanner::new(anchor_pair.clone()), anchor_pair, rct_outputs: 0, outputs: BTreeMap::new(), spent: BTreeMap::new(), seen_keys: BTreeSet::new(), reserved: BTreeSet::new(), quotes: BTreeMap::new(), tip: 0, blocks: 0, builds: BTreeMap::new(), decoy_cap: None, payout_view: None })
+    }
+    /// MONERO ACCOUNTS: the view key of the standard address this wallet's listings may pay instead of its own.
+    pub fn set_payout_view(&mut self, network: Network, address: &str, view: [u8; 32]) -> Result<()> {
+        let a = MoneroAddress::from_str(network, address).map_err(|e| anyhow::anyhow!("Payout address: {e:?}"))?;
+        ensure!(*a.kind() == AddressType::Legacy, "The payout must be a standard (primary) address");
+        let v = Option::<DS>::from(DS::from_canonical_bytes(view)).context("The view key is not a canonical scalar")?;
+        ensure!(Point::from(G * v).compress().to_bytes() == a.view().compress().to_bytes(), "This view key does not belong to the payout address");
+        let pair = ViewPair::new(a.spend(), Zeroizing::new(Scalar::from(v))).map_err(|e| anyhow::anyhow!("View pair: {e:?}"))?;
+        self.payout_view = Some((address.to_string(), Scanner::new(pair)));
+        Ok(())
     }
     // Begin at `height` with `rct_outputs` RingCT outputs already on the chain (from the daemon's
     // cumulative distribution at height-1). Only valid before any block was applied.
@@ -231,13 +296,48 @@ impl NativeWallet {
     pub fn address_for(&self, network: &str) -> String {
         self.pair.legacy_address(if network == "stagenet" { Network::Stagenet } else { Network::Mainnet }).to_string()
     }
+    // MONERO MARKET candidate (29 Oct 2026): Monero wallet message signature, spend-key type ("SigV2"), as
+    // wallet2::sign builds it: m = keccak("MoneroMessageSignature\0" || spend_pub || view_pub || 0 || varint(len) || data),
+    // k random, c = Hs(m || spend_pub || kG), r = k - c*spend; text = "SigV2" + monero-base58(c || r). Used only for the
+    // market's off-chain NFT listing/withdrawal messages (the host restricts the domains); the spend key never leaves here.
+    pub fn sign_message(&self, data: &[u8]) -> Result<String> {
+        let spend: DS = (*self.spend).into();
+        let spend_pub = (G * spend).compress().to_bytes();
+        let view_pub = self.pair.view().compress().to_bytes();
+        let mut m = Vec::with_capacity(96 + data.len());
+        m.extend_from_slice(b"MoneroMessageSignature\0");
+        m.extend_from_slice(&spend_pub);
+        m.extend_from_slice(&view_pub);
+        m.push(0);
+        let mut n = data.len();
+        while n >= 128 { m.push(((n & 127) | 128) as u8); n >>= 7; }
+        m.push(n as u8);
+        m.extend_from_slice(data);
+        let m = keccak256(&m);
+        let mut seed = [0u8; 64];
+        OsRng.fill_bytes(&mut seed);
+        let k = DS::from_bytes_mod_order_wide(&seed);
+        let k_g = (G * k).compress().to_bytes();
+        let mut h = Vec::with_capacity(96);
+        h.extend_from_slice(&m);
+        h.extend_from_slice(&spend_pub);
+        h.extend_from_slice(&k_g);
+        let c = DS::from_bytes_mod_order(keccak256(&h));
+        let r = k - c * spend;
+        let mut sig = [0u8; 64];
+        sig[..32].copy_from_slice(&c.to_bytes());
+        sig[32..].copy_from_slice(&r.to_bytes());
+        Ok(format!("SigV2{}", monero_base58(&sig)))
+    }
     pub fn reset(&mut self) {
         self.scanner = Scanner::new(self.pair.clone());
+        self.anchor_scanner = Scanner::new(self.anchor_pair.clone());
         self.rct_outputs = 0;
         self.outputs.clear();
         self.spent.clear();
         self.seen_keys.clear();
         self.quotes.clear();
+        self.builds.clear();
         self.tip = 0;
         self.blocks = 0;
         // `reserved` is deliberately kept: a rollback can return an output a
@@ -248,7 +348,7 @@ impl NativeWallet {
     pub fn snapshot(&self) -> J {
         json!({
             "blocks": self.blocks, "tip": self.tip, "rctOutputs": self.rct_outputs,
-            "outputs": self.outputs.iter().map(|(ki, o)| json!({"ki": hex32(*ki), "height": o.height, "coinbase": o.coinbase, "txid": hex32(o.txid), "output": hex::encode(o.output.serialize())})).collect::<Vec<_>>(),
+            "outputs": self.outputs.iter().map(|(ki, o)| json!({"ki": hex32(*ki), "height": o.height, "coinbase": o.coinbase, "txid": hex32(o.txid), "output": hex::encode(o.output.serialize()), "anchorKey": o.anchor_key, "carrier": o.carrier})).collect::<Vec<_>>(),
             "spent": self.spent.iter().map(|(ki, (h, tx))| json!([hex32(*ki), h, hex32(*tx)])).collect::<Vec<_>>(),
             "seen": self.seen_keys.iter().map(|k| hex32(*k)).collect::<Vec<_>>(),
             "reserved": self.reserved.iter().map(|k| hex32(*k)).collect::<Vec<_>>(),
@@ -268,11 +368,13 @@ impl NativeWallet {
             let bytes = hex::decode(o["output"].as_str().context("output")?)?;
             let output = WalletOutput::read(&mut bytes.as_slice()).map_err(|e| anyhow::anyhow!("Saved output: {e}"))?;
             let ki = unhex32(&o["ki"])?;
-            ensure!(image(self.secret(&output)) == ki, "Saved output does not belong to this wallet");
+            // Saved before option C: no flag, the standard spend key.
+            let anchor_key = o["anchorKey"].as_bool().unwrap_or(false);
+            ensure!(image(self.secret(&output, anchor_key)) == ki, "Saved output does not belong to this wallet");
             let height = o["height"].as_u64().context("height")? as usize;
             ensure!(height <= tip, "Saved output above the saved tip");
             seen.insert(output.key().compress().to_bytes());
-            outputs.insert(ki, Owned { txid: unhex32(&o["txid"])?, coinbase: o["coinbase"].as_bool().context("coinbase")?, output, height });
+            outputs.insert(ki, Owned { txid: unhex32(&o["txid"])?, coinbase: o["coinbase"].as_bool().context("coinbase")?, output, height, anchor_key, carrier: o["carrier"].as_bool() });
         }
         let mut spent = BTreeMap::new();
         for e in v["spent"].as_array().context("spent")? {
@@ -310,14 +412,14 @@ impl NativeWallet {
         self.blocks = blocks;
         Ok(())
     }
-    fn secret(&self, o: &WalletOutput) -> Scalar {
-        let a: DS = (*self.spend).into();
+    fn secret(&self, o: &WalletOutput, anchor_key: bool) -> Scalar {
+        let a: DS = if anchor_key { (*self.anchor_spend).into() } else { (*self.spend).into() };
         let b: DS = o.key_offset().into();
         Scalar::from(a + b)
     }
     // One block in canonical order. Returns each non-miner transaction's extra
     // bytes for the token pool and native scan statistics.
-    pub fn apply_block(&mut self, height: usize, block_hex: &str, txs: &[(String, String)]) -> Result<(Vec<(String, Vec<u8>)>, J)> {
+    pub fn apply_block(&mut self, height: usize, block_hex: &str, txs: &[(String, String)]) -> Result<(Vec<(String, Vec<u8>, Vec<[u8; 32]>)>, J)> {
         ensure!(height == self.blocks, "Blocks must be applied in order (expected {}, got {height})", self.blocks);
         let (block, parsed) = parse_block(height, block_hex, txs)?;
         let miner = block.miner_transaction();
@@ -342,23 +444,34 @@ impl NativeWallet {
                 }
             }
         }
-        let scannable = ScannableBlock { block: block.clone(), transactions: parsed.iter().cloned().map(Transaction::<Pruned>::from).collect(), output_index_for_first_ringct_output: first_rct };
-        let found = self.scanner.scan(scannable).map_err(|e| anyhow::anyhow!("Scan: {e:?}"))?.ignore_additional_timelock();
+        let scannable = || ScannableBlock { block: block.clone(), transactions: parsed.iter().cloned().map(Transaction::<Pruned>::from).collect(), output_index_for_first_ringct_output: first_rct };
+        let mut found: Vec<(WalletOutput, bool)> = self.scanner.scan(scannable()).map_err(|e| anyhow::anyhow!("Scan: {e:?}"))?.ignore_additional_timelock().into_iter().map(|o| (o, false)).collect();
+        // Option C: anchors are created by transactions carrying XA1/XL1 (inline anchors) or, since 31 Oct 2026, by this
+        // wallet's own spare-anchor payments; scan for the anchor key in blocks with such a record or with a spend of an
+        // output this wallet holds (every spare is funded by one, also after a restore from the seed).
+        let mut anchors = 0;
+        if spent_now > 0 || parsed.iter().any(carries_anchor_record) {
+            let a = self.anchor_scanner.scan(scannable()).map_err(|e| anyhow::anyhow!("Anchor scan: {e:?}"))?.ignore_additional_timelock();
+            anchors = a.len();
+            found.extend(a.into_iter().map(|o| (o, true)));
+        }
+        let carriers: BTreeSet<[u8; 32]> = parsed.iter().filter(|tx| carries_xmr20(tx)).map(|tx| tx.hash()).collect();
         let mut received = 0;
-        for o in found {
+        for (o, anchor_key) in found {
             let key = o.key().compress().to_bytes();
             if !self.seen_keys.insert(key) {
                 continue; // burning-bug duplicate: never spendable twice
             }
-            let ki = image(self.secret(&o));
+            let ki = image(self.secret(&o, anchor_key));
             let coinbase = o.transaction() == miner_hash;
-            self.outputs.insert(ki, Owned { txid: o.transaction(), output: o, height, coinbase });
+            let carrier = Some(carriers.contains(&o.transaction()));
+            self.outputs.insert(ki, Owned { txid: o.transaction(), output: o, height, coinbase, anchor_key, carrier });
             received += 1;
         }
         self.tip = height;
         self.blocks = height + 1;
-        let extras = parsed.iter().map(|tx| (hex32(tx.hash()), tx.prefix().extra.clone())).collect();
-        Ok((extras, json!({"received":received,"spent":spent_now,"rctOutputs":self.rct_outputs})))
+        let extras = parsed.iter().map(|tx| (hex32(tx.hash()), tx.prefix().extra.clone(), key_images(tx))).collect();
+        Ok((extras, json!({"received":received,"anchors":anchors,"spent":spent_now,"rctOutputs":self.rct_outputs})))
     }
     // First chain tip at which the output may be spent, following monerod's rules:
     // an output in block h is spendable once the chain height (tip + 1) reaches
@@ -397,7 +510,7 @@ impl NativeWallet {
                     locked += u128::from(amount);
                 }
             }
-            list.push(json!({"keyImage":hex32(*ki),"amount":amount.to_string(),"height":o.height,"coinbase":o.coinbase,"unlockedAt":unlocked_at,"spent":spent.map(|(h,t)|json!({"height":h,"txid":hex32(*t)})),"reserved":is_reserved,"txid":hex32(o.txid)}));
+            list.push(json!({"keyImage":hex32(*ki),"amount":amount.to_string(),"height":o.height,"coinbase":o.coinbase,"unlockedAt":unlocked_at,"spent":spent.map(|(h,t)|json!({"height":h,"txid":hex32(*t)})),"reserved":is_reserved,"txid":hex32(o.txid),"anchorKey":o.anchor_key}));
         }
         json!({"address":self.address(),"tip":self.tip,"unlocked":unlocked.to_string(),"locked":locked.to_string(),"reserved":reserved.to_string(),"outputs":list,"rctOutputs":self.rct_outputs})
     }
@@ -510,4 +623,20 @@ impl NativeWallet {
         self.reserved.insert(q.key_image);
         Ok(json!({"txid":hex32(tx.hash()),"blob":hex::encode(&blob),"nativeBytes":blob.len(),"extraBytes":tx.prefix().extra.len(),"fee":fee.to_string(),"keyImage":hex32(q.key_image),"inputs":1,"outputs":tx.prefix().outputs.len(),"kind":q.kind}))
     }
+}
+
+// Monero base58: 8-byte blocks encoded to 11 characters (shorter last block), as monero's tools/base58.cpp.
+pub fn monero_base58(bytes: &[u8]) -> String {
+    const ALPHABET: &[u8] = b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+    const BLOCK: [usize; 9] = [0, 2, 3, 5, 6, 7, 9, 10, 11];
+    let mut out = String::new();
+    for block in bytes.chunks(8) {
+        let mut n: u128 = 0;
+        for b in block { n = (n << 8) | u128::from(*b); }
+        let size = BLOCK[block.len()];
+        let mut s = vec![b'1'; size];
+        for i in (0..size).rev() { s[i] = ALPHABET[(n % 58) as usize]; n /= 58; }
+        out.push_str(std::str::from_utf8(&s).unwrap());
+    }
+    out
 }
