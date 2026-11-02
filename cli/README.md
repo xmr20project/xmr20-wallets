@@ -1,4 +1,4 @@
-# XMR20 terminal wallet (CLI) — 0.4.0
+# XMR20 terminal wallet (CLI) — 0.5.0
 
 A wallet you use by typing commands. It runs the **same engine** as the Chrome extension and xmr20.org
 ([`../engine`](../engine)), inside a private headless Chromium that has no window, no extensions and no website.
@@ -21,7 +21,7 @@ Every send shows a review: amount, recipient, network fee, and bridge fees if an
 
 ## Ready-made download
 
-If you don't want the whole repository, download **`xmr20-cli-0.4.0.zip`** from the
+If you don't want the whole repository, download **`xmr20-cli-0.5.0.zip`** from the
 [Releases page](https://github.com/xmr20project/xmr20-wallets/releases). Its engine files are already built. With Node.js
 22.12 or newer installed:
 
@@ -156,7 +156,7 @@ it also holds your saved operations and scan progress.
 
 - **The engine is not copied.** `cli/build.mjs` bundles `browser/host.js` with `engine/token`, `engine/monero` and
   `engine/shared`, and copies `engine/dist`. The engine build checks that its files are byte-identical to the installed
-  wallet 0.1.128.
+  wallet 0.1.134.
 - **Headless layer.** The token engine was written for screens. [`engine/headless/token-ops.js`](../engine/headless/token-ops.js)
   lets the CLI use it without one: it fills the same fields and presses the same buttons a person would. It stops at
   every review so the CLI can ask you. No engine logic is repeated.
@@ -181,6 +181,20 @@ npm run check:readonly -- /path/to/test-account.json   # read-only mainnet sync 
 `check:readonly` imports a throwaway account into a temporary folder, syncs XMR and XMR20, and prints the balances. It
 never approves, signs or sends anything, and never prints keys. Opening the token wallet publishes the account's signed
 address-book entry to the bridge, as every wallet does when it opens.
+
+## Changes in 0.5.0
+
+0.5.0 runs the engine of wallet 0.1.134 (`xmr20-holder-wasm 0.0.7-address-moves`):
+
+- **Fast start.** The first XMR20 sync no longer reads every Monero block for token records. The CLI downloads the
+  list of record transactions from the XMR20 indexers, fetches each one from the Monero node and checks it, and compares
+  the list with the issuer's signed daily checkpoint
+  ([public copy](https://github.com/xmr20project/xmr20-checkpoints)). While it reads its own blocks it checks that every
+  block's records are exactly the listed ones; if not, it reads the token history from the chain instead. The CLI's
+  loopback server now also forwards the two read-only bridge actions this needs (`ledgerTxs`, `checkpoints`).
+- **Sends to any Monero address.** `xmr20 send` to a Monero address that has no XMR20 wallet (or to a subaddress) now
+  delivers Open tokens to that address; its owner moves them at https://xmr20.org/move/ by signing with their own
+  Monero wallet.
 
 ## Changes in 0.4.0
 

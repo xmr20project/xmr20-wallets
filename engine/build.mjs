@@ -6,19 +6,20 @@
 //   holder.wasm, parameters-manifest.json                the holder engine and its mainnet parameter manifest
 //   native.worker.js and its three helpers, keys.worker.js   the Monero worker, copied from engine/monero/runtime/
 //   monero-0.11.16.js, monero-full-0.11.16.js             the Monero library (npm package monero-ts 0.11.16)
-// It then compares every file with the one installed in XMR20 Wallet 0.1.128 and writes dist/HASHES.json.
+// It then compares every file with the one installed in XMR20 Wallet 0.1.134 and writes dist/HASHES.json.
 import {readFile,writeFile,mkdir,copyFile,rm} from 'node:fs/promises';import {createHash} from 'node:crypto';import {join,dirname} from 'node:path';
 import {createRequire} from 'node:module';
 const here=import.meta.dirname,dist=join(here,'dist'),require=createRequire(join(here,'package.json'));
 const sha=b=>createHash('sha256').update(b).digest('hex');
-// The files installed in XMR20 Wallet 0.1.128 (extension folder vendor/), 31 Oct 2026: holder.wasm is the Monero Market engine
-// (xmr20-holder-wasm 0.0.6-market-experimental, built with the mainnet market start block 3,796,100) and private-holder.worker.js
-// the token worker with the market operations (built with marketDefine below; it resumes scan progress saved by the 0.0.3 and 0.0.4
-// engines); native.worker.js is from 0.1.120 (prepareSplit takes `coins`, 2..16); the others are unchanged since 0.1.117.
+// The files installed in XMR20 Wallet 0.1.134 (extension folder vendor/), 2 Nov 2026: holder.wasm is the engine xmr20-holder-wasm
+// 0.0.7-address-moves with fast start (built with the mainnet market start block 3,796,100 and the address-moves start block 3,797,288;
+// the version string stays 0.0.7 so saved scan progress resumes) and private-holder.worker.js
+// the token worker with the market operations, the address-move operations and fast start (built with marketDefine below; it
+// resumes scan progress saved by the 0.0.3–0.0.6 engines); native.worker.js is from 0.1.120 (prepareSplit takes `coins`, 2..16); the others are unchanged since 0.1.117.
 export const INSTALLED={
- 'private-holder.worker.js':'a1e756fb8b88a8764f19d9c99323aee20611f2999ced3d4331ce53cfbddb0ec4',
+ 'private-holder.worker.js':'196f790019d55435885ea4d4b851d1e7d0c43e73eaf36f2eed225083d5519773',
  'private-claim.worker.js':'d896b51fe12fa19612c6b95377ebf9a497de3e458a4c2637ac50c126a78ead79',
- 'holder.wasm':'5b5998187b49e22d92f90cd26c18997d954cae999f5174d3506b9eaaae5ec43a',
+ 'holder.wasm':'c2d8606a4636213404430070f931db4360a933a2ce06673a0e0a8e19b2dda310',
  'parameters-manifest.json':'1b1a27dcb1c4b3d93e4b38963c0b32595e44362a86296aa9445f468a51f1841b',
  'native.worker.js':'4cf3b221e2aff69559510c5e990fe5ab804c0f12c6c33d2d33d119f7706c3036',
  'native-carrier-guard.js':'09e80298b80ea4dc646dbac64eedd00db323a0634bb3e4932ec7da915fc2aa19',
@@ -29,10 +30,10 @@ export const INSTALLED={
  'monero-full-0.11.16.js':'2e53c27e4518c5e59ae9f6378550cd00c68bb0221d8ee751bd0a12cc39263c3e',
  'LICENSE.txt':'1ff271e3025cb8284c3ae3091ba19ee1dd1610cd984fddb98b582776de960127',
  'monero.worker.js.LICENSE.txt':'b56b6cbccbd5a0370d840ea4000f0267499febfdf00897d50e948aceb71d5d87'};
-// The worker build settings of the 0.1.112–0.1.128 release recipe.
+// The worker build settings of the 0.1.112–0.1.134 release recipe.
 export const workerOptions={bundle:true,format:'iife',platform:'browser',target:'chrome120',minify:true,logLevel:'warning'};
 // Monero Market (31 Oct 2026; experimental): the market page and order book the wallets talk to, the XMR20 asset on Monero, and the
-// node and parameter routes, as the 0.1.126–0.1.128 extension and xmr20.org wallet builds set them.
+// node and parameter routes, as the 0.1.126–0.1.134 extension and xmr20.org wallet builds set them.
 export const marketDefine={__XMR20_MONERO_MARKET__:JSON.stringify('https://xmr20.org'),__XMR20_MONERO_MARKET_API__:JSON.stringify('https://api.xmr20.org/market'),
  __XMR20_MONERO_MARKET_ASSET__:JSON.stringify('3cacb211956f6de017c01ff1e67176c4cd14ceca1b956a7fa59101c7408f480f'),__XMR20_MONERO_MARKET_NODE__:JSON.stringify('https://api.xmr20.org/api/private-node'),
  __XMR20_MONERO_MARKET_PARAMS__:JSON.stringify('https://api.xmr20.org/api/private-bridge')};
@@ -59,7 +60,7 @@ export async function buildEngine({out=dist,quiet=false}={}){
   if(f==='private-holder.worker.js'&&sha(b.toString('utf8').replace(/(\w+)\((\w+)\(\),1\)/,'$1($2())'))===INSTALLED[f]){interop.push(f);continue;}
   differs.push(f);}
  await writeFile(join(out,'HASHES.json'),JSON.stringify({sameAsInstalled:differs.length===0,differs,sameApartFromInteropFlag:interop,files},null,1)+'\n');
- if(!quiet)console.log(differs.length?`Engine built in ${out}. These files differ from XMR20 Wallet 0.1.128: ${differs.join(', ')}`:`Engine built in ${out}. All ${Object.keys(files).length} files match XMR20 Wallet 0.1.128`+(interop.length?` (${interop.join(', ')}: identical apart from esbuild's interop flag).`:' byte for byte.'));
+ if(!quiet)console.log(differs.length?`Engine built in ${out}. These files differ from XMR20 Wallet 0.1.134: ${differs.join(', ')}`:`Engine built in ${out}. All ${Object.keys(files).length} files match XMR20 Wallet 0.1.134`+(interop.length?` (${interop.join(', ')}: identical apart from esbuild's interop flag).`:' byte for byte.'));
  return {files,differs};
 }
 if(process.argv[1]===import.meta.filename)await buildEngine();

@@ -23,6 +23,7 @@ export default function WalletMenu(){
  useEffect(()=>{if(!menuOpen)return;const close=e=>{if(e.type==='keydown'?e.key==='Escape':!menuRef.current?.contains(e.target)&&!e.target.closest?.('.wallet-trigger'))setMenuOpen(false);};addEventListener('pointerdown',close);addEventListener('keydown',close);return()=>{removeEventListener('pointerdown',close);removeEventListener('keydown',close);};},[menuOpen]);
  useEffect(()=>{if(!w.owner)setMenuOpen(false);},[w.owner]);const [opened,setOpened]=useState(w.open),[setup,setSetup]=useState(import.meta.env.VITE_XMR20_DESIGN_PREVIEW==='1'&&['127.0.0.1','localhost'].includes(location.hostname)?new URLSearchParams(location.search).get('setup-preview'):null);
  useEffect(()=>{const show=()=>{setSetup('choose');setChain('monero');};window.addEventListener('xmr20-wallet-setup',show);return()=>window.removeEventListener('xmr20-wallet-setup',show);},[]);
+ useEffect(()=>{const show=()=>setChain('monero');window.addEventListener('xmr20-xmr-page',show);return()=>window.removeEventListener('xmr20-xmr-page',show);},[]);
  useEffect(()=>{if(w.pair)setSetup(null);},[w.pair]);
  // The bridge reads the connected wallet's SOL to say "Add SOL" before anything is signed; the XMR20 token wallet stays open across
  // tab switches and closes when the Solana wallet disconnects or changes.

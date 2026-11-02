@@ -7,6 +7,7 @@ import {useWallet} from './wallet-session.jsx';
 import {currentWebsitePrivateWallet,subscribeWebsitePrivateWallet} from './private-wallet-host.js';
 import {nativeRestoreHeight} from '../../engine/monero/native-wallet-client.js';
 import {attachMarketWallet} from './market-website-bridge.js';
+import {requestXmrPage} from './market-xmr-request.js';
 
 // Build-time configuration (vite define), like the extension candidate's; without it the market wallet is not offered.
 const CONFIG=typeof __XMR20_MONERO_MARKET_NODE__==='string'&&typeof __XMR20_MONERO_MARKET_PARAMS__==='string'&&typeof __XMR20_MONERO_MARKET_API__==='string'&&typeof __XMR20_MONERO_MARKET_ASSET__==='string'
@@ -16,7 +17,7 @@ export default function MarketWebsiteWallet(){
  const {owner,provider,pair,setOpen}=useWallet()||{};const bridge=useRef(null);
  useEffect(()=>{
   if(!CONFIG)return;
-  bridge.current=attachMarketWallet({config:CONFIG,openWalletPanel:()=>setOpen?.(true),
+  bridge.current=attachMarketWallet({config:CONFIG,openWalletPanel:()=>setOpen?.(true),openXmrPage:requestXmrPage,
    // An unlocked token wallet for the same account already holds the phrase: reuse it (no second approval).
    unlocked:a=>{const w=currentWebsitePrivateWallet()?.account();return w&&w.sol===a.owner&&w.xmr===a.address&&w.xmrSeed?w.xmrSeed:null;}});
   let wasOpen=Boolean(currentWebsitePrivateWallet());

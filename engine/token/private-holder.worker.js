@@ -52,6 +52,8 @@ async function rootFromSeed(seed,owner,networkKind='offline-fakechain'){
   const root=hexToBytes(m.get_private_spend_key(p));if(root.length!==32)throw Error('Unexpected key length');return {root,expectedNative};}
  finally{await new Promise(r=>m.close(p,false,0,r));}
 }
+// 2 Nov 2026 (fast start): a public bridge action (the XMR20 indexer's record list and checkpoints).
+const backendAction=async(name,body)=>{const r=await fetch(backend.replace(/\/$/,'')+'/action/'+name,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(60000)});const v=await r.json().catch(()=>({}));if(!r.ok)throw Error(v.error||('Bridge HTTP '+r.status));return v;};
 async function shippedManifest(){
  const r=await fetch('parameters-manifest.json');if(!r.ok)throw Error('This build ships no parameter manifest; parameters cannot be authenticated.');
  const {manifest,sha256}=await checkManifest(new Uint8Array(await r.arrayBuffer()),{expectedSha256:PINNED_MANIFEST_SHA256});
@@ -93,9 +95,12 @@ self.onmessage=async({data})=>{if(typeof data?.id!=='string')return;const {id,ac
    // from its first height (the creation height the wallet saved for it), never below the pool start.
    // 29 Oct 2026: the 0.0.4 engine resumes from progress the 0.0.3 engine saved (same pool record log, re-verified on replay).
    // 31 Oct 2026 (0.1.125): the market engine 0.0.6 resumes from the 0.0.4 engine's progress too (lots off: identical records).
-   progress=createProgressStore({manifestSha256:shipped.sha256,engineVersion:engine.call({op:'version'}).engine,account:await accountTag(d.ownerKey,shipped.sha256),key:sealKey,compatible:['xmr20-holder-wasm 0.0.3-persist','xmr20-holder-wasm 0.0.4-incoming']});
+   // 2 Nov 2026 (0.1.131): engine 0.0.7 (address moves) resumes from 0.0.6's progress: no address move exists before its start block.
+   progress=createProgressStore({manifestSha256:shipped.sha256,engineVersion:engine.call({op:'version'}).engine,account:await accountTag(d.ownerKey,shipped.sha256),key:sealKey,compatible:['xmr20-holder-wasm 0.0.3-persist','xmr20-holder-wasm 0.0.4-incoming','xmr20-holder-wasm 0.0.6-market-experimental']});
    const saved=await progress.load().catch(()=>({pool:null,native:null}));network.resumed={pool:saved.pool?.tip??null,native:saved.native?saved.native.state.blocks-1:null};
-   scanner=createChainScanner(engine,{rpc:data.rpc,genesis:net.genesis,network:kind,startHeight:network.startHeight,nativeStartHeight:Number(data.nativeStartHeight)||0,saved,onCheckpoint:p=>progress.save(p),lookahead:typeof __XMR20_SCAN_LOOKAHEAD__!=='undefined'?__XMR20_SCAN_LOOKAHEAD__:32,onProgress:p=>post(scanCallId||id,{...p,text:`Scanning the ${kind==='stagenet'?'stagenet':kind==='mainnet'?'Monero':'test'} chain locally · block ${p.height} of ${p.target}`})});
+   scanner=createChainScanner(engine,{rpc:data.rpc,genesis:net.genesis,network:kind,startHeight:network.startHeight,nativeStartHeight:Number(data.nativeStartHeight)||0,saved,onCheckpoint:p=>progress.save(p),lookahead:typeof __XMR20_SCAN_LOOKAHEAD__!=='undefined'?__XMR20_SCAN_LOOKAHEAD__:32,onProgress:p=>post(scanCallId||id,p.phase==='pool-ready'?{...p,status:engine.call({op:'status'}),text:'Token ledger loaded from the XMR20 indexers · checking on this device'}:{...p,text:`Scanning the ${kind==='stagenet'?'stagenet':kind==='mainnet'?'Monero':'test'} chain locally · block ${p.height} of ${p.target}`}),
+     // 2 Nov 2026 (fast start): the bridge's list of record-carrying transactions and its checkpoints (every record re-checked here).
+     ledger:{txs:from=>backendAction('ledgerTxs',{from}),checkpoints:()=>backendAction('checkpoints',{})}});
    // monerod sanity checks ON off the fakechain (normal validation); only the tiny offline chain cannot satisfy them.
    carrier=createCarrierBuilder({engine,rpc:data.rpc,onProgress:p=>post(id,p),sanityChecks:kind!=='offline-fakechain',distributionStore:createDistributionStore(kind+':'+(net.genesis||''))});
    if(MONERO_MARKET&&MARKET_FINALITY)engine.call({op:'marketProfile',finalityDepth:MARKET_FINALITY});
@@ -126,6 +131,9 @@ self.onmessage=async({data})=>{if(typeof data?.id!=='string')return;const {id,ac
   case 'parameters':result={label:params?.manifest.label,manifestSha256:params?.sha256,pinnedInBuild:params?.pinned,loaded:loader?.loaded??{},log:paramLog.slice(-20),engine:engine?.call({op:'version'}).parameters};break;
   case 'select':result=engine.call({op:'select',asset:data.asset,amount:data.amount,exclude:data.exclude||[],max:data.max||3});break;
   case 'selectPublic':result=engine.call({op:'selectPublic',asset:data.asset,amount:data.amount,exclude:data.exclude||[]});break;
+  // 2 Nov 2026 (sign to move): tokens held by a plain Monero address — its owner key, holdings, and the prepare/finalize steps
+  // (engine 0.0.7; every op refuses until address moves are active on this network).
+  case 'addressOwner':case 'addressHoldings':case 'addressMovePrepare':case 'addressMoveFinalize':result=engine.call({...data,op:action});break;
   // Exact record length(s) and transaction count for a build request, BEFORE anything is proved (drives the fee quote).
   case 'plan':result=engine.call({op:'plan',kind:data.kind,inputs:data.inputs,change:data.change});break;
   case 'build':{const SLOTS={public:[],burn:[],shield:[1],unshield:[0,1],private:[0,1]};const slots=SLOTS[data.kind];if(!slots)throw Error('Unknown build kind '+data.kind);

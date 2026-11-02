@@ -20,6 +20,14 @@ const publicError=e=>String(e?.message||e).replace(/[0-9a-f]{65,}/g,'…').slice
 const randomHex=n=>Array.from(crypto.getRandomValues(new Uint8Array(n)),x=>x.toString(16).padStart(2,'0')).join('');
 const sha256hex=async s=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s))),x=>x.toString(16).padStart(2,'0')).join('');
 const fail=(msg,status)=>Object.assign(Error(msg),{status});
+// Input key images of a signed transaction (prefix: version, unlock time, then each to-key input 0x02: amount, ring offsets, key image).
+export function inputKeyImages(blob){
+ const b=Uint8Array.from(String(blob).match(/../g)||[],x=>parseInt(x,16));let at=0;
+ const v=()=>{let x=0,m=1;for(;;){if(at>=b.length)throw Error('Truncated transaction');const c=b[at++];x+=(c&127)*m;if(c<128)return x;m*=128;}};
+ v();v();const n=v(),out=[];
+ for(let i=0;i<n;i++){if(b[at++]!==2)throw Error('Unexpected input type');v();const k=v();for(let j=0;j<k;j++)v();if(at+32>b.length)throw Error('Truncated transaction');
+  out.push(Array.from(b.subarray(at,at+32),x=>x.toString(16).padStart(2,'0')).join(''));at+=32;}
+ return out;}
 export function emptyMarketState(){return {version:1,requests:{},approvals:{},trades:{},offers:{},lots:{},rings:{},nftListings:{},nftRings:{},nftCancels:{},relists:{},spares:{},waiting:{},spareError:null,relayKey:null,relayCursor:0,events:[]};}
 /**
  * client: the token worker client (call(action,args,timeout,{idle})). journal: a private journal (write/read) unlocked for
@@ -99,14 +107,52 @@ export function createMarketHost({client,journal,ids,manifest,marketUrl,finality
   const q=await w.spare();
   if(BigInt(q.fee)>SPARE_FEE_CAP){await w.cancelBuild(q.buildId);throw Error(`Network fee ${q.fee} for a spare anchor is above ${SPARE_FEE_CAP}`);}
   const s=await w.sign(q.buildId);
-  await update(x=>{x.spares[s.txid]={txid:s.txid,blob:s.blob,anchor:s.anchorKeyImage,fee:s.fee,status:'sent',createdAt:Date.now()};},'spare-signed');
+  await update(x=>{x.spares[s.txid]={txid:s.txid,blob:s.blob,anchor:s.anchorKeyImage,fee:s.fee,keyImages:s.keyImages||[],status:'sent',createdAt:Date.now()};},'spare-signed');
   const p=await w.publishWithRecovery(s.blob,s.txid);
-  if(!p.ok){await update(x=>{x.spares[s.txid].status='refused';});throw Error('Spare anchor payment not accepted: '+(p.reason||p.status));}
+  if(!p.ok){await update(x=>{x.spares[s.txid].status='refused';});await releaseSpareInputs().catch(e=>log('spare release',publicError(e)));throw Error('Spare anchor payment not accepted: '+(p.reason||p.status));}
   return s;
  }
+ // Spares that will never confirm give their coin back (1 Nov 2026, owner's lots stuck at "Anchor payment sent · waiting for its
+ // first block"). (1) A spare the node refused kept its input reserved in the engine, and reservations are saved with the scan, so
+ // every refused attempt (all of them before release 48) took one more ordinary coin out of use until the wallet asked for XMR
+ // again. (2) A spare counted as coming for 6 hours while it was 'sent', also when the node no longer had it (another payment of
+ // this wallet spent the same coin first, or the page closed between saving and sending it). From 4 minutes on, the wallet asks
+ // its node about each sent spare it has not found, at most once a minute: waiting → kept; in a block → kept and its height noted
+ // (after 6 hours 'mined'); unknown → 'dropped'. Refused and dropped spares release their inputs once per session (the engine may
+ // restore an older saved reservation), never an input that a sent spare or a live purchase still uses.
+ const spareAsked=new Map(),spareReleased=new Set();
+ const spareInputs=s=>{try{return s.keyImages?.length?s.keyImages:inputKeyImages(s.blob);}catch{return [];}};
+ async function releaseSpareInputs(){
+  const done=Object.values(doc.spares).filter(s=>['refused','dropped'].includes(s.status)&&!spareReleased.has(s.txid));if(!done.length)return;
+  const keep=new Set(Object.values(doc.spares).filter(s=>s.status==='sent').flatMap(spareInputs));
+  for(const t of Object.values(doc.trades))if(t.role==='buyer'&&LIVE_BUYER.has(t.phase))for(const k of t.fundingKeyImages||[])keep.add(k);
+  const free=[...new Set(done.flatMap(spareInputs))].filter(k=>hex32.test(k)&&!keep.has(k));
+  if(free.length)await w.nativeRelease(free);
+  for(const s of done)spareReleased.add(s.txid);
+  if(free.length){spareRetry={at:0,unlocked:null};log('spares',`released ${free.length} input(s) of ${done.length} refused or dropped anchor payment(s)`);}
+ }
+ async function settleSpares(){
+  const t=Date.now(),known=new Set([...(mst?.spares?.ready||[]),...(mst?.spares?.maturing||[])].map(x=>x.keyImage));
+  for(const s of Object.values(doc.spares)){
+   if(s.status!=='sent'||known.has(s.anchor)||t-s.createdAt<240000||t-(spareAsked.get(s.txid)||0)<60000)continue;
+   spareAsked.set(s.txid,t);
+   const l=await w.lookup(s.txid).catch(e=>{log('spare lookup',publicError(e));return null;});
+   if(!l)continue;
+   if(l.known){
+    const h=l.inPool?null:l.blockHeight;
+    if(h!=null&&t-s.createdAt>=6*3600e3)await update(x=>{Object.assign(x.spares[s.txid],{status:'mined',blockHeight:h});});
+    else if(h!=null&&s.blockHeight!==h){await update(x=>{x.spares[s.txid].blockHeight=h;});log('spares',`anchor payment ${s.txid.slice(0,12)} is in block ${h}; not found by this wallet yet`);}
+    continue;
+   }
+   await update(x=>{Object.assign(x.spares[s.txid],{status:'dropped',droppedAt:t});},'spare-dropped');log('spares',`anchor payment ${s.txid.slice(0,12)} is unknown to the node; making another`);
+  }
+  await releaseSpareInputs();
+ }
  // In tick (serialised): start what waits for a spare, then make one more if the waiting work (+1 kept ready) needs it.
+ let spareRetry={at:0,unlocked:null};
  async function spareWork(){
   if(!spareMode||!mst)return;
+  await settleSpares().catch(e=>log('spares',publicError(e)));
   for(const wt of Object.values(doc.waiting)){
    if(wt.status!=='waiting')continue;const pick=freeSpares()[0];if(!pick)break;
    await update(x=>{x.waiting[wt.id].spare=pick.keyImage;});
@@ -119,8 +165,14 @@ export function createMarketHost({client,journal,ids,manifest,marketUrl,finality
    await update(x=>{const tt=x.trades[t.tradeId];tt.spare=pick.keyImage;history(tt,'requested');});
    await relay(t.seller,'request',t.tradeId,{offerId:t.offerId}).catch(e=>log('relay request',publicError(e)));
   }
+  // Back-off (31 Oct 2026): a failed spare (no spendable plain XMR, a fee above the cap, …) is retried after 2 minutes, or at once
+  // when the wallet's unlocked XMR changes. Every attempt fetches the chain's output distribution, so retrying each tick flooded
+  // the node gateway and starved the wallet's other requests.
   if(freeSpares().length+comingSpares()<waitingCount()+(marketUsed()?1:0)){
-   try{await makeSpare();if(doc.spareError)await update(x=>{x.spareError=null;});}catch(e){const msg=publicError(e);await update(x=>{x.spareError=msg;});}
+   const unlocked=holder?.native?.unlocked??null;
+   if(Date.now()<spareRetry.at&&unlocked===spareRetry.unlocked)return;
+   try{await makeSpare();spareRetry={at:0,unlocked:null};if(doc.spareError)await update(x=>{x.spareError=null;});}
+   catch(e){const msg=publicError(e);spareRetry={at:Date.now()+120000,unlocked};await update(x=>{x.spareError=msg;});}
   }
  }
  async function checkListing(e,tok){
@@ -724,7 +776,8 @@ export function createMarketHost({client,journal,ids,manifest,marketUrl,finality
    nftIndexedHeight:nftIndex.indexedHeight,
    anchors:{mode:spareMode?'spare':'inline',ready:freeSpares().length,coming:comingSpares(),error:doc.spareError||null,unlockBlocks:10,
     maturing:(mst?.spares?.maturing||[]).filter(x=>!namedSpares().has(x.keyImage)).map(x=>({height:x.height})),
-    sending:(()=>{const known=new Set([...(mst?.spares?.ready||[]),...(mst?.spares?.maturing||[])].map(x=>x.keyImage));return Object.values(doc.spares).filter(x=>x.status==='sent'&&!known.has(x.anchor)&&Date.now()-x.createdAt<6*3600e3).length;})()},
+    sending:(()=>{const known=new Set([...(mst?.spares?.ready||[]),...(mst?.spares?.maturing||[])].map(x=>x.keyImage));return Object.values(doc.spares).filter(x=>x.status==='sent'&&!known.has(x.anchor)&&Date.now()-x.createdAt<6*3600e3).length;})(),
+    sendingInBlock:(()=>{const known=new Set([...(mst?.spares?.ready||[]),...(mst?.spares?.maturing||[])].map(x=>x.keyImage));return Object.values(doc.spares).filter(x=>x.status==='sent'&&!known.has(x.anchor)&&x.blockHeight!=null&&Date.now()-x.createdAt<6*3600e3).map(x=>x.blockHeight).sort((a,b)=>a-b);})()},
    waiting:Object.values(doc.waiting).filter(x=>x.status==='waiting').map(x=>({id:x.id,kind:x.kind,quantityAtoms:x.review.quantity,listTotalPiconero:x.review.list?.price||null,since:x.createdAt,spare:x.spare||null})),
    pendingApprovals:Object.values(doc.approvals).filter(a=>a.status==='pending').map(a=>({approvalId:a.id,kind:a.kind,url:null}))};
  }

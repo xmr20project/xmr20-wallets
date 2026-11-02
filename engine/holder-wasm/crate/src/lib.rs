@@ -58,6 +58,8 @@ getrandom::register_custom_getrandom!(host_random);
 fn fresh_pool(domain: [u8; 32], manifest: &Manifest) -> pool::Pool {
     let mut p = pool::Pool::new(domain);
     p.market_from = core::market::activation(&manifest.network.kind);
+    // SIGN TO MOVE (2 Nov 2026): XW1 address moves from their activation height (core `address::activation`).
+    p.address_moves = core::address::activation(&manifest.network.kind);
     p
 }
 pub struct Params {
@@ -278,6 +280,28 @@ impl Engine {
             _ => self.output_pk.is_some(),
         }
     }
+    /// A record every reader applies at `height` (the rule the indexers store records by): a known record, with lots and address
+    /// moves only from their activation heights.
+    fn indexed_record(&self, extra: &[u8], height: u64) -> bool {
+        let Some(w) = transport::unframe(extra).ok().flatten() else { return false };
+        let Some(pool) = self.pool.as_ref() else { return false };
+        if !transport::known_magic(&w) || w.len() < 4 {
+            return false;
+        }
+        let m = &w[..4];
+        if (m == &core::market::MAGIC_ANCHORED[..] || m == &core::market::MAGIC_SALE[..]) && !pool.market_from.is_some_and(|h| height >= h) {
+            return false;
+        }
+        if m == &core::address::MAGIC_MOVE[..] && !pool.address_moves.is_some_and(|a| height >= a.from) {
+            return false;
+        }
+        true
+    }
+    /// The transactions the pool logged at `height`, in applied order (the log is in height order).
+    fn logged_at(&self, height: u64) -> Vec<String> {
+        let (a, b) = (self.pool_log.partition_point(|e| e.0 < height), self.pool_log.partition_point(|e| e.0 <= height));
+        self.pool_log[a..b].iter().map(|e| e.1.clone()).collect()
+    }
     fn apply_extra(&mut self, height: u64, txid: String, extra: &[u8], native: &[[u8; 32]]) -> Result<J> {
         let wire = transport::unframe(extra).ok().flatten();
         let p = self.params.as_ref().context("params")?;
@@ -433,7 +457,7 @@ impl Engine {
     }
     pub fn call(&mut self, q: &J) -> Result<J> {
         match txt(q, "op")? {
-            "version" => Ok(json!({"scheme":SCHEME,"protocol":PROTOCOL,"engine":"xmr20-holder-wasm 0.0.6-market-experimental","market":market_ops::MARKET_PROTOCOL_INFO,"parameterManifest":MANIFEST_FORMAT,"domainLabel":DOMAIN_LABEL,"records":{"public":"XP1","credit":"XC1","burn":"XR1","shield":"XS1","unshield":"XU1","privateA":"XMA","privateB":"XMB","anchored":"XA1","sale":"XL1"},"parameters":self.params.as_ref().map(|p|json!({"label":p.manifest.label,"domain":p.config.domain,"spendLoaded":self.spend_pk.is_some(),"outputLoaded":self.output_pk.is_some()}))})),
+            "version" => Ok(json!({"scheme":SCHEME,"protocol":PROTOCOL,"engine":"xmr20-holder-wasm 0.0.7-address-moves","market":market_ops::MARKET_PROTOCOL_INFO,"parameterManifest":MANIFEST_FORMAT,"domainLabel":DOMAIN_LABEL,"records":{"public":"XP1","credit":"XC1","burn":"XR1","shield":"XS1","unshield":"XU1","privateA":"XMA","privateB":"XMB","anchored":"XA1","sale":"XL1"},"parameters":self.params.as_ref().map(|p|json!({"label":p.manifest.label,"domain":p.config.domain,"spendLoaded":self.spend_pk.is_some(),"outputLoaded":self.output_pk.is_some()}))})),
             "derive" => {
                 let mut root = Zeroizing::new(bytes32(txt(q, "root")?)?);
                 let account = q["account"].as_u64().unwrap_or(0) as u32;
@@ -506,25 +530,40 @@ impl Engine {
                 if apply_pool {
                     ensure!(self.pool_tip.map_or(true, |t| height > t), "Pool already holds block {height}");
                 }
-                let txs: Vec<(String, String)> = q["txs"].as_array().context("txs")?.iter().map(|t| Ok((txt(t, "txid")?.to_string(), txt(t, "hex")?.to_string()))).collect::<Result<_>>()?;
+                // 2 Nov 2026: a transaction may come pruned (`prunableHash` given; native/read_tx checks its id the same way).
+                let txs: Vec<native::HostTx> = q["txs"].as_array().context("txs")?.iter().map(|t| Ok((txt(t, "txid")?.to_string(), txt(t, "hex")?.to_string(), t["prunableHash"].as_str().map(String::from)))).collect::<Result<_>>()?;
                 let (extras, native_stats) = match self.native.as_mut() {
                     Some(n) if apply_native => n.apply_block(height as usize, txt(q, "block")?, &txs)?,
                     Some(_) => {
                         let (_, parsed) = native::parse_block(height as usize, txt(q, "block")?, &txs)?;
-                        (parsed.iter().map(|tx| (hex::encode(tx.hash()), tx.prefix().extra.clone(), native::key_images(tx))).collect(), json!({"skipped":true}))
+                        (parsed.iter().map(|(tx, h)| (hex::encode(h), tx.prefix().extra.clone(), native::key_images(tx))).collect(), json!({"skipped":true}))
                     }
                     None => {
                         let mut out = vec![];
-                        for (txid, hex_tx) in &txs {
-                            let b = hex::decode(hex_tx)?;
-                            let tx = monero_wallet::transaction::Transaction::read(&mut b.as_slice()).map_err(|e| anyhow::anyhow!("Transaction: {e}"))?;
-                            ensure!(hex::encode(tx.hash()) == *txid, "Transaction hash mismatch");
+                        for (txid, hex_tx, prunable) in &txs {
+                            let (tx, hash) = native::read_tx(hex_tx, prunable.as_deref())?;
+                            ensure!(hex::encode(hash) == *txid, "Transaction hash mismatch");
                             out.push((txid.clone(), tx.prefix().extra.clone(), native::key_images(&tx)));
                         }
                         (out, json!(null))
                     }
                 };
                 let mut records = vec![];
+                // 2 Nov 2026: a block the pool already holds (its records came from an indexer's list, re-checked one by one) that
+                // the native side reads anyway: the XMR20 records in it must be exactly the listed ones, in block order (order decides
+                // which of two spends of one note counts). Otherwise the list was incomplete or reordered; the scanner then rebuilds
+                // the pool from the chain. `unlisted`: the records missing from the list, or the block's records if only the order differs.
+                let mut unlisted = vec![];
+                if !apply_pool && self.pool_tip.is_some_and(|t| height <= t) {
+                    let in_block: Vec<String> = extras.iter().filter(|(_, extra, _)| self.indexed_record(extra, height)).map(|(t, _, _)| t.clone()).collect();
+                    let logged = self.logged_at(height);
+                    if in_block != logged {
+                        unlisted = in_block.iter().filter(|t| !logged.contains(t)).cloned().collect();
+                        if unlisted.is_empty() {
+                            unlisted = if in_block.is_empty() { logged } else { in_block };
+                        }
+                    }
+                }
                 if apply_pool {
                     for (txid, extra, kis) in extras {
                         let r = self.apply_extra(height, txid, &extra, &kis)?;
@@ -535,7 +574,31 @@ impl Engine {
                     self.pool_tip = Some(height);
                 }
                 self.tip = self.tip.max(height);
-                Ok(json!({"height":height,"records":records,"native":native_stats,"pool":apply_pool}))
+                Ok(json!({"height":height,"records":records,"native":native_stats,"pool":apply_pool,"unlisted":unlisted}))
+            }
+            // 2 Nov 2026: the saved-progress log entries of the given record-carrying transactions (fetched by the host from the
+            // node, pruned or full; each id re-checked). Used to start the pool from an indexer's list instead of every block.
+            "recordEntries" => {
+                let mut log = vec![];
+                for t in q["txs"].as_array().context("txs")? {
+                    let txid = txt(t, "txid")?;
+                    let height = t["height"].as_u64().context("height")?;
+                    let (tx, hash) = native::read_tx(txt(t, "hex")?, t["prunableHash"].as_str())?;
+                    ensure!(hex::encode(hash) == txid, "Transaction hash mismatch for {txid}");
+                    ensure!(self.indexed_record(&tx.prefix().extra, height), "Transaction {txid} carries no XMR20 record at block {height}");
+                    log.push(json!({"height":height,"txid":txid,"extra":hex::encode(&tx.prefix().extra),"inputs":native::key_images(&tx).iter().map(hex::encode).collect::<Vec<_>>()}));
+                }
+                Ok(json!({"log":log}))
+            }
+            // 2 Nov 2026: check a checkpoint anchor carrier (fetched by the host; pruned or full): issuer signature under the shipped
+            // manifest's issuer key and this ledger's domain. Returns the anchored checkpoint.
+            "checkpointVerify" => {
+                let (tx, hash) = native::read_tx(txt(q, "hex")?, q["prunableHash"].as_str())?;
+                ensure!(hex::encode(hash) == txt(q, "txid")?, "Transaction hash mismatch");
+                let wire = core::checkpoint::Anchor::from_extra(&tx.prefix().extra).context("No checkpoint anchor in this transaction")?;
+                let p = self.params()?;
+                let a = core::checkpoint::Anchor::verify(&wire, &p.vks.issuer, &p.domain)?;
+                Ok(json!({"height":a.height,"blockHash":hex::encode(a.block_hash),"listHash":hex::encode(a.list_hash),"records":a.records}))
             }
             "poolSnapshot" => Ok(json!({
                 "tip": self.pool_tip,
@@ -734,6 +797,14 @@ impl Engine {
                     Some(o) => (pool.public_balances(&o), pool.notes_of_owner(&o)),
                     None => (BTreeMap::new(), vec![]),
                 };
+                // SIGN TO MOVE: Open notes held at this wallet's own main Monero address (sent there before it had a certificate).
+                let address_held = match (self.native.as_ref(), pool.address_moves) {
+                    (Some(n), Some(a)) => core::address::Address::decode(&n.address_for(if a.net == core::address::STAGENET { "stagenet" } else { "mainnet" }), a.net).ok().map(|ad| {
+                        let o = ad.owner();
+                        json!({"owner":hex::encode(o),"balances":pool.public_balances(&o).iter().map(|(a,v)|(a.clone(),v.to_string())).collect::<BTreeMap<_,_>>(),"notes":pool.notes_of_owner(&o).iter().map(|(id,n)|json!({"id":id,"asset":n.asset,"amount":n.amount.to_string(),"height":n.height})).collect::<Vec<_>>()})
+                    }),
+                    _ => None,
+                };
                 let records = self.records.iter().map(|(id, r)| (id.clone(), json!({"height":r.height,"txid":r.txid,"status":r.status,"kind":r.kind,"error":r.error,"detail":r.detail,"confirmations":self.tip+1-r.height}))).collect::<BTreeMap<_, _>>();
                 Ok(json!({
                     "tokenAddress":self.unified()?,
@@ -748,8 +819,15 @@ impl Engine {
                     "notes":owned.iter().filter(|o|!o.spent&&u128::from(o.note.amount())>0).map(|o| self.note_json(o)).collect::<Vec<_>>(),
                     "spent":owned.iter().filter(|o|o.spent).map(|o| self.note_json(o)).collect::<Vec<_>>(),
                     "records":records,
+                    "addressHeld":address_held,
                     "pool":pool.summary()
                 }))
+            }
+            // SIGN TO MOVE (2 Nov 2026): tokens held by a plain Monero address (core address.rs): owner key of an address, its
+            // holdings, and the relay's prepare/finalize steps. All refuse until address moves are active on this network.
+            "addressOwner" | "addressHoldings" | "addressMovePrepare" | "addressMoveFinalize" => {
+                let vks = &self.params.as_ref().context("Parameters first")?.vks;
+                self.pool()?.address_op(q, vks, self.tip.max(1))
             }
             "selectPublic" => {
                 let asset = asset_of(q)?;
