@@ -41,7 +41,7 @@ use monero_wallet::{
     primitives::keccak256,
     ringct::RctType,
     send::{Change, SignableTransaction},
-    transaction::{Input, Pruned, Timelock, Transaction},
+    transaction::{Input, PotentiallyPruned, Pruned, Timelock, Transaction},
     OutputWithDecoys, Scanner, ViewPair, WalletOutput,
 };
 use rand_chacha::{rand_core::SeedableRng, ChaCha20Rng};
@@ -87,11 +87,11 @@ fn anchor_scalar(domain: &[u8], spend: &DS) -> DS {
 /// (nft_anchor / nft_sale; NFT carriers are rare, so scanning every one costs little).
 /// True when a transaction carries any XMR20 record (token framing) or an XMR20-NFT-V2 carrier: its outputs are publicly
 /// XMR20-related (spare anchors are never funded from them).
-pub fn carries_xmr20(tx: &Transaction) -> bool {
+pub fn carries_xmr20<P: PotentiallyPruned>(tx: &Transaction<P>) -> bool {
     let extra = &tx.prefix().extra;
     matches!(transport::unframe(extra), Ok(Some(_))) || matches!(crate::nft_v2::extract(extra), Ok(Some(_)))
 }
-pub fn carries_anchor_record(tx: &Transaction) -> bool {
+pub fn carries_anchor_record<P: PotentiallyPruned>(tx: &Transaction<P>) -> bool {
     use xmr20_unshielded_core::market::{MAGIC_ANCHORED, MAGIC_SALE};
     let extra = &tx.prefix().extra;
     matches!(transport::unframe(extra), Ok(Some(r)) if r.len() >= 4 && (r[..4] == MAGIC_ANCHORED[..] || r[..4] == MAGIC_SALE[..]))
@@ -114,25 +114,45 @@ fn hex32(b: [u8; 32]) -> String {
     hex::encode(b)
 }
 /// The input key images of a transaction, in transaction order (the carrier's native inputs for the token pool).
-pub fn key_images(tx: &Transaction) -> Vec<[u8; 32]> {
+pub fn key_images<P: PotentiallyPruned>(tx: &Transaction<P>) -> Vec<[u8; 32]> {
     tx.prefix().inputs.iter().filter_map(|i| match i { Input::ToKey { key_image, .. } => Some(key_image.to_bytes()), _ => None }).collect()
 }
 
 // Minimal executor: the cached RPC below never returns Pending, so one poll completes.
+/// One transaction as the host supplies it: (txid, hex, prunable hash). With a prunable hash the hex is the PRUNED form the node
+/// returns (prefix + RingCT base, no signatures or range proofs: about 5.5x less to download, 2 Nov 2026); the transaction id is then
+/// recomputed from the pruned bytes and that hash, so it is checked exactly as for a full transaction.
+pub type HostTx = (String, String, Option<String>);
+pub fn read_tx(hex_tx: &str, prunable: Option<&str>) -> Result<(Transaction<Pruned>, [u8; 32])> {
+    let b = hex::decode(hex_tx)?;
+    match prunable {
+        Some(ph) => {
+            let ph: [u8; 32] = hex::decode(ph)?.try_into().map_err(|_| anyhow::anyhow!("prunable hash size"))?;
+            let tx = Transaction::<Pruned>::read(&mut b.as_slice()).map_err(|e| anyhow::anyhow!("Transaction: {e}"))?;
+            ensure!(tx.serialize() == b, "Non-canonical pruned transaction blob");
+            let hash = tx.hash_with_prunable_hash(ph).context("A pruned version-1 transaction cannot be checked")?;
+            Ok((tx, hash))
+        }
+        None => {
+            let tx = Transaction::read(&mut b.as_slice()).map_err(|e| anyhow::anyhow!("Transaction: {e}"))?;
+            ensure!(tx.serialize() == b, "Non-canonical transaction blob");
+            let hash = tx.hash();
+            Ok((Transaction::<Pruned>::from(tx), hash))
+        }
+    }
+}
 // A canonical block blob at `height` and exactly its transactions, in block order (hashes checked against the block).
-pub fn parse_block(height: usize, block_hex: &str, txs: &[(String, String)]) -> Result<(Block, Vec<Transaction>)> {
+pub fn parse_block(height: usize, block_hex: &str, txs: &[HostTx]) -> Result<(Block, Vec<(Transaction<Pruned>, [u8; 32])>)> {
     let raw = hex::decode(block_hex)?;
     let block = Block::read(&mut raw.as_slice()).map_err(|e| anyhow::anyhow!("Block: {e}"))?;
     ensure!(block.serialize() == raw, "Non-canonical block blob");
     ensure!(block.number() == height, "Block number {} != height {height}", block.number());
     ensure!(block.transactions.len() == txs.len(), "Block lists {} transactions, host supplied {}", block.transactions.len(), txs.len());
     let mut parsed = Vec::with_capacity(txs.len());
-    for ((txid, hex_tx), expected) in txs.iter().zip(&block.transactions) {
-        let b = hex::decode(hex_tx)?;
-        let tx = Transaction::read(&mut b.as_slice()).map_err(|e| anyhow::anyhow!("Transaction: {e}"))?;
-        ensure!(tx.serialize() == b, "Non-canonical transaction blob");
-        ensure!(tx.hash() == *expected && hex32(tx.hash()) == *txid, "Transaction hash mismatch in block {height}");
-        parsed.push(tx);
+    for ((txid, hex_tx, prunable), expected) in txs.iter().zip(&block.transactions) {
+        let (tx, hash) = read_tx(hex_tx, prunable.as_deref())?;
+        ensure!(hash == *expected && hex32(hash) == *txid, "Transaction hash mismatch in block {height}");
+        parsed.push((tx, hash));
     }
     Ok((block, parsed))
 }
@@ -419,7 +439,7 @@ impl NativeWallet {
     }
     // One block in canonical order. Returns each non-miner transaction's extra
     // bytes for the token pool and native scan statistics.
-    pub fn apply_block(&mut self, height: usize, block_hex: &str, txs: &[(String, String)]) -> Result<(Vec<(String, Vec<u8>, Vec<[u8; 32]>)>, J)> {
+    pub fn apply_block(&mut self, height: usize, block_hex: &str, txs: &[HostTx]) -> Result<(Vec<(String, Vec<u8>, Vec<[u8; 32]>)>, J)> {
         ensure!(height == self.blocks, "Blocks must be applied in order (expected {}, got {height})", self.blocks);
         let (block, parsed) = parse_block(height, block_hex, txs)?;
         let miner = block.miner_transaction();
@@ -430,7 +450,7 @@ impl NativeWallet {
             self.rct_outputs += miner.prefix().outputs.len() as u64;
         }
         let mut spent_now = 0;
-        for tx in &parsed {
+        for (tx, tx_hash) in &parsed {
             if tx.version() == 2 {
                 self.rct_outputs += tx.prefix().outputs.len() as u64;
             }
@@ -438,24 +458,24 @@ impl NativeWallet {
                 if let Input::ToKey { key_image, .. } = i {
                     let ki = key_image.to_bytes();
                     if self.outputs.contains_key(&ki) && !self.spent.contains_key(&ki) {
-                        self.spent.insert(ki, (height, tx.hash()));
+                        self.spent.insert(ki, (height, *tx_hash));
                         spent_now += 1;
                     }
                 }
             }
         }
-        let scannable = || ScannableBlock { block: block.clone(), transactions: parsed.iter().cloned().map(Transaction::<Pruned>::from).collect(), output_index_for_first_ringct_output: first_rct };
+        let scannable = || ScannableBlock { block: block.clone(), transactions: parsed.iter().map(|(tx, _)| tx.clone()).collect(), output_index_for_first_ringct_output: first_rct };
         let mut found: Vec<(WalletOutput, bool)> = self.scanner.scan(scannable()).map_err(|e| anyhow::anyhow!("Scan: {e:?}"))?.ignore_additional_timelock().into_iter().map(|o| (o, false)).collect();
         // Option C: anchors are created by transactions carrying XA1/XL1 (inline anchors) or, since 31 Oct 2026, by this
         // wallet's own spare-anchor payments; scan for the anchor key in blocks with such a record or with a spend of an
         // output this wallet holds (every spare is funded by one, also after a restore from the seed).
         let mut anchors = 0;
-        if spent_now > 0 || parsed.iter().any(carries_anchor_record) {
+        if spent_now > 0 || parsed.iter().any(|(tx, _)| carries_anchor_record(tx)) {
             let a = self.anchor_scanner.scan(scannable()).map_err(|e| anyhow::anyhow!("Anchor scan: {e:?}"))?.ignore_additional_timelock();
             anchors = a.len();
             found.extend(a.into_iter().map(|o| (o, true)));
         }
-        let carriers: BTreeSet<[u8; 32]> = parsed.iter().filter(|tx| carries_xmr20(tx)).map(|tx| tx.hash()).collect();
+        let carriers: BTreeSet<[u8; 32]> = parsed.iter().filter(|(tx, _)| carries_xmr20(tx)).map(|(_, h)| *h).collect();
         let mut received = 0;
         for (o, anchor_key) in found {
             let key = o.key().compress().to_bytes();
@@ -470,7 +490,7 @@ impl NativeWallet {
         }
         self.tip = height;
         self.blocks = height + 1;
-        let extras = parsed.iter().map(|tx| (hex32(tx.hash()), tx.prefix().extra.clone(), key_images(tx))).collect();
+        let extras = parsed.iter().map(|(tx, h)| (hex32(*h), tx.prefix().extra.clone(), key_images(tx))).collect();
         Ok((extras, json!({"received":received,"anchors":anchors,"spent":spent_now,"rctOutputs":self.rct_outputs})))
     }
     // First chain tip at which the output may be spent, following monerod's rules:

@@ -14,7 +14,8 @@ export function moneroRequest(url,method){
  return {base,path,relay:path==='/send_raw_transaction'||path==='/sendrawtransaction'};
 }
 // Same-origin paths of the CLI page that the loopback server forwards to api.xmr20.org.
-const BRIDGE_ACTIONS=new Set(['state','register','publishAddress','lookupAddress','feeQuote','feeSubmit','depositPrepare','depositSubmit','recentBlockhash','redeemPrepare','claimPrepare','claimSubmit','view']);
+// ledgerTxs and checkpoints (fast start, 0.5.0): the token-record list and the issuer's signed daily checkpoints, read-only.
+const BRIDGE_ACTIONS=new Set(['state','register','publishAddress','lookupAddress','feeQuote','feeSubmit','depositPrepare','depositSubmit','recentBlockhash','redeemPrepare','claimPrepare','claimSubmit','view','ledgerTxs','checkpoints']);
 const NODE_PATHS=new Set([...MONERO_PATHS,'/get_transactions','/get_outs','/get_transaction_pool','/get_transaction_pool_hashes']);
 export function forwardRequest(pathname,method){
  let m=pathname.match(/^\/api\/private-bridge\/action\/([A-Za-z]+)$/);

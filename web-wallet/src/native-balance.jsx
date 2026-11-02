@@ -7,6 +7,8 @@ import {moneroWalletVault} from './monero-wallet-vault.js';
 import {createNativeScanCache} from '../../engine/token/native-scan-cache.js';
 import WebsiteXmrSend from './website-xmr-send.jsx';
 import WebsiteXmrSplit from './website-xmr-split.jsx';
+import WebsiteXmrAnchorFunds from './website-xmr-anchor-funds.jsx';
+import {takeXmrPage} from './market-xmr-request.js';
 import WebsiteXmrDetail,{WebsiteXmrBridgeChoice} from './website-xmr-detail.jsx';
 import {openXmrTxs,refreshXmrTxStatus,xmrTxLabel,xmrTxTitle} from './xmr-tx-store.js';
 const WebsiteWxmrBridge=lazy(()=>import('./website-wxmr-bridge.jsx'));
@@ -103,6 +105,9 @@ export default function NativeBalance({owner,address,provider,workerPath=sitePat
  useEffect(()=>{if(afterUnlock&&opened&&balance){setPage(afterUnlock);setAfterUnlock(null);}else if(afterUnlock&&!busy&&!opened&&!form)setAfterUnlock(null);},[afterUnlock,opened,balance,busy,form]);
  function openPage(name){if(opened&&client.current?.alive){setPage(name);return;}if(busy)return;setAfterUnlock(name);if(vaulted)void unlockWithWallet();else setForm(true);}
  const openSend=()=>openPage('detail');
+ // Monero Market "Use my XMR": open the page the market asked for (once), unlocking first when needed.
+ const [pageOptions,setPageOptions]=useState(null);
+ useEffect(()=>{const take=()=>{if(busy&&!opened)return;const r=takeXmrPage(address);if(r){setPageOptions(r.options||null);openPage(r.page);}};take();window.addEventListener('xmr20-xmr-page',take);return()=>window.removeEventListener('xmr20-xmr-page',take);},[address,busy,opened,vaulted]);
  // 28 Oct 2026 (owner): one Monero row at the top of the Monero tab, as in the extension: the XMR balance, its status and
  // Sync, which also syncs XMR20 on Monero. The unlock form opens under the row.
  const scanFrom=Number(height)||0,pct=progress?.height&&progress?.target?Math.max(0,Math.min(99,Math.round((progress.height-scanFrom)/Math.max(1,progress.target-scanFrom)*100))):null;
@@ -117,6 +122,7 @@ export default function NativeBalance({owner,address,provider,workerPath=sitePat
  // Bridge = "bridge xmr to solana" (owner): the exchange page (ChangeNOW) from XMR to this Solana wallet, paid from this wallet.
  const canBridge=Boolean(owner)&&provider?.kind!=='xmr20';
  if(page&&opened&&client.current){
+  if(page==='market-xmr')return <WebsiteXmrAnchorFunds address={address} client={client.current} node={node} balance={balance} syncNow={syncNow} coins={pageOptions?.coins} onReviewing={reviewing} onSent={()=>void sync({quiet:true})} onClose={toDetail}/>;
   if(page==='split')return <WebsiteXmrSplit address={address} client={client.current} node={node} balance={balance} syncNow={syncNow} onReviewing={reviewing} onSent={()=>void sync({quiet:true})} onClose={toDetail}/>;
   if(page==='send')return <WebsiteXmrSend client={client.current} address={address} node={node} balance={balance} syncNow={syncNow} onReviewing={reviewing} onSent={()=>void sync({quiet:true})} onClose={toDetail}/>;
   // 29 Oct 2026: Bridge offers wXMR (wxmr.io) and SOL (ChangeNOW).

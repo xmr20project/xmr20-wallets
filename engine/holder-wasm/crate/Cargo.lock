@@ -3957,6 +3957,7 @@ dependencies = [
  "ark-serialize",
  "ark-snark",
  "blake2b_simd 1.0.5",
+ "curve25519-dalek",
  "decaf377",
  "decaf377-ka",
  "decaf377-rdsa",
@@ -3972,6 +3973,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "sha3",
  "zeroize",
 ]
 
