@@ -3,14 +3,16 @@
 //   connect()       unlock this wallet's Monero phrase (one approval in the connected Solana wallet, as the site's Sync does;
 //                   an already unlocked token wallet is reused) and start the market host (market-website.js);
 //   call(message)   the bounded market.* v2 methods ({method,id,body}) → {value}|{error}; nothing here can approve;
-//   showApprovals() bring the wallet's dialog back (market-website-ui.js), where every approval is decided.
+//   showApprovals() bring the wallet's dialog back (market-website-ui.js), where every approval is decided;
+//   prepareXmr({coins}) open the wallet on its "Prepare XMR for listing" page (31 Oct 2026, owner: "1 click inside the wallet"):
+//                   a payment of its XMR to itself, built for review there; the user sends it in the wallet (nothing is sent here).
 // The account comes from the website wallet session (setAccount); a sign-out or another account closes the market.
 import {createWebsiteMarket} from './market-website.js';
 import {createMarketDialog} from './market-website-ui.js';
 import {moneroWalletVault} from './monero-wallet-vault.js';
 
 // config: see createWebsiteMarket. unlocked(account) → the phrase of an already unlocked token wallet for that account, or null.
-export function attachMarketWallet({config,unlocked=()=>null,openWalletPanel=()=>{},vault=moneroWalletVault(),target=globalThis}){
+export function attachMarketWallet({config,unlocked=()=>null,openWalletPanel=()=>{},openXmrPage=()=>{},vault=moneroWalletVault(),target=globalThis}){
  let account=null,market=null,dialog=null;const listeners=new Set();
  const status=()=>({signedIn:Boolean(account?.owner),address:account?.address||null,...(market?market.status():{phase:'closed',error:null})});
  const notify=()=>{const s=status();for(const l of listeners){try{l(s);}catch{}}};
@@ -36,7 +38,11 @@ export function attachMarketWallet({config,unlocked=()=>null,openWalletPanel=()=
   try{if(!market)throw Error('Connect your XMR20 wallet to the market first.');return {value:await market.handle(message)};}
   catch(e){return {error:String(e?.message||e).slice(0,300)};}
  }
- const api=Object.freeze({version:1,connect,call,status,showApprovals:()=>dialog?.show(),onChange:fn=>{listeners.add(fn);return()=>listeners.delete(fn);}});
+ function prepareXmr({coins=3}={}){
+  const a=account;if(!a?.owner||!a?.address){openWalletPanel();throw Error('Sign in to your XMR20 wallet first (Wallet, top right).');}
+  openWalletPanel();openXmrPage(a.address,'market-xmr',{coins:Math.max(2,Math.min(16,Number(coins)||3))});return true;
+ }
+ const api=Object.freeze({version:1,connect,call,status,prepareXmr,showApprovals:()=>dialog?.show(),onChange:fn=>{listeners.add(fn);return()=>listeners.delete(fn);}});
  Object.defineProperty(target,'xmr20MarketWallet',{value:api,configurable:true,writable:false});
  target.dispatchEvent?.(new Event('xmr20-market-wallet'));
  const leave=()=>stop();globalThis.addEventListener?.('pagehide',leave);

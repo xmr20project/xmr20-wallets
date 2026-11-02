@@ -15,7 +15,12 @@ export function createMarketWorker({engine,scanner,rpc,fetch:f=globalThis.fetch.
   const info=await json('get_info');const tip=info.height-1;
   const e=await json('get_fee_estimate',{grace_blocks:10});
   const d=await json('get_output_distribution',{amounts:[0],from_height:0,to_height:tip,cumulative:true,binary:false});
-  const row=d.distributions[0];const values=row.distribution.map(Number);while(values.length<tip+1)values.push(values[values.length-1]);values.length=tip+1;
+  // 31 Oct 2026 fix: the daemon lists RingCT counts from its own start_height (1,220,516 on mainnet), not from 0. Reading the list
+  // as if it began at 0 made every recent height the chain total, so all ring members came from the newest block and the node
+  // refused each market transaction ("spends at least one output which is too young"). Heights before start_height hold 0.
+  const row=d.distributions?.[0];if(!row||!Array.isArray(row.distribution)||!row.distribution.length)throw Error('Daemon returned no output distribution');
+  const start=Number(row.start_height)||0,got=row.distribution.map(Number),values=new Array(tip+1).fill(0);
+  for(let h=start;h<=tip;h++)values[h]=h-start<got.length?got[h-start]:values[h-1];
   const pool=await other('/get_transaction_pool',{});
   return {tip,feeRate:{perWeight:String(e.fee),mask:String(e.quantization_mask||1)},distribution:values,poolSpent:(pool.spent_key_images||[]).map(k=>String(k.id_hash).toLowerCase())};
  }

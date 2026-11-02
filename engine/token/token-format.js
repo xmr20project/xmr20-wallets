@@ -78,6 +78,10 @@ export function createPrivateFormat({endpoint=PRIVATE_FORMAT_ENDPOINT,node=PRIVA
  let backend=null,holder=null,journalAcc=null,error='',loading=false,statusLine='',refreshQueued=false,holderAccount=null,bridgeBack=null;
  // The last successful read (balances shown while the bridge restarts) and, while it is shown, when it was read.
  let lastGood=null,stale=null;
+ // 2 Nov 2026 (fast start): balances from the XMR20 indexers' ledger list, every record re-checked here, shown while this device
+ // still reads its own coins and checks the list against the chain; sending waits until that finishes.
+ let early=null;
+ function showEarly(a,status){if(account()?.id!==a.id||!backend||ready())return;holder=status;holderAccount=a.id;early={at:Date.now()};render();}
  const network=()=>backend?.network||'offline-fakechain';const isStagenet=()=>network()==='stagenet';const isMainnet=()=>network()==='mainnet';const isRealChain=()=>isStagenet()||isMainnet();const features=()=>backend?.features||{mine:true,fund:true,bridge:true,credit:false,faucet:false,view:true};const nodeWord=()=>isMainnet()?'Monero node':isStagenet()?'stagenet node':'test daemon';const opWord=()=>isMainnet()?'bridge operator':'test operator';const idxWord=()=>isMainnet()?'bridge indexer':'test indexer';const confirmLater=()=>isRealChain()?`Confirmed after ${backend.confirmations} ${isMainnet()?'Monero':'stagenet'} blocks (about ${isMainnet()?20:30} minutes); refresh later.`:'Advance the chain to confirm.';
  // Success card (27 Oct premium UI): short summary + explorer links; #progress keeps the detailed text.
  const explorerTx=t=>isMainnet()?'https://xmrchain.net/tx/'+t:isStagenet()?'https://stagenet.xmrchain.net/tx/'+t:null;const shortA=a=>a&&a.length>24?a.slice(0,12)+'…'+a.slice(-8):(a||'');const confirmWhen=()=>isRealChain()?`About ${isMainnet()?20:30} minutes`:'After the next blocks';
@@ -113,14 +117,14 @@ export function createPrivateFormat({endpoint=PRIVATE_FORMAT_ENDPOINT,node=PRIVA
  async function ensureWorker(a){
   for(const [id,w] of workers)if(id!==a.id){w.client.close();workers.delete(id);}
   if(workers.has(a.id))return workers.get(a.id);
-  const client=workerClient('private-holder.worker.js',{onProgress:p=>{setStatus(p.text||'');trackScan(p);}});
+  const client=workerClient('private-holder.worker.js',{onProgress:p=>{setStatus(p.text||'');trackScan(p);if(p?.phase==='pool-ready'&&p.status)showEarly(a,p.status);}});
   const w={client,tokenAddress:null,accountId:a.id};workers.set(a.id,w);
   try{const opened=await client.call('open',{seed:a.xmrSeed,owner:a.xmr,backend:endpoint,rpc:node||backend.rpcUrl,nativeStartHeight:Number(a.height)||0},240000,{idle:true});if(opened.addressCertificate)void postR('publishAddress',{certificate:opened.addressCertificate}).catch(()=>{});Object.assign(w,{tokenAddress:opened.tokenAddress,domain:opened.domain,shieldedAddress:opened.shieldedAddress,ownerKey:opened.ownerKey,nativeAddress:opened.nativeAddress,scheme:opened.scheme,engine:opened.engine,parameters:opened.parameters});return w;}
   catch(e){client.close();workers.delete(a.id);throw e;}}
  async function ensureRegistered(){if(backend?.registered)return;const a=account(),w=need();await register(a,w.tokenAddress,w);backend=await post('state',{id:accountId()});if(backend.tokenAddress&&backend.tokenAddress!==w.tokenAddress)throw Error('The bridge knows this account under a different token address.');}
  async function register(a,tokenAddress,w=null){if(isRealChain())return post('register',{id:accountId(),sol:a.sol,xmr:w?.nativeAddress||a.xmr,tokenAddress});const keys=await oneShot('private-claim.worker.js','public-keys',{seed:a.xmrSeed,owner:a.xmr});return post('register',{id:accountId(),sol:a.sol,xmr:a.xmr,A:keys.A,B:keys.B,tokenAddress});}
  const current=()=>{const a=account();return a&&workers.get(a.id)?.tokenAddress&&holderAccount===a.id?workers.get(a.id):null;};
- const need=()=>{const w=current();if(!w)throw Error('The token wallet is still opening. Wait for the balances to load and try again.');return w;};
+ const need=()=>{const w=current();if(!w)throw Error('The token wallet is still opening. Wait for the balances to load and try again.');if(early)throw Error('Still checking this wallet on this device. Sending opens when that finishes (a few minutes the first time).');return w;};
  async function refresh(){const a=account();if(!a)return;if(!a.xmrSeed||!a.sol){error='This account needs both a Monero recovery phrase and a Solana key for the token test.';backend=holder=null;render();return;}
   if(loading){refreshQueued=true;return;}loading=true;error='';if(holderAccount!==a.id){holder=null;journalAcc=null;holderAccount=null;render();}
   // 28 Oct 2026: render once the token wallet is open, so its addresses (receiveInfo) show before the first scan finishes.
@@ -130,8 +134,8 @@ export function createPrivateFormat({endpoint=PRIVATE_FORMAT_ENDPOINT,node=PRIVA
    if(!journal.unlocked)await journal.unlock(secret());
    const reserve=[...reservedNative(journal.account(await journal.read(),w.tokenAddress))];
    holder=await w.client.call('sync',{reserveKeyImages:reserve},600000,{idle:true});if(account()?.id!==a.id)return;
-   await reconcile(w,holder);journalAcc=journal.account(await journal.read(),w.tokenAddress);holderAccount=a.id;stale=null;lastGood={account:a.id,at:Date.now(),backend,holder,journalAcc};setStatus('');}
-  catch(e){if(account()?.id===a.id){if(e.code==='bridge-unavailable'&&lastGood&&lastGood.account===a.id){backend=lastGood.backend;holder=lastGood.holder;journalAcc=lastGood.journalAcc;holderAccount=a.id;stale={at:lastGood.at,message:e.message};}else{error=e.message;holder=null;}}}
+   await reconcile(w,holder);journalAcc=journal.account(await journal.read(),w.tokenAddress);holderAccount=a.id;stale=null;early=null;lastGood={account:a.id,at:Date.now(),backend,holder,journalAcc};setStatus('');}
+  catch(e){if(account()?.id===a.id){if(e.code==='bridge-unavailable'&&lastGood&&lastGood.account===a.id){backend=lastGood.backend;holder=lastGood.holder;journalAcc=lastGood.journalAcc;holderAccount=a.id;stale={at:lastGood.at,message:e.message};}else{error=e.message;holder=null;early=null;}}}
   finally{loading=false;if(account()?.id===a.id)render();if(refreshQueued){refreshQueued=false;void refresh();}}}
  // Journal reconciliation against the LOCAL replica (every record of every carrier): settled operations move to history;
  // signed carriers absent from the chain are re-sent AS-IS after a lookup; stale operations whose inputs were spent elsewhere
@@ -245,7 +249,8 @@ export function createPrivateFormat({endpoint=PRIVATE_FORMAT_ENDPOINT,node=PRIVA
   let html='';held().forEach(r=>{const i=assets().indexOf(r),pend=pendingOf(r),total=totalOf(r),value=usdOf(r.mint,total);
    html+=`<button class="asset pf-asset" id="asset-private-${i}">${coinHTML(r)}<span class="asset-info"><strong>${esc(r.name)}</strong><small>${esc(label(r))}</small></span><span class="asset-value" title="${esc(amount(total))} ${esc(r.symbol)}">${esc(compactTokenBalance(total))} ${esc(r.symbol)}<small class="asset-usd${value==null?' none':''}">${esc(value??'Price unavailable')}</small><small>${pend.length+incomingOf(r).length?(pend.length+incomingOf(r).length)+' pending':atomic(shOf(r))>0n?esc(compactTokenBalance(shOf(r)))+' private':'Open'}</small></span></button>`;});
   if(ready())assets().forEach((r,i)=>(r.legacy??[]).filter(l=>!l.claimed).forEach((l,j)=>{html+=`<button class="asset legacy-asset" id="asset-legacy-${i}-${j}"><span class="coin"><span class="coin-fallback">L</span></span><span class="asset-info"><strong>Legacy ${esc(r.symbol)} (not migrated)</strong><small>Previously bridged tokens · migrate to the new open format</small></span><span class="asset-value"><span title="${esc(amount(l.amount))} ${esc(r.symbol)}">${esc(compactTokenBalance(l.amount))} ${esc(r.symbol)}</span><small>Legacy</small></span></button>`;}));
-  return staleNote+html;}
+  const earlyNote=early&&ready()?`<div class="empty" role="status" style="padding:6px 12px;font-size:11px;line-height:1.35;color:#9aa0a8"><strong style="display:block;font-size:12px">From the XMR20 indexers</strong>Checking on this device${scanPct()!=null?' · '+scanPct()+'%':''}; sending opens when it finishes.</div>`:'';
+  return staleNote+earlyNote+html;}
  // Monero-side scan state for the wallet's Monero row (owner, 28 Oct: "it should say syncing on monero itself").
  function syncStatus(){return {syncing:Boolean(accountId()&&!error&&!ready()),pct:scanPct(),error:error||null,restarting:Boolean(stale)||error===RESTARTING,staleAt:stale?.at??null};}
  // Receive: this account's unified token address (known once the token wallet is open, before its first scan finishes).
@@ -418,15 +423,20 @@ ${historyHTML(r)}
    // Open: a plain Monero address. Its open owner key comes from the certificate its owner's wallet published, verified here
    // against the address's own spend key and this ledger (the bridge only stores it). Private: the receiver's separate private
    // address, which is never published. Token addresses (xmr20t1…) still work as before.
-   if(isMoneroAddress(entered,net)){if(!pub)throw Error('Private transfers go to the receiver’s private address (xmr20p1…), not their Monero address. Ask them for it, or send openly to their Monero address.');
-    setProgress('Looking up this Monero address’s XMR20 owner key…');const found=(await postR('lookupAddress',{monero:entered})).certificate;same(e);
-    if(!found)throw Error('This Monero address has not set up XMR20 tokens yet. Ask the receiver to open their XMR20 Wallet once, then try again.');
-    if(found.monero!==entered||!verifyCertificate(found,{network:net,domain:w.domain}))throw Error('The XMR20 owner key published for this Monero address is not signed by it for this token ledger. Nothing was sent.');to=found.ownerKey;setProgress('');}
+   // 2 Nov 2026 (sign to move): an address with no XMR20 wallet yet — or any subaddress — holds the tokens itself (engine
+   // addressOwner, once address moves are active); its owner moves them by signing with Feather, Cake Wallet or any Monero wallet.
+   const mainAddr=isMoneroAddress(entered,net),moneroLike=mainAddr||(entered.length===95&&(net==='stagenet'?/^7/:/^8/).test(entered));let heldAtAddress=false;
+   if(moneroLike){if(!pub)throw Error('Private transfers go to the receiver’s private address (xmr20p1…), not their Monero address. Ask them for it, or send openly to their Monero address.');
+    let found=null;if(mainAddr){setProgress('Looking up this Monero address’s XMR20 owner key…');found=(await postR('lookupAddress',{monero:entered})).certificate;same(e);}
+    if(found){if(found.monero!==entered||!verifyCertificate(found,{network:net,domain:w.domain}))throw Error('The XMR20 owner key published for this Monero address is not signed by it for this token ledger. Nothing was sent.');to=found.ownerKey;}
+    else{let held;try{held=await w.client.call('addressOwner',{address:entered},60000);}catch(err){if(/not active|Unknown action/.test(String(err?.message||err)))throw Error(mainAddr?'This Monero address has not set up XMR20 tokens yet. Ask the receiver to open their XMR20 Wallet once, then try again.':'Use the receiver’s main Monero address.');throw err;}
+     same(e);to=held.owner;heldAtAddress=true;}
+    setProgress('');}
    else if(!addrOk(entered))throw Error(pub?'Enter the recipient’s Monero address.':'Enter the recipient’s private address (xmr20p1…).');if(atomic(raw)<=0n)throw Error('Enter an amount.');
    if(!pub)to=enginePrivateAddress(to);
    if(pub){if(!to.startsWith('xmr20t1')&&!/^[0-9a-f]{64}$/.test(to))throw Error('An open transfer goes to the recipient’s Monero address; an xmr20p1… (or penumbra1…) address only receives private transfers.');if(atomic(raw)>atomic(pubOf(r)))throw Error('Insufficient open balance.'+(atomic(raw)<=atomic(pubOf(r))+atomic(shOf(r))?' Your private balance covers it: make it open first, or choose a private transfer.':''));}
    else if(atomic(raw)>atomic(shOf(r)))throw Error('Insufficient private balance.'+(atomic(raw)<=atomic(pubOf(r))?' Your open balance covers it: make it private first (1 transaction), then send privately (2 transactions) — 3 transactions and three fees in total.':''));
-   setProgress('Selecting inputs and reserving them in the encrypted journal…');const out=await operate(e,w,{kind:pub?'public':'private',inputKind:pub?'public':'shielded',asset:r.asset,symbol:r.symbol,amount:raw,to});same(e);success(pub?'Sent openly':'Sent privately',[['Amount',amount(raw)+' '+r.symbol],['To',shortA(entered)],['Network fee',xmr(out.total)+' XMR'],['Confirmed in',confirmWhen()]],out.carriers.map(c=>c.txid));
+   setProgress('Selecting inputs and reserving them in the encrypted journal…');const out=await operate(e,w,{kind:pub?'public':'private',inputKind:pub?'public':'shielded',asset:r.asset,symbol:r.symbol,amount:raw,to});same(e);success(pub?'Sent openly':'Sent privately',[['Amount',amount(raw)+' '+r.symbol],['To',shortA(entered)],...(heldAtAddress?[['Held at','this Monero address · its owner moves them by signing with any Monero wallet at xmr20.org/move']]:[]),['Network fee',xmr(out.total)+' XMR'],['Confirmed in',confirmWhen()]],out.carriers.map(c=>c.txid));
    setProgress(`${pub?'Open':'Private'} transfer published: ${out.transactions} transaction${out.transactions===1?'':'s'} (${out.carriers.map(c=>c.txid.slice(0,12)+'…').join(', ')}), fees ${xmr(out.total)} XMR paid from this wallet; change ${amount(out.change)} ${r.symbol}; proved locally in ${Math.round(out.provingMs/1000)} s.${out.recovered?' The node’s reply was lost but it already held a carrier: nothing was re-sent.':''} ${isRealChain()?`Confirmed after ${backend.confirmations} ${isMainnet()?'Monero':'stagenet'} blocks; refresh later.`:'Advance the chain to confirm.'}`);await refresh();}));}
  // "Enable private transfers": one Monero transaction to this account's own address leaves 3 coins. The host's Monero wallet
  // builds it behind its XMR20 coin guard (splitXmr.prepare, nothing relayed), shows the fee, and sends only that reviewed
