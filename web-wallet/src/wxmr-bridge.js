@@ -1,6 +1,6 @@
 // wXMR bridge (wxmr.io) client, 29 Oct 2026 (owner: "lets build the wxmr.io bridge thing" — wXMR <-> native XMR in the wallet).
 // The bridge is a public Solana program run by the wXMR team; its interface is published on-chain (Anchor IDL account
-// GJsDgfPM…, saved in operations/claude-wxmr-bridge-20261029/wxmr-bridge-idl.json). wxmr.io itself only calls this program:
+// GJsDgfPM…). wxmr.io itself only calls this program:
 //   XMR -> wXMR: once per Solana wallet `create_deposit_account`; their relayer then writes a reusable Monero deposit address into
 //     the deposit record; XMR sent there is minted as wXMR to the wallet after 10 Monero confirmations (fee in wXMR).
 //   wXMR -> XMR: `request_withdrawal(nonce, amount, xmr_address, exact_out)` moves the wXMR (amount, fee included) into a withdrawal

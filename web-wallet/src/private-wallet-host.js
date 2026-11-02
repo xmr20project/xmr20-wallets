@@ -1,6 +1,6 @@
 // Website host for the extension's Open/Private token module (wallet-extension/src/token-format.js), 28 Oct 2026, LOCAL ONLY.
-// The module, its workers, the holder engine (wasm) and the parameter manifest are the extension's own (see
-// operations/claude-website-private-wallet-20261028/build-private-assets.mjs), so both wallets behave the same. This file only
+// The module, its workers, the holder engine (wasm) and the parameter manifest are the extension's own (the website's
+// release build copies them), so both wallets behave the same. This file only
 // supplies what the extension's popup supplies: a dialog to draw in, the account, storage and Solana signing, which here is the
 // connected Phantom/Solflare wallet instead of a key held by the wallet. The extension's screens and token rows are drawn inside
 // shadow roots that carry the extension's own stylesheet, so they look the same and the site's styles cannot reach them.

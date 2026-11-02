@@ -12,11 +12,15 @@
 //! MONERO MARKET candidate copy (29 Oct 2026, research/monero-market-20261029): adds anchored Open notes
 //! (market.rs). XA1/XL1 records DO carry a native key image (the anchor): an explicit, flagged deviation
 //! from the rule above, pending owner review. Every existing record and plain note is unchanged.
+//! SIGN TO MOVE (2 Nov 2026, research/sign-to-move-20261101): XW1 address moves (address.rs) — Open notes held by a plain Monero
+//! address, moved by the address's Monero message signature and carried by a relay; off until `address::activation`.
 use anyhow::{ensure, Result};
 use penumbra_sdk_asset::{asset, Value};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+pub mod address;
+pub mod checkpoint;
 pub mod keys;
 pub mod ledger;
 pub mod manifest;
@@ -29,6 +33,8 @@ pub mod public;
 pub mod shield;
 pub mod transport;
 pub use payload::Payload;
+#[cfg(test)]
+mod address_tests;
 #[cfg(test)]
 mod market_tests;
 #[cfg(test)]

@@ -1,6 +1,6 @@
 {
   "name": "@xmr20/engine",
-  "version": "0.1.128",
+  "version": "0.1.134",
   "private": true,
   "type": "module",
   "description": "The shared XMR20 wallet engine: Open/Private tokens, the private bridge client, the holder engine and the Monero worker (experimental)",

@@ -20,7 +20,7 @@ use serde::Serialize;
 use serde_json::{json, Value as J};
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::{keys::owner_vk, ledger::Ledger, market, private2, public, shield, transport, PublicOutput};
+use crate::{address, keys::owner_vk, ledger::Ledger, market, private2, public, shield, transport, PublicOutput};
 
 pub struct Vks {
     pub spend: PreparedVerifyingKey<Bls12_377>,
@@ -98,6 +98,9 @@ pub struct Pool {
     /// First height at which XA1/XL1 apply (`market::activation`); None = never (fails closed: a reader that does not set it
     /// behaves like one without the market rules).
     pub market_from: Option<u64>,
+    /// SIGN TO MOVE: first height at which XW1 applies and the address network of its texts (`address::activation`); None =
+    /// never (fails closed exactly like a reader without the XW1 rules).
+    pub address_moves: Option<address::Activation>,
 }
 fn hx(b: &[u8]) -> String {
     hex::encode(b)
@@ -121,6 +124,7 @@ impl Pool {
             rejected: 0,
             pending_records: 0,
             market_from: None,
+            address_moves: None,
         }
     }
     pub fn domain(&self) -> [u8; 32] {
@@ -204,6 +208,107 @@ impl Pool {
         let out = market::AnchoredOutput { owner: s.buyer, amount: s.quantity, anchor: s.buyer_anchor };
         let ids = self.create_anchored(&rid, &asset, &[out], txid, height);
         Ok(json!({"asset":asset,"lot":hx(&s.lot),"quantity":s.quantity.to_string(),"seller":hx(&owner.to_bytes()),"buyer":hx(&s.buyer),"offer":hx(&s.offer),"terms":hx(&s.terms),"outputs":ids,"buyerAnchored":s.buyer_anchor().is_some()}))
+    }
+    // ---- SIGN TO MOVE
+    fn address_move(&mut self, b: &[u8], txid: &str, height: u64, domain: &[u8; 32], native: &[[u8; 32]], net: address::Net) -> Result<J> {
+        let m = address::Move::decode(b)?;
+        ensure!(u64::from(m.until) >= height, "Address move expired");
+        let asset = hx(&m.asset.to_bytes());
+        let (owner, total_in) = self.take_inputs(&m.inputs, &asset, native)?;
+        let signer = m.signer.owner();
+        ensure!(owner.to_bytes() == signer, "Inputs do not belong to the signing address");
+        ensure!(total_in == m.total_out()?, "Address move does not conserve value");
+        m.verify_sig(domain, net)?;
+        self.spend_inputs(&m.inputs);
+        let rid = public::record_id(b);
+        let mut outs: Vec<PublicOutput> = m.to.iter().map(|(r, n)| PublicOutput { owner: r.owner(), amount: *n }).collect();
+        outs.push(PublicOutput { owner: m.fee_owner, amount: m.fee });
+        outs.push(PublicOutput { owner: signer, amount: m.change });
+        let refs: Vec<&PublicOutput> = outs.iter().collect();
+        let ids = self.create_outputs(&rid, &asset, &refs, txid, height);
+        Ok(json!({"asset":asset,"inputs":m.inputs.len(),"outputs":ids,"owner":hx(&signer),"signer":m.signer.encode(net),"feeInXmr":m.flags & address::FLAG_FEE_IN_XMR != 0}))
+    }
+    // ---- SIGN TO MOVE helpers shared by the wallet engine and the bridge readers (JSON in, JSON out)
+    pub fn address_net(&self) -> Result<address::Net> {
+        Ok(self.address_moves.context("Address moves are not active on this network")?.net)
+    }
+    /// An unsigned XW1 for `signer` from its largest plain notes of `asset` (anchored notes never: XW1's carrier is the relay's).
+    #[allow(clippy::too_many_arguments)]
+    pub fn prepare_address_move(&self, signer: address::Address, asset: penumbra_sdk_asset::asset::Id, ticker: &str, to: Vec<(address::Recipient, u64)>, fee: Option<([u8; 32], u64)>, fee_in_xmr: bool, until: u32) -> Result<address::Move> {
+        let owner = hx(&signer.owner());
+        let asset_hex = hx(&asset.to_bytes());
+        let fee = fee.filter(|f| f.1 > 0);
+        let need = to.iter().try_fold(u128::from(fee.map_or(0, |f| f.1)), |s, (_, n)| s.checked_add(u128::from(*n))).context("Amount overflow")?;
+        let mut notes: Vec<(&[u8; 32], &PublicNote)> = self.notes.iter().filter(|(_, n)| n.owner == owner && n.asset == asset_hex && n.anchor.is_none()).collect();
+        notes.sort_by(|a, b| b.1.amount.cmp(&a.1.amount).then(a.0.cmp(b.0)));
+        let (mut pick, mut got) = (vec![], 0u128);
+        for (id, n) in notes {
+            if got >= need {
+                break;
+            }
+            pick.push(*id);
+            got += u128::from(n.amount);
+        }
+        ensure!(got >= need, "This address does not hold that much");
+        ensure!(pick.len() <= address::MAX_INPUTS, "That needs more than four notes at once; move a smaller amount first");
+        let (fee_owner, fee) = fee.unwrap_or(([0; 32], 0));
+        let m = address::Move { asset, until, inputs: pick, to, fee_owner, fee, change: u64::try_from(got - need)?, flags: if fee_in_xmr { address::FLAG_FEE_IN_XMR } else { 0 }, signer, ticker: ticker.to_string(), variant: 0, c: [0; 32], r: [0; 32] };
+        m.check()?;
+        Ok(m)
+    }
+    /// JSON operations: addressOwner, addressHoldings, addressMovePrepare, addressMoveFinalize (see address.rs).
+    /// `height` = the next block a carrier would land in (a finalized move is checked against a copy of the ledger there).
+    pub fn address_op(&self, q: &J, vks: &Vks, height: u64) -> Result<J> {
+        let net = self.address_net()?;
+        let s = |k: &str| q[k].as_str().with_context(|| format!("Missing {k}"));
+        let addr = |t: &str| address::Address::decode(t.trim(), net);
+        match s("op")? {
+            "addressOwner" => {
+                let a = addr(s("address")?)?;
+                Ok(json!({"owner":hx(&a.owner()),"kind":if a.sub {"sub"} else {"main"}}))
+            }
+            "addressHoldings" => {
+                let a = addr(s("address")?)?;
+                let owner = a.owner();
+                let notes: Vec<J> = self.notes_of_owner(&owner).into_iter().map(|(id, n)| json!({"id":id,"asset":n.asset,"amount":n.amount.to_string(),"height":n.height,"anchored":n.anchor.is_some()})).collect();
+                Ok(json!({"owner":hx(&owner),"balances":self.public_balances(&owner).into_iter().map(|(k, v)| (k, J::String(v.to_string()))).collect::<serde_json::Map<_, _>>(),"notes":notes}))
+            }
+            "addressMovePrepare" => {
+                let signer = addr(s("signer")?)?;
+                let asset = crate::asset_from_bytes(&hex::decode(s("asset")?)?)?;
+                let amount = |v: &J| -> Result<u64> { v.as_str().context("amount must be a string of atomic units")?.parse::<u64>().context("amount") };
+                let mut to = vec![];
+                for t in q["to"].as_array().context("Missing to")? {
+                    let n = amount(&t["amount"])?;
+                    let rec = if let Some(k) = t["key"].as_str() {
+                        address::Recipient::Key(hex::decode(k)?.try_into().map_err(|_| anyhow::anyhow!("key"))?)
+                    } else if t["cert"].is_object() {
+                        let h = |k: &str| -> Result<[u8; 32]> { hex::decode(t["cert"][k].as_str().with_context(|| format!("cert.{k}"))?)?.try_into().map_err(|_| anyhow::anyhow!("cert.{k}")) };
+                        let a = addr(t["address"].as_str().context("address")?)?;
+                        ensure!(address::verify_certificate(&a, &h("ownerKey")?, &h("c")?, &h("s")?, &self.domain(), net), "The recipient's XMR20 wallet certificate does not verify");
+                        address::Recipient::Certified { addr: a, owner: h("ownerKey")?, c: h("c")?, s: h("s")? }
+                    } else {
+                        address::Recipient::Address(addr(t["address"].as_str().context("address")?)?)
+                    };
+                    to.push((rec, n));
+                }
+                let fee = if q["fee"].is_object() { Some((hex::decode(q["fee"]["owner"].as_str().context("fee.owner")?)?.try_into().map_err(|_| anyhow::anyhow!("fee.owner"))?, amount(&q["fee"]["amount"])?)) } else { None };
+                let until = q["until"].as_u64().context("Missing until")?;
+                ensure!(until >= height, "Expiry below the next block");
+                let m = self.prepare_address_move(signer, asset, s("ticker")?, to, fee, q["feeInXmr"].as_bool().unwrap_or(false), u32::try_from(until)?)?;
+                Ok(json!({"body":hx(&m.body()),"text":m.text(&self.domain(), net),"code":hx(&m.code(&self.domain())),"inputs":m.inputs.len(),"change":m.change.to_string(),"until":m.until}))
+            }
+            "addressMoveFinalize" => {
+                let mut m = address::Move::decode_body(&hex::decode(s("body")?)?)?;
+                m.attach(s("signature")?, &self.domain(), net)?;
+                let wire = m.encode();
+                let mut probe = self.clone();
+                let r = probe.apply_carrier(Some(&wire), &hx(&[0u8; 32]), height, &[], vks);
+                ensure!(r["record"] == "accepted", "{}", r["error"].as_str().unwrap_or("The ledger would not accept this move"));
+                Ok(json!({"wire":hx(&wire),"bytes":wire.len(),"variant":m.variant,"signer":m.signer.encode(net),"text":m.text(&self.domain(), net),"result":r}))
+            }
+            other => anyhow::bail!("Unknown address op {other}"),
+        }
     }
     // ---- record admission
     fn transfer(&mut self, b: &[u8], txid: &str, height: u64, domain: &[u8; 32], native: &[[u8; 32]]) -> Result<J> {
@@ -379,11 +484,16 @@ impl Pool {
             m if m == shield::MAGIC_UNSHIELD => "unshield",
             m if m == market::MAGIC_ANCHORED => "anchored-transfer",
             m if m == market::MAGIC_SALE => "lot-sale",
+            m if m == address::MAGIC_MOVE => "address-move",
             m if m == private2::MAGIC_A => "private-part-a",
             _ => "private-part-b",
         };
         // Byte-for-byte the answer of a reader without the market rules (unknown magic), so old and new readers agree below H.
         if matches!(kind, "anchored-transfer" | "lot-sale") && !self.market_from.is_some_and(|h| height >= h) {
+            return json!({"record":"ignored"});
+        }
+        let moves = self.address_moves.filter(|a| height >= a.from);
+        if kind == "address-move" && moves.is_none() {
             return json!({"record":"ignored"});
         }
         let domain = self.ledger.domain;
@@ -396,6 +506,7 @@ impl Pool {
             "unshield" => candidate.unshield(b, txid, height, vks, &domain),
             "anchored-transfer" => candidate.anchored(b, txid, height, &domain, native),
             "lot-sale" => candidate.sale(b, txid, height, &domain, native),
+            "address-move" => candidate.address_move(b, txid, height, &domain, native, moves.unwrap().net),
             _ => candidate.part(b, txid, height, vks, &domain),
         }))
         .unwrap_or_else(|_| Err(anyhow::anyhow!("Malformed record")));

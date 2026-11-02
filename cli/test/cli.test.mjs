@@ -42,6 +42,7 @@ test('the private browser reaches only the allowed Monero and api.xmr20.org path
  assert.equal(moneroRequest('https://xmr-node.cakewallet.com:18081/stop_daemon','POST'),null);assert.equal(moneroRequest('https://example.com/get_info','GET'),null);
  assert.equal(moneroRequest('https://api.xmr20.org/api/wallet','POST'),null);
  assert.equal(forwardRequest('/api/private-bridge/action/state','POST').url,'https://api.xmr20.org/api/private-bridge/action/state');
+ assert.equal(forwardRequest('/api/private-bridge/action/ledgerTxs','POST').action,'ledgerTxs');assert.equal(forwardRequest('/api/private-bridge/action/checkpoints','POST').action,'checkpoints');
  assert.equal(forwardRequest('/api/private-bridge/action/state','GET'),null);assert.equal(forwardRequest('/api/private-bridge/action/mine','POST'),null);
  assert.equal(forwardRequest('/api/private-bridge/params/mainnet-v1/spend_pk.bin','GET').kind,'parameters');assert.equal(forwardRequest('/api/private-bridge/../x','GET'),null);
  assert.equal(forwardRequest('/api/private-node/json_rpc','POST').kind,'node');assert.equal(forwardRequest('/api/private-node/stop_daemon','POST'),null);
