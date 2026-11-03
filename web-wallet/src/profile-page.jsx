@@ -13,6 +13,7 @@ import {ACCENTS,NAME_MAX,BIO_MAX,loadProfile,saveProfile,defaultAccent,initials,
 import './wallet.css';
 import './wallet-premium.css';
 import './profile-page.css';
+import {useSignWallet,WALLET_NAMES} from './sign-wallet-store.js';
 const WalletLibrary=lazy(()=>import('./wallet-library.jsx'));
 const TokenHoldings=lazy(()=>import('./wallet-library.jsx').then(m=>({default:m.TokenHoldings})));
 
@@ -78,7 +79,7 @@ function HoldingRow({icon,name,sub,amount,value,stale}){
 const tokenIcon=(r,fallback,images)=>{const src=images?.get(r.mint)||r.image;return src?<img src={src} alt=""/>:<span className="xp-row-initial">{(r.ticker||fallback||'?').slice(0,1)}</span>;};
 
 export default function ProfilePage(){
- const w=useWallet(),owner=w.owner,moneroAddress=w.pair?.address||'';
+ const w=useWallet(),owner=w.owner,moneroAddress=w.pair?.address||'',sign=useSignWallet();
  const [profile,setProfile]=useState(()=>owner?loadProfile(owner):null),[editing,setEditing]=useState(false),[tab,setTab]=useState(()=>['portfolio','wallet','activity'].includes(location.hash.slice(1))?location.hash.slice(1):'portfolio');
  useEffect(()=>{setProfile(owner?loadProfile(owner):null);},[owner]);
  useEffect(()=>{history.replaceState(null,'','#'+tab);},[tab]);
@@ -115,6 +116,7 @@ export default function ProfilePage(){
  // React stopped the whole wallet app (blank profile, no header button).
  const [txTick,setTxTick]=useState(0);
  useEffect(()=>{if(!moneroAddress)return;let live=true;const load=()=>refreshXmrTxStatus(moneroAddress).then(()=>{if(live)setTxTick(t=>t+1);}).catch(()=>{});void load();const t=setInterval(()=>{if(!document.hidden&&openXmrTxs(moneroAddress).length)void load();},60000);return()=>{live=false;clearInterval(t);};},[moneroAddress]);
+ if(!owner&&sign)return <SignProfile sign={sign} w={w} images={images}/>;
  if(!owner)return <ConnectFirst w={w}/>;
  const name=profile?.name||short(owner);
  const activity=[...readActivity(owner,moneroAddress),...bridgeActivity,...pendingDeposits(owner,bridgeActivity)].sort((a,b)=>(b.at||0)-(a.at||0)).slice(0,60);void txTick;
@@ -161,6 +163,54 @@ export default function ProfilePage(){
    {activity.length?activity.map(a=><div className="xp-row" key={a.key}><span className={'xp-row-icon xp-act xp-act-'+a.kind}>{a.mark}</span><span className="xp-row-main"><strong>{a.title}</strong><small>{when(a.at)}{a.status?' · '+a.status:''}</small></span><span className="xp-row-amt"><strong>{a.amount}</strong>{a.link&&<a href={a.link} target="_blank" rel="noopener noreferrer">View ↗</a>}</span></div>)
     :<p className="xp-muted">Nothing yet. Bridge transfers, and sends, exchanges and wXMR requests made in this browser, show here.</p>}
   </section>}
+  {editing&&<EditProfile owner={owner} profile={profile} onSaved={p=>{setProfile(p);setEditing(false);}} onClose={()=>setEditing(false)}/>}
+ </section>;
+}
+// Feather / Cake Wallet profile (2 Nov 2026; owner: "connect then click on their profile, just like they can do it with phantom
+// wallet, so they can see holdings"): the watched Monero address (sign-wallet-store.js) with a local profile, what it holds on the
+// XMR20 ledger (the relay's addressHoldings, re-read every minute) and the wallet window's Move / market actions.
+function SignProfile({sign,w,images}){
+ const owner=sign.address,name0=WALLET_NAMES[sign.kind];
+ const [profile,setProfile]=useState(()=>loadProfile(owner)),[editing,setEditing]=useState(false);
+ useEffect(()=>{setProfile(loadProfile(owner));},[owner]);
+ const [holding,setHolding]=useState(null),[error,setError]=useState('');
+ useEffect(()=>{setHolding(null);setError('');let live=true;const load=async()=>{try{
+   const r=await fetch(BRIDGE_API.replace('/action/state','/action/addressHoldings'),{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({address:owner}),credentials:'omit',cache:'no-store',signal:AbortSignal.timeout(20000)});
+   const v=await r.json().catch(()=>({}));if(!live)return;if(!r.ok)throw Error(v.error||'The XMR20 service refused this request.');setHolding(v);setError('');}catch(e){if(live)setError(e.message);}};
+  void load();const t=setInterval(()=>{if(!document.hidden)void load();},60000);return()=>{live=false;clearInterval(t);};},[owner]);
+ const tokens=(holding?.tokens||[]).filter(t=>t.mint&&BigInt(t.amount)>0n);
+ const priceMints=tokens.map(t=>t.mint).sort().join(',');
+ const [launchPrices,setLaunchPrices]=useState({});
+ useEffect(()=>{if(!priceMints)return;let live=true;const load=()=>loadTokenPrices(priceMints.split(',')).then(p=>{if(live)setLaunchPrices(p);}).catch(()=>{});void load();const t=setInterval(load,60000);return()=>{live=false;clearInterval(t);};},[priceMints]);
+ const rows=tokens.map(t=>{const d=t.decimals??6,a=atomic(t.amount,d),p=launchPrices[t.mint];return {key:t.asset,icon:tokenIcon({mint:t.mint,ticker:t.symbol},null,images),name:'$'+(t.symbol||'XMR20'),sub:'Open · held by this address',amount:num(a,2)+' '+(t.symbol||''),usd:p?a*p:null};});
+ const total=rows.reduce((n,r)=>n+(r.usd||0),0),unknown=rows.some(r=>r.usd==null);
+ const name=profile?.name||short(owner);
+ const openWallet=()=>{w.setOpen(true);};
+ return <section className="xp-shell">
+  <div className="xp-hero">
+   <div className="xp-hero-card xp-identity">
+    <Avatar profile={profile} owner={owner}/>
+    <div className="xp-identity-text"><p className="xp-kicker">XMR20 / PROFILE · {name0.toUpperCase()}</p><h1>{name}<span className="xp-dot">.</span></h1>
+     <p className="xp-bio">{profile?.bio||(profile?'':'Create a profile to add a name and a short bio.')}</p>
+     <div className="xp-chips"><CopyChip label="Monero" value={owner}/></div>
+     <div className="xp-actions"><button type="button" className="xp-btn xp-primary" onClick={()=>setEditing(true)}><Pencil aria-hidden="true"/>{profile?'Edit profile':'Create profile'}</button><button type="button" className="xp-btn xp-ghost" onClick={openWallet}><Wallet aria-hidden="true"/>Open wallet</button></div>
+    </div>
+   </div>
+   <div className="xp-hero-card xp-worth">
+    <p className="xp-kicker">PORTFOLIO VALUE</p><strong className="xp-total">{usd(total)}</strong>
+    <dl className="xp-worth-rows"><div><dt><i className="xp-key-xmr"/>XMR20 on Monero</dt><dd>{usd(total)}</dd></div></dl>
+    <p className="xp-note">{unknown&&rows.length?'Some tokens have no price yet and are not counted. ':''}Estimates for display only. XMR itself stays in {name0}; this page reads only the XMR20 ledger.</p>
+   </div>
+  </div>
+  <div className="xp-grid">
+   <section className="xp-card" aria-label="Monero holdings"><div className="xp-card-head"><span><img src={sitePath('/brand/monero-user.png')} alt=""/>Monero · {name0}</span><strong>{usd(total)}</strong></div>
+    {rows.map(r=><HoldingRow key={r.key} icon={r.icon} name={r.name} sub={r.sub} amount={r.amount} value={usd(r.usd)}/>)}
+    {holding&&!rows.length&&<p className="xp-muted">No XMR20 at this address yet. Anyone can send XMR20 to it from an XMR20 wallet, or buy a lot on the Monero Market with it.</p>}
+    {!holding&&!error&&<p className="xp-muted">Reading the token ledger…</p>}
+    {error&&<p className="xp-error" role="alert">{error}</p>}
+    <div className="xp-actions"><button type="button" className="xp-btn xp-primary" disabled={!rows.length} onClick={()=>{openWallet();setTimeout(()=>dispatchEvent(new Event('xmr20-sign-move')),0);}}>Move tokens</button><a className="xp-btn xp-ghost" href={'/market/#'+sign.kind}>Sell or buy on the Monero Market</a></div>
+    <p className="xp-note">Moving, selling and buying each require one message signed in {name0} with this address. A signature proves control of the address; it does not spend from it or expose any key.</p></section>
+  </div>
   {editing&&<EditProfile owner={owner} profile={profile} onSaved={p=>{setProfile(p);setEditing(false);}} onClose={()=>setEditing(false)}/>}
  </section>;
 }

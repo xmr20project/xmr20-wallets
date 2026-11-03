@@ -72,6 +72,9 @@ export function createChainScanner(engine,{rpc,fetch:fetchOnce=globalThis.fetch,
   if(v1.length){const whole=new Map((await getTxs(v1,false)).map(x=>[x.tx_hash,x]));for(const x of t)if(whole.has(x.tx_hash)){x.as_hex=whole.get(x.tx_hash).as_hex;delete x.pruned_as_hex;delete x.prunable_hash;}}
   return t;}
  const txInput=tx=>({hex:tx.pruned_as_hex||tx.as_hex,...(tx.pruned_as_hex?{prunableHash:tx.prunable_hash}:{})});
+ // SIGN TO TRADE: payment transactions named by trade claims, as mined (a payment still in the pool or unknown is left out).
+ async function paymentTxs(ids){if(!ids.length)return [];return (await getTxs([...new Set(ids)])).filter(t=>!t.in_pool&&Number.isInteger(t.block_height)).map(t=>({txid:t.tx_hash,height:t.block_height,...txInput(t)}));}
+ async function paymentFacts(ids){const txs=await paymentTxs(ids);return txs.length?engine.call({op:'paymentFacts',txs}).payments:[];}
  // The listed transactions, fetched from the node; each must be in the listed block.
  async function fetchTxs(list){const out=new Map((await getTxs(list.map(x=>x.txid))).map(tx=>[tx.tx_hash,tx]));
   return list.map(x=>{const tx=out.get(x.txid);if(!tx||tx.in_pool||tx.block_height!==x.height)throw Error('A listed transaction is not in its listed block: '+x.txid.slice(0,12)+'…');
@@ -83,7 +86,9 @@ export function createChainScanner(engine,{rpc,fetch:fetchOnce=globalThis.fetch,
   const fresh=(L.txs||[]).filter(x=>x.height>=poolNext&&x.height<=L.tip);
   if(new Set(fresh.map(x=>x.txid)).size!==fresh.length||fresh.some((x,i)=>i&&x.height<fresh[i-1].height))throw Error('The indexer list repeats a transaction or is out of order');
   const entries=fresh.length?engine.call({op:'recordEntries',txs:await fetchTxs(fresh)}).log:[];
-  const before=poolNext>base?engine.call({op:'poolSnapshot'}).log:[],log=before.concat(entries);
+  const snap=poolNext>base?engine.call({op:'poolSnapshot'}):{log:[],payments:[]},before=snap.log,log=before.concat(entries);
+  // Trade claims settle with their payments: fetched here from the node like the records (each id re-checked by the engine).
+  const payments=(snap.payments||[]).concat(await paymentFacts(entries.filter(e=>e.payment).map(e=>e.payment)));
   // The newest daily anchor the list reaches that is in a block (one posted minutes ago may still wait in the pool; then the one
   // before it): the issuer's signed checkpoint must match the list up to it.
   let anchored=null;const C=await ledger.checkpoints().catch(()=>null);
@@ -93,7 +98,7 @@ export function createChainScanner(engine,{rpc,fetch:fetchOnce=globalThis.fetch,
    if(v.height!==a.height)throw Error('Checkpoint anchor is for another block');const upTo=log.filter(e=>e.height<=v.height);
    if(upTo.length!==v.records||await listHash(upTo)!==v.listHash||await headerHash(v.height)!==v.blockHash)throw Error('The indexer list differs from the signed checkpoint at block '+v.height);
    anchored=v.height;break;}
-  engine.call({op:'poolRestore',tip:L.tip,log});poolNext=L.tip+1;remember(L.tip,L.tipHash);
+  engine.call({op:'poolRestore',tip:L.tip,log,payments});poolNext=L.tip+1;remember(L.tip,L.tipHash);
   ledgerState={source:'indexer',upTo:L.tip,anchored,checkedFrom:nativeNext,checkedTo:nativeNext-1,records:log.length};
   onProgress({phase:'pool-ready',height:L.tip,records:log.length,anchored});}
  async function startNative(){if(nativeFirst>0)engine.call({op:'nativeStart',height:nativeFirst,rctOutputs:await rctThrough(nativeFirst-1)});nativeNext=nativeFirst;}
@@ -102,7 +107,7 @@ export function createChainScanner(engine,{rpc,fetch:fetchOnce=globalThis.fetch,
   engine.call({op:'reset'});known.clear();poolNext=base;nativeNext=nativeFirst;
   const pool=progress?.pool,nat=progress?.native;
   if(pool&&Array.isArray(pool.log)){const h=await agreed(pool.hashes,tip).catch(()=>null);
-   if(h!==null&&h>=base-1&&h<=pool.tip){try{engine.call({op:'poolRestore',tip:h,log:pool.log.filter(e=>e.height<=h)});poolNext=h+1;for(const [k,v] of pool.hashes)if(k<=h)remember(k,v);}catch{engine.call({op:'reset'});poolNext=base;}}}
+   if(h!==null&&h>=base-1&&h<=pool.tip){try{engine.call({op:'poolRestore',tip:h,log:pool.log.filter(e=>e.height<=h),payments:pool.payments||[]});poolNext=h+1;for(const [k,v] of pool.hashes)if(k<=h)remember(k,v);}catch{engine.call({op:'reset'});poolNext=base;}}}
   let nativeResumed=false;
   if(nat?.state&&nat.from<=nativeFirst){const top=nat.state.blocks-1,h=await agreed(nat.hashes,tip).catch(()=>null);
    if(h!==null&&h>=nativeFirst-1&&h<=top){try{engine.call({op:'nativeRestore',state:nat.state,...(h<top?{rollbackTo:h,rctOutputs:await rctThrough(h)}:{})});nativeNext=h+1;nativeResumed=true;for(const [k,v] of nat.hashes)if(k<=h)remember(k,v);}catch{nativeResumed=false;}}}
@@ -113,7 +118,8 @@ export function createChainScanner(engine,{rpc,fetch:fetchOnce=globalThis.fetch,
  }
  function progressNow(){
   const p=poolNext-1,n=nativeNext-1,hashes=top=>[...known].filter(([h])=>h<=top&&h>top-64).sort((a,b)=>a[0]-b[0]);
-  return {pool:p>=base&&known.has(p)?{tip:p,log:engine.call({op:'poolSnapshot'}).log,hashes:hashes(p)}:null,native:n>=nativeFirst&&known.has(n)?{from:nativeFirst,state:engine.call({op:'nativeSnapshot'}),hashes:hashes(n)}:null};
+  const snap=p>=base&&known.has(p)?engine.call({op:'poolSnapshot'}):null;
+  return {pool:snap?{tip:p,log:snap.log,payments:snap.payments||[],hashes:hashes(p)}:null,native:n>=nativeFirst&&known.has(n)?{from:nativeFirst,state:engine.call({op:'nativeSnapshot'}),hashes:hashes(n)}:null};
  }
  async function checkpoint(){const progress=progressNow();resumeFrom=progress;lastSave={at:Date.now(),height:Math.min(poolNext,nativeNext)-1};savedOnce=true;if(onCheckpoint)try{await onCheckpoint(progress);}catch{}}
  async function reset(){engine.call({op:'reset'});known.clear();poolNext=base;nativeNext=nativeFirst;ready=false;resumeFrom=null;applied=0;received=0;}
@@ -142,6 +148,8 @@ export function createChainScanner(engine,{rpc,fetch:fetchOnce=globalThis.fetch,
    if((known.has(height-1)&&b.block_header.prev_hash!==known.get(height-1))||(known.has(height)&&known.get(height)!==b.block_header.hash)){ready=false;throw Error('Chain changed during replay; retry');}
    const pool=height>=poolNext,native=height>=nativeNext;
    const r=engine.call({op:'applyBlock',height,block:b.blob,txs:got.txs,pool,native});applied+=r.records.length;received+=r.native?.received||0;
+   // SIGN TO TRADE: this block's claims settle now, with the payment transactions fetched from the node (missing = not on chain).
+   if(r.claims?.length)engine.call({op:'resolveClaims',height,txs:await paymentTxs(r.claims)});
    // A record in a block the pool took from the indexer list but that the list left out: start the pool over from the chain.
    if(r.unlisted?.length){ledgerOff=true;ready=false;resumeFrom={pool:null,native:native&&nativeNext-1>=nativeFirst?{from:nativeFirst,state:engine.call({op:'nativeSnapshot'}),hashes:[...known].filter(([k])=>k<=nativeNext-1)}:null};
     ledgerState={source:'chain',ledgerError:'The XMR20 indexers left out or reordered '+r.unlisted.length+' record(s) in block '+height};throw Error('The XMR20 indexers left out or reordered a record; reading the full token history from the chain instead. Retry.');}
