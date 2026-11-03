@@ -20,7 +20,7 @@ use serde::Serialize;
 use serde_json::{json, Value as J};
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::{address, keys::owner_vk, ledger::Ledger, market, private2, public, shield, transport, PublicOutput};
+use crate::{address, keys::owner_vk, ledger::Ledger, market, private2, public, shield, trade, transport, PublicOutput};
 
 pub struct Vks {
     pub spend: PreparedVerifyingKey<Bls12_377>,
@@ -78,6 +78,51 @@ pub struct Completed {
     pub txid_b: String,
     pub height: u64,
 }
+// ---- SIGN TO TRADE state (trade.rs)
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LotStatus {
+    Open,
+    Sold,
+    Cancelled,
+}
+#[derive(Clone, Debug)]
+pub struct Reservation {
+    pub buyer: address::Address,
+    pub height: u64,
+    pub pay_by: u64,
+    pub pay: u64,
+    pub record: [u8; 32],
+}
+#[derive(Clone, Debug)]
+pub struct Claimed {
+    pub buyer: address::Address,
+    pub payment: [u8; 32],
+    pub payment_height: u64,
+    pub height: u64,
+    pub txid: String,
+}
+#[derive(Clone, Debug)]
+pub struct Lot {
+    pub asset: String,
+    pub ticker: String,
+    pub amount: u64,
+    pub price: u64,
+    pub seller: address::Address,
+    pub until: u64,
+    pub height: u64,
+    pub txid: String,
+    pub note: [u8; 32],
+    pub status: LotStatus,
+    pub reservations: Vec<Reservation>,
+    pub claim: Option<Claimed>,
+}
+/// A claim waits for the end of its block, when the reader's host hands over the payment it fetched (resolve_claims).
+#[derive(Clone, Debug)]
+pub struct PendingClaim {
+    pub wire: Vec<u8>,
+    pub txid: String,
+    pub height: u64,
+}
 #[derive(Clone)]
 pub struct Pool {
     pub ledger: Ledger,
@@ -101,6 +146,11 @@ pub struct Pool {
     /// SIGN TO MOVE: first height at which XW1 applies and the address network of its texts (`address::activation`); None =
     /// never (fails closed exactly like a reader without the XW1 rules).
     pub address_moves: Option<address::Activation>,
+    /// SIGN TO TRADE: first height at which XT1 applies (`trade::activation`); None = never (ignored like an unknown magic).
+    pub trades: Option<address::Activation>,
+    pub lots: BTreeMap<[u8; 32], Lot>,
+    pub used_payments: BTreeSet<[u8; 32]>,
+    pub pending_claims: Vec<PendingClaim>,
 }
 fn hx(b: &[u8]) -> String {
     hex::encode(b)
@@ -125,6 +175,10 @@ impl Pool {
             pending_records: 0,
             market_from: None,
             address_moves: None,
+            trades: None,
+            lots: BTreeMap::new(),
+            used_payments: BTreeSet::new(),
+            pending_claims: vec![],
         }
     }
     pub fn domain(&self) -> [u8; 32] {
@@ -485,6 +539,12 @@ impl Pool {
             m if m == market::MAGIC_ANCHORED => "anchored-transfer",
             m if m == market::MAGIC_SALE => "lot-sale",
             m if m == address::MAGIC_MOVE => "address-move",
+            m if m == trade::MAGIC_TRADE => match b.get(4) {
+                Some(&trade::OP_LIST) => "trade-list",
+                Some(&trade::OP_CANCEL) => "trade-cancel",
+                Some(&trade::OP_RESERVE) => "trade-reserve",
+                _ => "trade-claim",
+            },
             m if m == private2::MAGIC_A => "private-part-a",
             _ => "private-part-b",
         };
@@ -494,6 +554,10 @@ impl Pool {
         }
         let moves = self.address_moves.filter(|a| height >= a.from);
         if kind == "address-move" && moves.is_none() {
+            return json!({"record":"ignored"});
+        }
+        let trades = self.trades.filter(|a| height >= a.from);
+        if kind.starts_with("trade-") && trades.is_none() {
             return json!({"record":"ignored"});
         }
         let domain = self.ledger.domain;
@@ -507,12 +571,13 @@ impl Pool {
             "anchored-transfer" => candidate.anchored(b, txid, height, &domain, native),
             "lot-sale" => candidate.sale(b, txid, height, &domain, native),
             "address-move" => candidate.address_move(b, txid, height, &domain, native, moves.unwrap().net),
+            k if k.starts_with("trade-") => candidate.trade(b, txid, height, &domain, native, trades.unwrap().net),
             _ => candidate.part(b, txid, height, vks, &domain),
         }))
         .unwrap_or_else(|_| Err(anyhow::anyhow!("Malformed record")));
         match outcome {
             Ok(detail) => {
-                let pending = kind.starts_with("private-part") && detail["completed"] == false;
+                let pending = kind.starts_with("private-part") && detail["completed"] == false || kind == "trade-claim";
                 if !pending {
                     candidate.accepted += 1;
                 }
@@ -611,5 +676,249 @@ impl Pool {
             "credits": self.credits.iter().map(|(k,v)| json!({"binding":hx(k),"kind":v.kind,"asset":v.asset,"amount":v.amount.to_string(),"owner":v.owner,"txid":v.txid,"height":v.height})).collect::<Vec<_>>(),
             "redemptions": self.redemptions.values().map(|v| json!({"txid":v.txid,"asset":v.asset,"amount":v.amount.to_string(),"binding":v.binding,"owner":v.owner,"height":v.height})).collect::<Vec<_>>(),
         })
+    }
+}
+
+// ---------------------------------------------------------------- SIGN TO TRADE (trade.rs)
+impl Pool {
+    pub fn trade_net(&self) -> Result<address::Net> {
+        Ok(self.trades.context("Trading by signature is not active on this network")?.net)
+    }
+    fn terms(l: &Lot) -> trade::Terms {
+        trade::Terms { amount: l.amount, price: l.price, ticker: l.ticker.clone(), seller: l.seller }
+    }
+    fn trade(&mut self, b: &[u8], txid: &str, height: u64, domain: &[u8; 32], native: &[[u8; 32]], net: address::Net) -> Result<J> {
+        let t = trade::Trade::decode(b)?;
+        let rid = public::record_id(b);
+        match &t.body {
+            trade::Body::List { asset, until, inputs, amount, price, ticker, seller } => {
+                ensure!(trade::usable(seller), "This address cannot sign");
+                ensure!(u64::from(*until) >= height, "This listing expired");
+                let asset_hex = hx(&asset.to_bytes());
+                let (owner, total_in) = self.take_inputs(inputs, &asset_hex, native)?;
+                ensure!(owner.to_bytes() == seller.owner(), "Inputs do not belong to the signing address");
+                ensure!(total_in >= u128::from(*amount), "The listed notes hold less than the listed amount");
+                t.verify_sig(domain, net, None)?;
+                self.spend_inputs(inputs);
+                let change = u64::try_from(total_in - u128::from(*amount))?;
+                let outs = [PublicOutput { owner: trade::lot_owner(&rid), amount: *amount }, PublicOutput { owner: seller.owner(), amount: change }];
+                let refs: Vec<&PublicOutput> = outs.iter().collect();
+                let ids = self.create_outputs(&rid, &asset_hex, &refs, txid, height);
+                let note = public::note_id(&rid, 0);
+                self.lots.insert(rid, Lot { asset: asset_hex.clone(), ticker: ticker.clone(), amount: *amount, price: *price, seller: *seller, until: u64::from(*until), height, txid: txid.to_string(), note, status: LotStatus::Open, reservations: vec![], claim: None });
+                Ok(json!({"lot":hx(&rid),"asset":asset_hex,"amount":amount.to_string(),"price":price.to_string(),"seller":seller.encode(net),"outputs":ids}))
+            }
+            trade::Body::Cancel { lot, seller } => {
+                let l = self.lots.get(lot).context("There is no such lot")?.clone();
+                ensure!(l.status == LotStatus::Open, if l.status == LotStatus::Sold { "This lot is already sold" } else { "This lot was cancelled" });
+                ensure!(*seller == l.seller, "Only the seller can cancel this lot");
+                if let Some(r) = l.reservations.last() {
+                    ensure!(height > r.pay_by, "This lot is reserved until block {}; it can be cancelled after that", r.pay_by);
+                }
+                t.verify_sig(domain, net, None)?;
+                self.spend_inputs(&[l.note]);
+                let back = PublicOutput { owner: l.seller.owner(), amount: l.amount };
+                let ids = self.create_outputs(&rid, &l.asset, &[&back], txid, height);
+                self.lots.get_mut(lot).unwrap().status = LotStatus::Cancelled;
+                Ok(json!({"lot":hx(lot),"cancelled":true,"outputs":ids}))
+            }
+            trade::Body::Reserve { lot, pay_by, buyer } => {
+                let l = self.lots.get(lot).context("There is no such lot")?.clone();
+                ensure!(l.status == LotStatus::Open, if l.status == LotStatus::Sold { "This lot is already sold" } else { "This lot was cancelled" });
+                ensure!(height <= l.until, "This listing has expired");
+                ensure!(trade::usable(buyer), "This address cannot sign");
+                ensure!(buyer.owner() != l.seller.owner(), "The seller cannot reserve their own lot");
+                if let Some(r) = l.reservations.last() {
+                    ensure!(height > r.pay_by, "This lot is reserved by someone else until block {}", r.pay_by);
+                }
+                let pb = u64::from(*pay_by);
+                ensure!(pb > height, "This reservation ran out before it was posted; reserve again");
+                ensure!(pb <= height + trade::MAX_RESERVE, "A reservation lasts at most {} blocks", trade::MAX_RESERVE);
+                ensure!(pb <= l.until, "The reservation would outlast the listing");
+                t.verify_sig(domain, net, Some(&Self::terms(&l)))?;
+                let pay = t.body.pay_amount(l.price, domain)?;
+                self.lots.get_mut(lot).unwrap().reservations.push(Reservation { buyer: *buyer, height, pay_by: pb, pay, record: rid });
+                Ok(json!({"lot":hx(lot),"buyer":buyer.encode(net),"payBy":pb,"pay":pay.to_string()}))
+            }
+            trade::Body::Claim { lot, txid: payment, .. } => {
+                let l = self.lots.get(lot).context("There is no such lot")?;
+                ensure!(l.status == LotStatus::Open, if l.status == LotStatus::Sold { "This lot is already sold" } else { "This lot was cancelled" });
+                ensure!(!l.reservations.is_empty(), "Nobody reserved this lot");
+                ensure!(!self.used_payments.contains(payment), "This payment already bought a lot");
+                self.pending_claims.push(PendingClaim { wire: b.to_vec(), txid: txid.to_string(), height });
+                Ok(json!({"lot":hx(lot),"payment":hx(payment),"settles":"at the end of this block"}))
+            }
+        }
+    }
+    /// The payment transactions this block's pending claims need (the host fetches them from its node).
+    pub fn claim_payments(&self) -> Vec<[u8; 32]> {
+        self.pending_claims.iter().filter_map(|c| match trade::Trade::decode(&c.wire).ok()?.body { trade::Body::Claim { txid, .. } => Some(txid), _ => None }).collect()
+    }
+    /// End of a block: settle its claims, in order, with the payments the host fetched and id-checked (missing = not on its
+    /// chain). Returns one result per claim: {txid, record: accepted|rejected, ...}.
+    pub fn resolve_claims(&mut self, height: u64, payments: &BTreeMap<[u8; 32], trade::PaymentFacts>) -> Vec<J> {
+        let pending = std::mem::take(&mut self.pending_claims);
+        let mut out = vec![];
+        for c in pending {
+            let r = self.settle(&c, height, payments);
+            match r {
+                Ok(detail) => {
+                    self.accepted += 1;
+                    out.push(json!({"txid":c.txid,"record":"accepted","kind":"trade-claim","detail":detail}));
+                }
+                Err(e) => {
+                    self.rejected += 1;
+                    out.push(json!({"txid":c.txid,"record":"rejected","kind":"trade-claim","error":e.to_string()}));
+                }
+            }
+        }
+        out
+    }
+    fn settle(&mut self, c: &PendingClaim, height: u64, payments: &BTreeMap<[u8; 32], trade::PaymentFacts>) -> Result<J> {
+        ensure!(c.height == height, "Claim from another block");
+        let trade::Body::Claim { lot, txid: payment, keys } = trade::Trade::decode(&c.wire)?.body else { anyhow::bail!("Not a claim") };
+        let l = self.lots.get(&lot).context("There is no such lot")?.clone();
+        ensure!(l.status == LotStatus::Open, if l.status == LotStatus::Sold { "This lot is already sold" } else { "This lot was cancelled" });
+        let r = l.reservations.last().context("Nobody reserved this lot")?.clone();
+        ensure!(!self.used_payments.contains(&payment), "This payment already bought a lot");
+        let f = payments.get(&payment).context("The payment transaction is not on this chain")?;
+        ensure!(f.txid == payment, "Payment facts for another transaction");
+        ensure!(f.height <= height, "The payment is in a later block than the claim");
+        let paid = trade::paid_to(&l.seller, &keys, &f.outputs)?;
+        ensure!(paid == r.pay, "{}", if paid == 0 { "This transaction key does not show a payment to the seller's address".to_string() } else { format!("The payment is {} piconero; this reservation needs exactly {}", paid, r.pay) });
+        self.spend_inputs(&[l.note]);
+        let rid = public::record_id(&c.wire);
+        let out = PublicOutput { owner: r.buyer.owner(), amount: l.amount };
+        let ids = self.create_outputs(&rid, &l.asset, &[&out], &c.txid, height);
+        self.used_payments.insert(payment);
+        let net = self.trade_net()?;
+        let m = self.lots.get_mut(&lot).unwrap();
+        m.status = LotStatus::Sold;
+        m.claim = Some(Claimed { buyer: r.buyer, payment, payment_height: f.height, height, txid: c.txid.clone() });
+        Ok(json!({"lot":hx(&lot),"buyer":r.buyer.encode(net),"payment":hx(&payment),"paid":paid.to_string(),"outputs":ids}))
+    }
+    pub fn lot_view(&self, id: &[u8; 32], l: &Lot, height: u64) -> Result<J> {
+        let net = self.trade_net()?;
+        let r = l.reservations.last();
+        Ok(json!({
+            "id":hx(id),"asset":l.asset,"ticker":l.ticker,"amount":l.amount.to_string(),"price":l.price.to_string(),"seller":l.seller.encode(net),
+            "until":l.until,"height":l.height,"txid":l.txid,"status":match l.status { LotStatus::Open => "open", LotStatus::Sold => "sold", LotStatus::Cancelled => "cancelled" },
+            "reservation":r.map(|r| json!({"buyer":r.buyer.encode(net),"height":r.height,"payBy":r.pay_by,"pay":r.pay.to_string(),"running":height <= r.pay_by})),
+            "claim":l.claim.as_ref().map(|c| json!({"buyer":c.buyer.encode(net),"payment":hx(&c.payment),"paymentHeight":c.payment_height,"height":c.height,"txid":c.txid})),
+        }))
+    }
+    /// JSON operations for the relay, the indexer API and the wallets. `height` = the next block a carrier would land in.
+    ///   tradeLots {status?} · tradeLot {lot} · tradeHoldings {address} · tradeListPrepare {seller,asset,ticker,amount,price,until}
+    ///   tradeCancelPrepare {seller,lot} · tradeReservePrepare {buyer,lot,payBy} · tradeFinalize {body,signature} (checked against
+    ///   a copy of the ledger at `height`) · tradeClaimRecord {lot,txid,keys} · tradeClaimCheck {wire,payment} (a copy settles it)
+    pub fn trade_op(&self, q: &J, vks: &Vks, height: u64) -> Result<J> {
+        let net = self.trade_net()?;
+        let s = |k: &str| q[k].as_str().with_context(|| format!("Missing {k}"));
+        let addr = |t: &str| address::Address::decode(t.trim(), net);
+        let h32 = |t: &str| -> Result<[u8; 32]> { hex::decode(t)?.try_into().map_err(|_| anyhow::anyhow!("Expected 32 bytes of hex")) };
+        let u = |k: &str| -> Result<u64> { s(k)?.parse::<u64>().with_context(|| format!("{k}: atomic units")) };
+        let domain = self.domain();
+        match s("op")? {
+            "tradeLots" => {
+                let want = q["status"].as_str();
+                let mut rows = vec![];
+                for (id, l) in &self.lots {
+                    let v = self.lot_view(id, l, height)?;
+                    if want.is_none_or(|w| v["status"] == w) {
+                        rows.push(v);
+                    }
+                }
+                rows.sort_by(|a, b| b["height"].as_u64().cmp(&a["height"].as_u64()));
+                Ok(json!({"lots":rows,"height":height}))
+            }
+            "tradeLot" => {
+                let id = h32(s("lot")?)?;
+                let l = self.lots.get(&id).context("There is no such lot")?;
+                self.lot_view(&id, l, height)
+            }
+            "tradeHoldings" => {
+                let a = addr(s("address")?)?;
+                let owner = a.owner();
+                let mut sells = vec![];
+                let mut buys = vec![];
+                for (id, l) in &self.lots {
+                    if l.seller == a {
+                        sells.push(self.lot_view(id, l, height)?);
+                    } else if l.reservations.iter().any(|r| r.buyer == a) {
+                        buys.push(self.lot_view(id, l, height)?);
+                    }
+                }
+                Ok(json!({"address":a.encode(net),"owner":hx(&owner),"balances":self.public_balances(&owner).into_iter().map(|(k, v)| (k, J::String(v.to_string()))).collect::<serde_json::Map<_, _>>(),"selling":sells,"buying":buys}))
+            }
+            "tradeListPrepare" => {
+                let seller = addr(s("seller")?)?;
+                let asset = crate::asset_from_bytes(&hex::decode(s("asset")?)?)?;
+                let (amount, price) = (u("amount")?, u("price")?);
+                let until = q["until"].as_u64().context("Missing until")?;
+                ensure!(until >= height, "Expiry below the next block");
+                let owner = hx(&seller.owner());
+                let asset_hex = hx(&asset.to_bytes());
+                let mut notes: Vec<(&[u8; 32], &PublicNote)> = self.notes.iter().filter(|(_, n)| n.owner == owner && n.asset == asset_hex && n.anchor.is_none()).collect();
+                notes.sort_by(|a, b| b.1.amount.cmp(&a.1.amount).then(a.0.cmp(b.0)));
+                let (mut pick, mut got) = (vec![], 0u128);
+                for (id, n) in notes {
+                    if got >= u128::from(amount) {
+                        break;
+                    }
+                    pick.push(*id);
+                    got += u128::from(n.amount);
+                }
+                ensure!(got >= u128::from(amount), "This address does not hold that much");
+                ensure!(pick.len() <= trade::MAX_INPUTS, "That needs more than four notes at once; list a smaller amount first");
+                let body = trade::Body::List { asset, until: u32::try_from(until)?, inputs: pick, amount, price, ticker: s("ticker")?.to_string(), seller };
+                body.check()?;
+                Ok(json!({"body":hx(&body.bytes()),"text":body.text(&domain, net, None)?,"code":hx(&body.code(&domain)),"until":until}))
+            }
+            "tradeCancelPrepare" => {
+                let body = trade::Body::Cancel { lot: h32(s("lot")?)?, seller: addr(s("seller")?)? };
+                Ok(json!({"body":hx(&body.bytes()),"text":body.text(&domain, net, None)?}))
+            }
+            "tradeReservePrepare" => {
+                let lot = h32(s("lot")?)?;
+                let l = self.lots.get(&lot).context("There is no such lot")?;
+                let pay_by = q["payBy"].as_u64().context("Missing payBy")?;
+                let body = trade::Body::Reserve { lot, pay_by: u32::try_from(pay_by)?, buyer: addr(s("buyer")?)? };
+                Ok(json!({"body":hx(&body.bytes()),"text":body.text(&domain, net, Some(&Self::terms(l)))?,"pay":body.pay_amount(l.price, &domain)?.to_string(),"payBy":pay_by,"payTo":l.seller.encode(net)}))
+            }
+            "tradeFinalize" => {
+                let body = trade::Trade::decode_body(&hex::decode(s("body")?)?)?;
+                let terms = body.lot().and_then(|id| self.lots.get(&id)).map(Self::terms);
+                let t = trade::Trade::attach(body, s("signature")?, &domain, net, terms.as_ref())?;
+                let wire = t.encode();
+                let mut copy = self.clone();
+                let r = copy.apply_carrier(Some(&wire), "0".repeat(64).as_str(), height, &[], vks);
+                ensure!(r["record"] == "accepted", "{}", r["error"].as_str().unwrap_or("Refused by the ledger"));
+                Ok(json!({"wire":hx(&wire),"bytes":wire.len(),"signer":t.body.signer().map(|a| a.encode(net)),"op":t.body.op(),"detail":r["detail"]}))
+            }
+            "tradeClaimRecord" => {
+                let keys = q["keys"].as_array().context("Missing keys")?.iter().map(|k| h32(k.as_str().context("key")?)).collect::<Result<Vec<_>>>()?;
+                let body = trade::Body::Claim { lot: h32(s("lot")?)?, txid: h32(s("txid")?)?, keys };
+                body.check()?;
+                Ok(json!({"wire":hx(&body.bytes())}))
+            }
+            "tradeClaimCheck" => {
+                let wire = hex::decode(s("wire")?)?;
+                let p = &q["payment"];
+                let outputs = p["outputs"].as_array().context("Missing payment outputs")?.iter().map(|o| -> Result<trade::PaymentOutput> {
+                    Ok(trade::PaymentOutput { key: h32(o["key"].as_str().context("key")?)?, ecdh: hex::decode(o["ecdh"].as_str().context("ecdh")?)?.try_into().map_err(|_| anyhow::anyhow!("ecdh"))?, commitment: h32(o["commitment"].as_str().context("commitment")?)? })
+                }).collect::<Result<Vec<_>>>()?;
+                let f = trade::PaymentFacts { txid: h32(p["txid"].as_str().context("payment.txid")?)?, height: p["height"].as_u64().context("payment.height")?, outputs };
+                let mut copy = self.clone();
+                let r = copy.apply_carrier(Some(&wire), "0".repeat(64).as_str(), height, &[], vks);
+                ensure!(r["record"] == "pending", "{}", r["error"].as_str().unwrap_or("Refused by the ledger"));
+                let mut payments = BTreeMap::new();
+                payments.insert(f.txid, f);
+                let out = copy.resolve_claims(height, &payments);
+                let first = out.into_iter().next().context("No claim")?;
+                ensure!(first["record"] == "accepted", "{}", first["error"].as_str().unwrap_or("Refused by the ledger"));
+                Ok(first["detail"].clone())
+            }
+            other => anyhow::bail!("Unknown trade op {other}"),
+        }
     }
 }
