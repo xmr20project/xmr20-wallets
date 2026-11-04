@@ -66,6 +66,23 @@ background runner); the live page offers the site's own wallet.
 
 The settlement is experimental and has not had an independent security review. Trade small amounts.
 
+## What's new (3 November 2026)
+
+- **Sign to trade: Feather and Cake Wallet on the Monero Market.** Anyone holding XMR20 at a plain Monero address can
+  sell and buy lots without connecting a wallet. The seller signs a listing message in their own wallet and pays a
+  0.0001 XMR listing fee. A buyer reserves the lot by signing a message (held for up to 30 blocks), pays the seller the
+  exact amount shown from their own wallet, then gives that payment's transaction ID and transaction key. Every XMR20
+  wallet and the bridge fetch the payment and check it with that key (`check_tx_key` plus the amount commitment) before
+  the lot moves; the amount includes a small tail tied to the reservation, so a payment can claim only that reservation.
+  Records `XT1` (list, cancel, reserve, claim) in `engine/holder-wasm/core/src/trade.rs`, applied from Monero block
+  3,797,400. The engine's version string stays `0.0.7-address-moves` so saved scan progress resumes; the token worker
+  now fetches each claimed payment from the Monero node (`engine/token/holder-engine.js`).
+- **Website wallet: Feather / Cake Wallet in "Connect wallet".** Enter the address that holds your XMR20 to see its
+  holdings (no signature), move tokens from it by signing a message in your wallet (the page checks the signature
+  before sending, then you pay the 0.0001 XMR network fee by QR code), and open a profile for that address
+  (`web-wallet/src/sign-wallet.jsx`, `sign-wallet-store.js`, `sign-message.js`, `qrcode.mjs`).
+- **Chrome extension 0.1.135**, **website wallet release 63** (xmr20.org) and **CLI 0.5.1** all carry the above.
+
 ## What's new (2 November 2026)
 
 - **Fast start.** A wallet no longer reads every Monero block to find your XMR20 balance. It downloads the list of
@@ -78,7 +95,7 @@ The settlement is experimental and has not had an independent security review. T
   data); the few old version-1 transactions still mined are downloaded whole.
 - **Sign to move: XMR20 at Feather and Cake Wallet addresses.** Open XMR20 can be sent to any Monero address, including
   one that never opened an XMR20 wallet. Its owner moves it later at [xmr20.org/move](https://xmr20.org/move/) by signing a
-  short text in their own wallet (Feather, Cake Wallet, any wallet2-based wallet) and paying a 0.0001 XMR network fee from
+  message in their own wallet (Feather, Cake Wallet, any wallet2-based wallet) and paying a 0.0001 XMR network fee from
   it. Tokens sent back to an XMR20 wallet's address land in its Open balance. Engine `xmr20-holder-wasm 0.0.7-address-moves`,
   from Monero block 3,797,288.
 - **Market fixes.** A spare anchor that will never confirm gives its coin back instead of blocking new lots, and the
@@ -109,9 +126,9 @@ The settlement is experimental and has not had an independent security review. T
 The [Releases page](https://github.com/xmr20project/xmr20-wallets/releases) has files you can use without building
 anything:
 
-- **`XMR20-Wallet-0.1.134.zip`**: the Chrome extension, exactly the build that was tested. Unzip it and load it in
+- **`XMR20-Wallet-0.1.135.zip`**: the Chrome extension, exactly the build that was tested. Unzip it and load it in
   `chrome://extensions` ([steps](extension/README.md#install-from-a-tester-zip)).
-- **`xmr20-cli-0.5.0.zip`**: the terminal wallet with its engine already built. You need Node.js 22, then
+- **`xmr20-cli-0.5.1.zip`**: the terminal wallet with its engine already built. You need Node.js 22, then
   `npm install`, `npm run setup` and `./xmr20` ([steps](cli/README.md#ready-made-download)).
 - **`SHA256SUMS.txt`**: each file's fingerprint, so you can check that your download is complete and unchanged.
 
@@ -185,7 +202,7 @@ instead of `./xmr20`. All commands are explained in [`cli/README.md`](cli/README
 
 - `npm run build:engine` puts the engine's browser files in `engine/dist/`. The extension, the website wallet and the CLI
   each copy them from there. The build checks that these files are byte-for-byte the same as in the installed wallet
-  0.1.134 (one known exception: a 2-character esbuild flag in the token worker, explained in `engine/build.mjs`).
+  0.1.135 (one known exception: a 2-character esbuild flag in the token worker, explained in `engine/build.mjs`).
 - The XMR20 token engine runs in the browser: the extension popup, the xmr20.org page, or the CLI's private headless
   Chromium. Your keys never leave your computer. Scanning, proving and signing happen locally.
 

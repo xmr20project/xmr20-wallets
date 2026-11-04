@@ -31,10 +31,13 @@ pub mod pool;
 pub mod private2;
 pub mod public;
 pub mod shield;
+pub mod trade;
 pub mod transport;
 pub use payload::Payload;
 #[cfg(test)]
 mod address_tests;
+#[cfg(test)]
+mod trade_tests;
 #[cfg(test)]
 mod market_tests;
 #[cfg(test)]

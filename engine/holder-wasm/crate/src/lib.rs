@@ -60,6 +60,8 @@ fn fresh_pool(domain: [u8; 32], manifest: &Manifest) -> pool::Pool {
     p.market_from = core::market::activation(&manifest.network.kind);
     // SIGN TO MOVE (2 Nov 2026): XW1 address moves from their activation height (core `address::activation`).
     p.address_moves = core::address::activation(&manifest.network.kind);
+    // SIGN TO TRADE (2 Nov 2026): XT1 from its activation height (core `trade::activation`).
+    p.trades = core::trade::activation(&manifest.network.kind);
     p
 }
 pub struct Params {
@@ -113,6 +115,19 @@ pub struct Engine {
     output_pk: Option<ProvingKey<Bls12_377>>,
     native: Option<native::NativeWallet>,
     market: market_ops::MarketState,
+    // SIGN TO TRADE: every payment a claim was settled with (kept for saved progress), and the block whose claims wait for the
+    // host's payments (applyBlock then resolveClaims).
+    payments: BTreeMap<[u8; 32], core::trade::PaymentFacts>,
+    claims_at: Option<u64>,
+}
+fn facts_json(f: &core::trade::PaymentFacts) -> J {
+    json!({"txid":hex::encode(f.txid),"height":f.height,"outputs":f.outputs.iter().map(|o| json!({"key":hex::encode(o.key),"ecdh":hex::encode(o.ecdh),"commitment":hex::encode(o.commitment)})).collect::<Vec<_>>()})
+}
+fn facts_from_json(v: &J) -> Result<core::trade::PaymentFacts> {
+    let outputs = v["outputs"].as_array().context("payment outputs")?.iter().map(|o| -> Result<core::trade::PaymentOutput> {
+        Ok(core::trade::PaymentOutput { key: bytes32(txt(o, "key")?)?, ecdh: hex::decode(txt(o, "ecdh")?)?.try_into().map_err(|_| anyhow::anyhow!("ecdh"))?, commitment: bytes32(txt(o, "commitment")?)? })
+    }).collect::<Result<Vec<_>>>()?;
+    Ok(core::trade::PaymentFacts { txid: bytes32(txt(v, "txid")?)?, height: v["height"].as_u64().context("payment height")?, outputs })
 }
 fn txt<'a>(v: &'a J, k: &str) -> Result<&'a str> {
     v[k].as_str().context(format!("Text field {k}"))
@@ -295,7 +310,45 @@ impl Engine {
         if m == &core::address::MAGIC_MOVE[..] && !pool.address_moves.is_some_and(|a| height >= a.from) {
             return false;
         }
+        if m == &core::trade::MAGIC_TRADE[..] && !pool.trades.is_some_and(|a| height >= a.from) {
+            return false;
+        }
         true
+    }
+    /// SIGN TO TRADE: settle the pool's pending claims of block `height` with the payments known for them; record statuses follow.
+    fn settle_claims(&mut self, height: u64) -> Result<Vec<J>> {
+        let pool = self.pool.as_mut().context("params")?;
+        if pool.pending_claims.is_empty() {
+            return Ok(vec![]);
+        }
+        let ids: Vec<String> = pool.pending_claims.iter().map(|c| hex::encode(core::hash(&c.wire))).collect();
+        let out = pool.resolve_claims(height, &self.payments);
+        for (id, r) in ids.iter().zip(&out) {
+            if let Some(info) = self.records.get_mut(id) {
+                info.status = r["record"].as_str().unwrap_or("?").into();
+                info.error = r["error"].as_str().map(String::from);
+                if !r["detail"].is_null() {
+                    info.detail = r["detail"].clone();
+                }
+            }
+        }
+        self.claims_at = None;
+        Ok(out)
+    }
+    /// Payment transactions from the host (pruned or full; each id re-checked) as the facts a claim is settled with.
+    fn payment_facts(&self, txs: &J) -> Result<Vec<core::trade::PaymentFacts>> {
+        let mut out = vec![];
+        for t in txs.as_array().context("txs")? {
+            let txid = bytes32(txt(t, "txid")?)?;
+            let (tx, hash) = native::read_tx(txt(t, "hex")?, t["prunableHash"].as_str())?;
+            ensure!(hash == txid, "Transaction hash mismatch for a payment");
+            let height = t["height"].as_u64().context("payment height")?;
+            // A transaction that cannot pay for a lot is left out: its claim is then refused like a missing payment.
+            if let Ok(outputs) = native::payment_outputs(&tx) {
+                out.push(core::trade::PaymentFacts { txid, height, outputs });
+            }
+        }
+        Ok(out)
     }
     /// The transactions the pool logged at `height`, in applied order (the log is in height order).
     fn logged_at(&self, height: u64) -> Vec<String> {
@@ -515,6 +568,8 @@ impl Engine {
                 self.pool_log.clear();
                 self.pool_tip = None;
                 self.tip = 0;
+                self.payments.clear();
+                self.claims_at = None;
                 if let Some(n) = self.native.as_mut() {
                     n.reset();
                 }
@@ -524,6 +579,7 @@ impl Engine {
             // and the native wallet can be at different heights. A skipped native side still checks the block blob.
             "applyBlock" => {
                 let height = q["height"].as_u64().context("height")?;
+                ensure!(self.claims_at.is_none(), "Resolve the trade claims of block {} first", self.claims_at.unwrap_or(0));
                 let apply_pool = q["pool"].as_bool().unwrap_or(true);
                 let apply_native = q["native"].as_bool().unwrap_or(true);
                 ensure!(apply_pool || apply_native, "applyBlock with neither side");
@@ -574,7 +630,12 @@ impl Engine {
                     self.pool_tip = Some(height);
                 }
                 self.tip = self.tip.max(height);
-                Ok(json!({"height":height,"records":records,"native":native_stats,"pool":apply_pool,"unlisted":unlisted}))
+                // SIGN TO TRADE: claims settle at the end of the block, with payments the host fetches (resolveClaims).
+                let claims: Vec<String> = self.pool.as_ref().map(|p| p.claim_payments().iter().map(hex::encode).collect()).unwrap_or_default();
+                if !claims.is_empty() {
+                    self.claims_at = Some(height);
+                }
+                Ok(json!({"height":height,"records":records,"native":native_stats,"pool":apply_pool,"unlisted":unlisted,"claims":claims}))
             }
             // 2 Nov 2026: the saved-progress log entries of the given record-carrying transactions (fetched by the host from the
             // node, pruned or full; each id re-checked). Used to start the pool from an indexer's list instead of every block.
@@ -586,7 +647,14 @@ impl Engine {
                     let (tx, hash) = native::read_tx(txt(t, "hex")?, t["prunableHash"].as_str())?;
                     ensure!(hex::encode(hash) == txid, "Transaction hash mismatch for {txid}");
                     ensure!(self.indexed_record(&tx.prefix().extra, height), "Transaction {txid} carries no XMR20 record at block {height}");
-                    log.push(json!({"height":height,"txid":txid,"extra":hex::encode(&tx.prefix().extra),"inputs":native::key_images(&tx).iter().map(hex::encode).collect::<Vec<_>>()}));
+                    let mut e = json!({"height":height,"txid":txid,"extra":hex::encode(&tx.prefix().extra),"inputs":native::key_images(&tx).iter().map(hex::encode).collect::<Vec<_>>()});
+                    // SIGN TO TRADE: a claim names its payment; the host fetches it and passes the facts to poolRestore.
+                    if let Some(w) = transport::unframe(&tx.prefix().extra).ok().flatten() {
+                        if let Ok(core::trade::Trade { body: core::trade::Body::Claim { txid: p, .. }, .. }) = core::trade::Trade::decode(&w) {
+                            e["payment"] = json!(hex::encode(p));
+                        }
+                    }
+                    log.push(e);
                 }
                 Ok(json!({"log":log}))
             }
@@ -600,7 +668,21 @@ impl Engine {
                 let a = core::checkpoint::Anchor::verify(&wire, &p.vks.issuer, &p.domain)?;
                 Ok(json!({"height":a.height,"blockHash":hex::encode(a.block_hash),"listHash":hex::encode(a.list_hash),"records":a.records}))
             }
+            // SIGN TO TRADE: the facts of payment transactions the host fetched for claims (pruned or full, each id re-checked).
+            "paymentFacts" => {
+                let facts = self.payment_facts(&q["txs"])?;
+                Ok(json!({"payments":facts.iter().map(facts_json).collect::<Vec<_>>()}))
+            }
+            "resolveClaims" => {
+                let height = q["height"].as_u64().context("height")?;
+                ensure!(self.claims_at == Some(height), "No trade claims wait at block {height}");
+                for f in self.payment_facts(&q["txs"])? {
+                    self.payments.insert(f.txid, f);
+                }
+                Ok(json!({"height":height,"claims":self.settle_claims(height)?}))
+            }
             "poolSnapshot" => Ok(json!({
+                "payments": self.payments.values().map(facts_json).collect::<Vec<_>>(),
                 "tip": self.pool_tip,
                 "log": self.pool_log.iter().map(|(h, txid, extra, kis)| json!({"height": h, "txid": txid, "extra": hex::encode(extra), "inputs": kis.iter().map(hex::encode).collect::<Vec<_>>()})).collect::<Vec<_>>()
             })),
@@ -613,10 +695,21 @@ impl Engine {
                 self.note_origin.clear();
                 self.records.clear();
                 self.pool_log.clear();
+                self.claims_at = None;
+                if q["payments"].is_array() {
+                    for f in q["payments"].as_array().unwrap() {
+                        let f = facts_from_json(f)?;
+                        self.payments.insert(f.txid, f);
+                    }
+                }
                 let mut last = 0;
                 for e in entries {
                     let height = e["height"].as_u64().context("height")?;
                     ensure!(height >= last && height <= tip, "Saved record log out of order");
+                    // SIGN TO TRADE: claims settle at the end of their block, as when the blocks were read.
+                    if height > last {
+                        self.settle_claims(last)?;
+                    }
                     last = height;
                     // A record log saved by an engine without carrier inputs (0.0.4 and earlier) cannot be replayed under the
                     // anchored rules once they apply: refuse it then, so the scanner starts over from the chain instead of
@@ -628,6 +721,7 @@ impl Engine {
                     let r = self.apply_extra(height, txt(e, "txid")?.to_string(), &hex::decode(txt(e, "extra")?)?, &kis)?;
                     ensure!(r["record"] != "ignored", "Saved record log holds a non-record");
                 }
+                self.settle_claims(last)?;
                 self.pool_tip = Some(tip);
                 self.tip = self.tip.max(tip);
                 Ok(json!({"tip":tip,"records":self.pool_log.len()}))
@@ -825,6 +919,10 @@ impl Engine {
             }
             // SIGN TO MOVE (2 Nov 2026): tokens held by a plain Monero address (core address.rs): owner key of an address, its
             // holdings, and the relay's prepare/finalize steps. All refuse until address moves are active on this network.
+            "tradeLots" | "tradeLot" | "tradeHoldings" | "tradeListPrepare" | "tradeCancelPrepare" | "tradeReservePrepare" | "tradeFinalize" | "tradeClaimRecord" => {
+                let vks = &self.params()?.vks;
+                self.pool()?.trade_op(q, vks, self.tip.max(1))
+            }
             "addressOwner" | "addressHoldings" | "addressMovePrepare" | "addressMoveFinalize" => {
                 let vks = &self.params.as_ref().context("Parameters first")?.vks;
                 self.pool()?.address_op(q, vks, self.tip.max(1))
