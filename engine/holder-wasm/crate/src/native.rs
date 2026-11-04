@@ -123,6 +123,21 @@ pub fn key_images<P: PotentiallyPruned>(tx: &Transaction<P>) -> Vec<[u8; 32]> {
 /// returns (prefix + RingCT base, no signatures or range proofs: about 5.5x less to download, 2 Nov 2026); the transaction id is then
 /// recomputed from the pruned bytes and that hash, so it is checked exactly as for a full transaction.
 pub type HostTx = (String, String, Option<String>);
+/// SIGN TO TRADE (2 Nov 2026): the outputs a trade claim's payment check reads (one-time key, compact encrypted amount, commitment).
+pub fn payment_outputs(tx: &Transaction<Pruned>) -> Result<Vec<xmr20_unshielded_core::trade::PaymentOutput>> {
+    let Transaction::V2 { prefix, proofs: Some(p) } = tx else { anyhow::bail!("Only current RingCT transactions can pay for a lot") };
+    ensure!(p.base.encrypted_amounts.len() == prefix.outputs.len() && p.base.commitments.len() == prefix.outputs.len(), "Transaction outputs are incomplete");
+    prefix
+        .outputs
+        .iter()
+        .zip(&p.base.encrypted_amounts)
+        .zip(&p.base.commitments)
+        .map(|((o, a), c)| match a {
+            monero_wallet::ringct::EncryptedAmount::Compact { amount } => Ok(xmr20_unshielded_core::trade::PaymentOutput { key: o.key.to_bytes(), ecdh: *amount, commitment: c.to_bytes() }),
+            _ => anyhow::bail!("Only current RingCT transactions can pay for a lot"),
+        })
+        .collect()
+}
 pub fn read_tx(hex_tx: &str, prunable: Option<&str>) -> Result<(Transaction<Pruned>, [u8; 32])> {
     let b = hex::decode(hex_tx)?;
     match prunable {

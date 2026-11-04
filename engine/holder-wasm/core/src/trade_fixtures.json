@@ -1,0 +1,136 @@
+{
+ "domain": "2222222222222222222222222222222222222222222222222222222222222222",
+ "network": "mainnet",
+ "made": "2026-11-02 by tests/trade-lab.test.mjs with wallet2 (monero-wallet-rpc)",
+ "records": [
+  {
+   "op": "list",
+   "wire": "585431fe013cacb211956f6de017c01ff1e67176c4cd14ceca1b956a7fa59101c7408f480f78030000019a5697213caa5a87b7b6c466e0607c4b9af3a26d4fd41011be6c56f187fe5ce400ca9a3b0000000000b864d94500000005584d52323000c1d26250b720342f9b549690215849e67b2b0e4424d7719aba63ab79c387aa6cd4260c5399bc69d1958411b25b5254fb60981951ac0da1ba090281a1d891005a00246859b50c5132630572a6c881fce0ddcc7edf4ecac560ca77de229aee681a08d6c929d6f554be80575b4676d4bd31c0fbaac4c26f3caa1d557a2ece8ebb9a08",
+   "text": "XMR20 list: sell 1000 XMR20 for 0.3 XMR paid to 48y7ktALyPq8xr2Fwg9sHrfYxRkGArszgSt4G9tchuj7KCmwKcQgDbWc4EDGrMs98oj3g9N8gFuPNY7mvANErA2jBFd3Bpw; valid until block 888; code 993ae144169d70823fc82590a89c27dc"
+  },
+  {
+   "op": "reserve",
+   "wire": "585431fe034cd317e6e3395bd820afdde08454d7ea041a2ce7928a7b1bf8cf662caa216c10b20000000057c9d73f5c1e1e45a0a0c0a6a584c714bd0f7ac636f9e51b5e945bec2d5643e91887c3180c90fad794e135133b66a2e7a0ebc72598a7ab45bac0e9f742aadc0200a37ce460762f10cd66212c8b9d12141c133e2eba6a6f4d4f10974f164a085d085bb68ba9a8ff6bbf6e96e2ccf09d0ef92623c70676d39de24fd4724293b06c0d",
+   "text": "XMR20 reserve: buy 1000 XMR20 for 0.3 XMR; pay exactly 0.300000660844 XMR to 48y7ktALyPq8xr2Fwg9sHrfYxRkGArszgSt4G9tchuj7KCmwKcQgDbWc4EDGrMs98oj3g9N8gFuPNY7mvANErA2jBFd3Bpw by block 178; tokens to 44x4ZsuYAJhCeUTtrhjCDL4UBzoj3t2VJ5aX3RZRxCWEfzKeP6PWrgyd4QrFsTRk9ffk65WXtqgC2CfTtQP5zazf1GRreKs; code 3afd02ce8407345adb1c726a0fcdc371",
+   "pay": "300000660844",
+   "terms": {
+    "amount": "1000000000",
+    "price": "300000000000",
+    "ticker": "XMR20",
+    "seller": "48y7ktALyPq8xr2Fwg9sHrfYxRkGArszgSt4G9tchuj7KCmwKcQgDbWc4EDGrMs98oj3g9N8gFuPNY7mvANErA2jBFd3Bpw"
+   }
+  },
+  {
+   "op": "cancel",
+   "wire": "585431fe024cd317e6e3395bd820afdde08454d7ea041a2ce7928a7b1bf8cf662caa216c1000c1d26250b720342f9b549690215849e67b2b0e4424d7719aba63ab79c387aa6cd4260c5399bc69d1958411b25b5254fb60981951ac0da1ba090281a1d891005a009221ded32d8b142d3cee6dc43b153a04f79aee15b1fa27a9425f704cde9002032e2081d92347f8a3f12c655e900a0a4ed69fd225288ada4bdc433109e2ae9509",
+   "text": "XMR20 cancel listing 4cd317e6e3395bd8; from 48y7ktALyPq8xr2Fwg9sHrfYxRkGArszgSt4G9tchuj7KCmwKcQgDbWc4EDGrMs98oj3g9N8gFuPNY7mvANErA2jBFd3Bpw; code 11539a9791074bca7dbdd16876eecceb"
+  },
+  {
+   "op": "claim",
+   "wire": "585431fe044cd317e6e3395bd820afdde08454d7ea041a2ce7928a7b1bf8cf662caa216c10dcfae689a3d07758ca4714d0d52c30cbfba90960292b75c64b7b82d15024858a017f3e8407bdb823dea9373e585ad87afbb50003d9f6aae019fc04c542ae3f8202"
+  }
+ ],
+ "payments": [
+  {
+   "txid": "34c7eb37c379c7fa6096e305f7e3bad494df7a6b2549698a70e12aa850989a26",
+   "txKey": "6de5159fabcf21630f0cfb460aef36029ae140b457a4d9548097ec0d684cb300",
+   "address": "48y7ktALyPq8xr2Fwg9sHrfYxRkGArszgSt4G9tchuj7KCmwKcQgDbWc4EDGrMs98oj3g9N8gFuPNY7mvANErA2jBFd3Bpw",
+   "amount": "123456789",
+   "outputs": [
+    {
+     "key": "581977d533ea0b9c9951d0caac340f3f0c8ab25116108e0f049c6636cf12c12f",
+     "ecdh": "2572d7d04f1ab7eb",
+     "commitment": "2cc2aabbb48eb7d923bd6f5a66a6eb26cc63a41c5d06405f9405092f0c412bce"
+    },
+    {
+     "key": "61b1e5cbdac21bafe24e6f21a309655dc85500ffdee024c3bf6d9a812f9dfae9",
+     "ecdh": "586d49b8be7979fb",
+     "commitment": "bd2bdabbae11857d41e08eeae1ac86ca8b6c8f0870096b7739e25e2643422eee"
+    }
+   ]
+  },
+  {
+   "txid": "317370afaa984d240449aff29a3a502ac048ff142eee372d5314a8adc259f2ce",
+   "txKey": "e05a1a6adfd388dd15730550dc35faf49057399265ac09ecd42d6f90bd8d6702",
+   "address": "82we2BLbobr1vtkikgLoruZLkgeV2m2tWWjX8bi2e2rXM9Ffc2VPGwh1MWctdfFDcNbcKYWu6MbGM1EdmJB23kSu4v4sGSG",
+   "amount": "5000",
+   "outputs": [
+    {
+     "key": "69bb399f198dfecba368ce2b80fdc5a99e03de96ef19b20cb67aa40b9042169b",
+     "ecdh": "3df156d9c82ff218",
+     "commitment": "c0b358f39f4a08b24a428c4ffdb32bb7a96cf08fa9fceb9169efe00f6a3df85c"
+    },
+    {
+     "key": "72a9b09e250d1ff685463cdb7fa76e2d7d86fecdb19d93557e8ccf527d23e9b6",
+     "ecdh": "d4aae4dc169f3d0d",
+     "commitment": "9f583ea41329123ec04db63c90e0c72cde132f435c72006b8f5a3568bb1343cc"
+    }
+   ]
+  },
+  {
+   "txid": "4498b4018c7164d41792f28401aec677c5a5c4964b340d57c2d69661fec47e91",
+   "txKey": "3e6515c17d4e72f10b7568de67f52f3a3fc7c60440027c01432946fdaadf66025daff8136351c0e44b876b08902f7d127c217f92fbc9d20505ee4fc4b76b8a04f486e55bc32509514c00f5afd0a1e98253f3b1315a9b85e7371943323e7b7200dca02f7c26ad9d130400a5b5a3263f9f099d5bae3fe03cb21ed1dac53177e900",
+   "address": "84pwMShcJBbWHqhdQSRUGFJW2uR6Sd4NEG2qbirKfFiB54bRWPDdrvr98k5xuAnVPWZZuV4nzQ1C4HvwpfoFE1RgJn5pXfh",
+   "amount": "9000",
+   "outputs": [
+    {
+     "key": "1188d7af905d3ca7d01411215fc10f11f9f7be662488fefa85f3b2077e401baf",
+     "ecdh": "58505c5199979cf3",
+     "commitment": "cbbef8e2000dbbd624f98bce5e4466d4aec2d2feb1e508bd7026073914dcb3d4"
+    },
+    {
+     "key": "0db66081732d1db43473fbd25089264b7742850080ef66713f0e6e1f451552d1",
+     "ecdh": "ee07af0ba6161acf",
+     "commitment": "36552a7eaf285febee21567a109e69fc7a510dca1209e77336f3c413c66c3552"
+    },
+    {
+     "key": "b6a95efd4bb2d2ff96c439668cf075e6773dcb458d6f4bfe6601ed13dafba9eb",
+     "ecdh": "de30f7f6eba7c852",
+     "commitment": "83b12d2f98dc619f52b1a3962dd841d057a1c2917b6274eea15ea774fc488e88"
+    }
+   ]
+  },
+  {
+   "txid": "4498b4018c7164d41792f28401aec677c5a5c4964b340d57c2d69661fec47e91",
+   "txKey": "3e6515c17d4e72f10b7568de67f52f3a3fc7c60440027c01432946fdaadf66025daff8136351c0e44b876b08902f7d127c217f92fbc9d20505ee4fc4b76b8a04f486e55bc32509514c00f5afd0a1e98253f3b1315a9b85e7371943323e7b7200dca02f7c26ad9d130400a5b5a3263f9f099d5bae3fe03cb21ed1dac53177e900",
+   "address": "82we2BLbobr1vtkikgLoruZLkgeV2m2tWWjX8bi2e2rXM9Ffc2VPGwh1MWctdfFDcNbcKYWu6MbGM1EdmJB23kSu4v4sGSG",
+   "amount": "7000",
+   "outputs": [
+    {
+     "key": "1188d7af905d3ca7d01411215fc10f11f9f7be662488fefa85f3b2077e401baf",
+     "ecdh": "58505c5199979cf3",
+     "commitment": "cbbef8e2000dbbd624f98bce5e4466d4aec2d2feb1e508bd7026073914dcb3d4"
+    },
+    {
+     "key": "0db66081732d1db43473fbd25089264b7742850080ef66713f0e6e1f451552d1",
+     "ecdh": "ee07af0ba6161acf",
+     "commitment": "36552a7eaf285febee21567a109e69fc7a510dca1209e77336f3c413c66c3552"
+    },
+    {
+     "key": "b6a95efd4bb2d2ff96c439668cf075e6773dcb458d6f4bfe6601ed13dafba9eb",
+     "ecdh": "de30f7f6eba7c852",
+     "commitment": "83b12d2f98dc619f52b1a3962dd841d057a1c2917b6274eea15ea774fc488e88"
+    }
+   ]
+  },
+  {
+   "txid": "dcfae689a3d07758ca4714d0d52c30cbfba90960292b75c64b7b82d15024858a",
+   "txKey": "7f3e8407bdb823dea9373e585ad87afbb50003d9f6aae019fc04c542ae3f8202",
+   "address": "48y7ktALyPq8xr2Fwg9sHrfYxRkGArszgSt4G9tchuj7KCmwKcQgDbWc4EDGrMs98oj3g9N8gFuPNY7mvANErA2jBFd3Bpw",
+   "amount": "300000660844",
+   "forReservation": true,
+   "outputs": [
+    {
+     "key": "c4298743dc2d9f502eed0f408eb65d034371b287e51f4e345c9e992fc253c181",
+     "ecdh": "e20ea6d6480cc34f",
+     "commitment": "b81bb19df1c0cb354afabaf98796813f03dd10400890a741ddd63865783231f1"
+    },
+    {
+     "key": "fe5574df0fa374addb7d3744cd85cd53acb74a32092222732412c4f2ce180569",
+     "ecdh": "cb70eb4c9ce2c953",
+     "commitment": "a9582d77f6a624cf4c54049e19729ea9405709914bcbd67a0e0b05f2d64a2110"
+    }
+   ]
+  }
+ ]
+}
