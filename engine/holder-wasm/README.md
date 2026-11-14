@@ -32,8 +32,8 @@
 
 | Path | What it is |
 |---|---|
-| `holder.wasm` | The built engine (`xmr20-holder-wasm 0.0.7-address-moves` with fast start and sign to trade, built with `XMR20_MARKET_MAINNET_ACTIVATION=3796100`, `XMR20_ADDRESS_MOVES_MAINNET_ACTIVATION=3797288` and `XMR20_TRADES_MAINNET_ACTIVATION=3797400`, sha256 `4b33f98d…`). Byte-identical to the one in XMR20 Wallet 0.1.135–0.1.143 and on xmr20.org (release 60 onwards). |
-| `mordinals.wasm` | The Mordinals engine the Chrome extension runs as `vendor/mordinals.wasm` since 0.1.142 (sha256 `fbd2d908…`, the same file as the xmr20.org wallet's): this engine plus three operations in `mordinals/mordinals_ops.rs`. `mordinalsFind` finds which entries of the public Mordinals owner list belong to this wallet, `mordinalsClaimSign` signs a claim with the owner coin's one-time key, and `mordinalsSign` signs one line of text that starts with "Mordinals move/list/cancel/reserve: " or "XMR721 collection/mint/burn: ". None of them builds or spends a Monero transaction, and the keys never leave the engine. |
+| `holder.wasm` | The built engine (`xmr20-holder-wasm 0.0.7-address-moves` with fast start and sign to trade, built with `XMR20_MARKET_MAINNET_ACTIVATION=3796100`, `XMR20_ADDRESS_MOVES_MAINNET_ACTIVATION=3797288` and `XMR20_TRADES_MAINNET_ACTIVATION=3797400`, sha256 `8240bf49…`). The engine of XMR20 Wallet 0.1.135 and later and of xmr20.org; since 14 November 2026 (wallet 0.1.144) with the build machine's home folder in its error-message paths replaced by `/Users/user` (same length, no other byte changed; the build before that was `4b33f98d…`). |
+| `mordinals.wasm` | The Mordinals engine the Chrome extension runs as `vendor/mordinals.wasm` since 0.1.142 (sha256 `b892485a…` since 0.1.144, cleaned the same way as `holder.wasm`; before that `fbd2d908…`; the same file as the xmr20.org wallet's): this engine plus three operations in `mordinals/mordinals_ops.rs`. `mordinalsFind` finds which entries of the public Mordinals owner list belong to this wallet, `mordinalsClaimSign` signs a claim with the owner coin's one-time key, and `mordinalsSign` signs one line of text that starts with "Mordinals move/list/cancel/reserve: " or "XMR721 collection/mint/burn: ". None of them builds or spends a Monero transaction, and the keys never leave the engine. |
 | `mordinals/` | `mordinals_ops.rs` and `build.mjs`, which builds `mordinals.wasm` from a copy of `crate/` with that file added: one module line in `native.rs`, one dispatch line in `lib.rs`, the engine info string extended with `"mordinals":"local-candidate-2-xmr721"` (what the installed engine reports), and the package renamed `xmr20-holder-wasm-mordinals`. |
 | `crate/` | The wasm crate (`xmr20-holder-wasm-market`): `src/lib.rs` (token engine API), `src/native.rs` (the Monero side: scanning your XMR and building carrier transactions), `src/market_ops.rs` and `src/native_market.rs` (lots, sales and spare anchors), `src/nft_ops.rs` and `src/nft_v2.rs` (anchored NFT sales, not open yet). The `lab-adversary` feature is a separately built TEST-ONLY copy for the settlement tests; the wallets never use it. |
 | `core/` | `xmr20-market-core`: the token format (records, ledger rules, proofs over Penumbra's circuits) plus the market's lot rules (`src/market.rs`), sign to move (`src/address.rs`), sign to trade (`src/trade.rs`, tests `src/trade_tests.rs`), the daily checkpoint anchor (`src/checkpoint.rs`) and the activation gates. The bridge's indexer and issuer use it too, built with the same start block. |
@@ -48,11 +48,13 @@ You need Rust and the wasm target:
 ```bash
 rustup target add wasm32-unknown-unknown
 cd engine/holder-wasm/crate
+RUSTFLAGS="--remap-path-prefix=$HOME=/Users/user" \
 XMR20_MARKET_MAINNET_ACTIVATION=3796100 XMR20_ADDRESS_MOVES_MAINNET_ACTIVATION=3797288 XMR20_TRADES_MAINNET_ACTIVATION=3797400 \
   cargo build --release --target wasm32-unknown-unknown
 ```
 
-The output is `target/wasm32-unknown-unknown/release/xmr20_holder_wasm_market.wasm`. Release builds take several
+The output is `target/wasm32-unknown-unknown/release/xmr20_holder_wasm_market.wasm`. `RUSTFLAGS` keeps your home folder out of the file
+(Rust writes source paths into error messages). Release builds take several
 minutes the first time. `XMR20_MARKET_MAINNET_ACTIVATION` sets the market's start block on mainnet and
 `XMR20_ADDRESS_MOVES_MAINNET_ACTIVATION` the sign-to-move start block and `XMR20_TRADES_MAINNET_ACTIVATION` the sign-to-trade start block; without them the engine ignores those records on mainnet. Every program that reads XMR20 balances (wallets, the bridge's indexer and issuer) must
 be built with the same value.

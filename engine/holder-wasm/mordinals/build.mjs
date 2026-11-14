@@ -8,7 +8,7 @@
 // A rebuilt file is not expected to be byte-identical to the committed one (Rust embeds source paths); from this layout the
 // source was compile-checked (--check), not rebuilt and run.
 import {readFile,writeFile,mkdir,rm,readdir,copyFile} from 'node:fs/promises';import {join,resolve,dirname} from 'node:path';import {spawnSync} from 'node:child_process';
-import {createHash} from 'node:crypto';import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';import {homedir} from 'node:os';import assert from 'node:assert/strict';
 const here=import.meta.dirname,src=join(here,'../crate'),build=join(here,'build'),check=process.argv.includes('--check');
 const one=(text,from,to,name)=>{assert.equal(text.split(from).length,2,name+': expected exactly one match: '+from);return text.replace(from,()=>to);};
 await rm(join(build,'src'),{recursive:true,force:true});await mkdir(join(build,'src'),{recursive:true});
@@ -24,8 +24,9 @@ const dispatchAt='            other if other.starts_with("market") => self.marke
 let lib=one(await readFile(join(build,'src/lib.rs'),'utf8'),dispatchAt,'            other if other.starts_with("mordinals") => self.native.as_ref().context("No native wallet")?.mordinals_call(other, q),\n'+dispatchAt,'lib.rs');
 lib=one(lib,'"engine":"xmr20-holder-wasm 0.0.7-address-moves"','"engine":"xmr20-holder-wasm 0.0.7-address-moves","mordinals":"local-candidate-2-xmr721"','lib.rs');
 await writeFile(join(build,'src/lib.rs'),lib);
-// The same start blocks as holder.wasm (market, sign to move, sign to trade on mainnet).
-const env={...process.env,XMR20_MARKET_MAINNET_ACTIVATION:'3796100',XMR20_ADDRESS_MOVES_MAINNET_ACTIVATION:'3797288',XMR20_TRADES_MAINNET_ACTIVATION:'3797400'};
+// The same start blocks as holder.wasm (market, sign to move, sign to trade on mainnet). The home folder is written as /Users/user
+// in the error-message paths, as in the committed files.
+const env={...process.env,RUSTFLAGS:[process.env.RUSTFLAGS,'--remap-path-prefix='+homedir()+'=/Users/user'].filter(Boolean).join(' '),XMR20_MARKET_MAINNET_ACTIVATION:'3796100',XMR20_ADDRESS_MOVES_MAINNET_ACTIVATION:'3797288',XMR20_TRADES_MAINNET_ACTIVATION:'3797400'};
 const r=spawnSync('cargo',[check?'check':'build','--release','--target','wasm32-unknown-unknown','--manifest-path',join(build,'Cargo.toml')],{stdio:'inherit',env});
 if(r.status!==0){console.error('cargo failed');process.exit(r.status||1);}
 if(check)console.log('Mordinals engine source compiles (cargo check).');
