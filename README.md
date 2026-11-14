@@ -88,9 +88,9 @@ The settlement is experimental and has not had an independent security review. T
 - **My profile on xmr20.org** in Settings opens your profile page. (0.1.143)
 - **Fix: Solana token sends.** Sending a Solana token from the extension, XMR20 tokens included, failed with
   "Transaction recentBlockhash required". Sends now carry the recent blockhash and the token's decimals. (0.1.143)
-- **Where the source is.** `XMR20-Wallet-0.1.143.zip` on the Releases page is exactly the installed and tested build.
-  The extension source in this repository is still 0.1.135 plus the launch-token change below; the source of the
-  0.1.136 to 0.1.143 additions is not in this repository yet.
+- **Source.** `XMR20-Wallet-0.1.143.zip` on the Releases page is exactly the installed and tested build, and
+  `npm run build:extension` builds the same version from this repository. [`extension/README.md`](extension/README.md#how-it-is-built)
+  lists what is rebuilt from source and what is kept as installed.
 
 ## What's new (14 November 2026)
 
@@ -103,9 +103,7 @@ The settlement is experimental and has not had an independent security review. T
 - **Website wallet: a failed balance read no longer hides such a token.** The holder index does not list these tokens,
   so when the read from the chain fails once, the ones this browser last saw stay listed as "last checked"
   (`web-wallet/src/solana-chain-holdings.js`).
-- In the Chrome extension since 0.1.139 and on xmr20.org since 14 November 2026. The extension source in this
-  repository is still the 0.1.135 source plus this change: the private SOL and wXMR balances added in 0.1.136 to
-  0.1.138 are not in the repository yet.
+- In the Chrome extension since 0.1.139 and on xmr20.org since 14 November 2026.
 
 ## What's new (3 November 2026)
 
@@ -247,7 +245,7 @@ instead of `./xmr20`. All commands are explained in [`cli/README.md`](cli/README
 
 - `npm run build:engine` puts the engine's browser files in `engine/dist/`. The extension, the website wallet and the CLI
   each copy them from there. The build checks that these files are byte-for-byte the same as in the installed wallet
-  0.1.135 (one known exception: a 2-character esbuild flag in the token worker, explained in `engine/build.mjs`).
+  0.1.143 (one known exception: a 2-character esbuild flag in the token worker, explained in `engine/build.mjs`).
 - The XMR20 token engine runs in the browser: the extension popup, the xmr20.org page, or the CLI's private headless
   Chromium. Your keys never leave your computer. Scanning, proving and signing happen locally.
 

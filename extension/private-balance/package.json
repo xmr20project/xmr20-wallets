@@ -1,0 +1,17 @@
+{
+  "name": "@xmr20/private-balance",
+  "version": "0.1.143",
+  "private": true,
+  "type": "module",
+  "description": "Private transfers in the XMR20 Wallet extension (Helius Solana Privacy Rings): the source of the extension's private-balance.js",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "dependencies": {
+    "@heliuslabs/spr": "0.9.0-alpha",
+    "@noble/curves": "2.4.0",
+    "@solana-program/system": "0.14.1",
+    "@solana/kit": "8.6.0"
+  },
+  "license": "MIT"
+}

@@ -7,13 +7,14 @@
 // compiled in at build time and are loopback addresses. Real trading disabled.
 import {createWorkerClient} from '../../engine/token/worker-client.js';import {openTokenWorker} from '../../engine/shared/market-open.js';
 import {createPrivateJournal} from '../../engine/token/private-journal.js';
-import {createMarketHost} from '../../engine/shared/market-host.js';
+import {createMarketHost,bridgeTokenList} from '../../engine/shared/market-host.js';
 import {serveMarketHost} from './market-host-channel.js';
 import {MONERO_MARKET_ORIGIN} from './site-policy.js';
 import {MARKET_HOST_LOCK,MARKET_ACTIVE_KEY} from './market-runner-control.js';
 import {esc,exact,compact,T,X,short,lines,review,KIND_TITLE,PHASE_WORD,approveLabel,doneText} from '../../engine/shared/market-reviews.js';
 // The order book may live on another origin than the page (stagenet test: api.xmr20.org); it defaults to the page origin (lab).
 const API=typeof __XMR20_MONERO_MARKET_API__==='string'?__XMR20_MONERO_MARKET_API__:null;
+const TOKENS=typeof __XMR20_MONERO_MARKET_TOKENS__==='string'?__XMR20_MONERO_MARKET_TOKENS__:null;
 const NODE=typeof __XMR20_MONERO_MARKET_NODE__==='string'?__XMR20_MONERO_MARKET_NODE__:null,PARAMS=typeof __XMR20_MONERO_MARKET_PARAMS__==='string'?__XMR20_MONERO_MARKET_PARAMS__:null,ASSET=typeof __XMR20_MONERO_MARKET_ASSET__==='string'?__XMR20_MONERO_MARKET_ASSET__:null;
 const $=s=>document.querySelector(s);
 const setHTML=(sel,html)=>{const el=$(sel);if(el.__html!==html){el.innerHTML=html;el.__html=html;return true;}return false;};
@@ -36,9 +37,9 @@ function anchorLine(s){
  return text?`<p class="wl-note${s.anchors.error?' warn':''}">${esc(text)}</p>`:'';
 }
 function overview(){
- const s=host.state();
- const lots=s.lots.map(l=>`<div class="wl-row"><span>${esc(T(l.quantityAtoms))} XMR20 <small>${l.listed?'listed':l.tradable?'ready':`${l.confirmations}/${s.binding?host.state().trades[0]?.finalityDepth||'':''} confirmations`}</small></span><span class="mono">${esc(short(l.id))}</span></div>`).join('');
- const trades=s.trades.slice(0,6).map(t=>`<div class="wl-row"><span>${t.role==='buyer'?'Buy':'Sell'} ${esc(T(t.quantityAtoms))} XMR20 <small>${esc(PHASE_WORD(t.phase))}</small></span><span>${esc(X(t.totalPiconero))} XMR</span></div>`).join('');
+ const s=host.state(),sym=a=>esc(a&&a!==s.binding.asset?s.tokens?.[a]?.symbol||'tokens':'XMR20');
+ const lots=s.lots.map(l=>`<div class="wl-row"><span>${esc(T(l.quantityAtoms))} ${sym(l.asset)} <small>${l.listed?'listed':l.tradable?'ready':`${l.confirmations}/${s.binding?host.state().trades[0]?.finalityDepth||'':''} confirmations`}</small></span><span class="mono">${esc(short(l.id))}</span></div>`).join('');
+ const trades=s.trades.slice(0,6).map(t=>`<div class="wl-row"><span>${t.role==='buyer'?'Buy':'Sell'} ${esc(T(t.quantityAtoms))} ${sym(t.asset)} <small>${esc(PHASE_WORD(t.phase))}</small></span><span>${esc(X(t.totalPiconero))} XMR</span></div>`).join('');
  return `<h1 class="wl-title">Monero Market</h1><p class="wl-lead">${s.sync.state==='ready'?`Synced to block ${esc(String(s.sync.tipHeight))}. Approvals appear here.`:s.sync.state==='unavailable'?`Node unavailable: ${esc(s.sync.error)}`:({mainnet:'Syncing Monero (mainnet)…',stagenet:'Syncing the stagenet test chain…'}[s.binding.network]||'Syncing the offline test chain…')}</p>
   <div class="wl-rows"><h2>Your lots</h2>${lots||'<div class="wl-row"><small>No lots yet.</small></div>'}</div>
   <div class="wl-rows"><h2>Trades</h2>${trades||'<div class="wl-row"><small>No trades yet.</small></div>'}</div>
@@ -83,7 +84,7 @@ window.addEventListener('pagehide',()=>{if(!closed){closed=true;host?.close();se
    open:async c=>{const keys=await call('marketKeys');try{if(keys.address!==account.monero)throw Error('Monero account changed.');return await c.call('open',{seed:keys.seed,owner:keys.address,backend:PARAMS,rpc:NODE,nativeStartHeight:0},240000,{idle:true});}finally{keys.seed='';}}});
   await call('marketCheck');
   if(!opened.marketJournalKey||!opened.market)throw Error('This token worker has no market support.');
-  // Mainnet (owner, 31 Oct 2026): only with an engine built with the market start block (lots count from it for every reader built alike).
+  // Mainnet (31 Oct 2026): only with an engine built with the market start block (lots count from it for every reader built alike).
   if(!['offline-fakechain','stagenet'].includes(opened.network?.kind)&&!(opened.network?.kind==='mainnet'&&opened.market?.activationHeight!=null))throw Error('Monero Market runs on mainnet only in a build with the market start block ('+opened.network?.kind+').');
   $('#wl-chip').textContent={stagenet:'STAGENET TEST',mainnet:'MAINNET · EXPERIMENTAL'}[opened.network.kind]||'OFFLINE LAB';
   const journal=createPrivateJournal({store,journalKey:'xmr20-market-journal',saltKey:'xmr20-market-journal-salt',aad:'XMR20-market-journal-v1'});
@@ -91,7 +92,7 @@ window.addEventListener('pagehide',()=>{if(!closed){closed=true;host?.close();se
   const params=await client.call('parameters',{},30000);
   const manifestR=await fetch(chrome.runtime.getURL('vendor/parameters-manifest.json'));const manifest=await manifestR.json();
   const asset=ASSET;
-  const h=createMarketHost({client,journal,ids:{ownerKey:opened.ownerKey,nativeAddress:opened.nativeAddress,tokenAddress:opened.tokenAddress},manifest,marketUrl:API||MONERO_MARKET_ORIGIN,finality:opened.market.finalityDepth,asset,accountId:account.name,log:(...a)=>console.warn('[market]',...a),onChange:()=>{if(!busy)render();}});
+  const h=createMarketHost({client,journal,ids:{ownerKey:opened.ownerKey,nativeAddress:opened.nativeAddress,tokenAddress:opened.tokenAddress},manifest,marketUrl:API||MONERO_MARKET_ORIGIN,finality:opened.market.finalityDepth,asset,accountId:account.name,tokenList:TOKENS?bridgeTokenList(TOKENS):null,log:(...a)=>console.warn('[market]',...a),onChange:()=>{if(!busy)render();}});
   const check=setInterval(()=>{call('marketCheck').catch(e=>{clearInterval(check);shutdown(e.message);});},2000);
   // One Web Lock decides who runs the market host: this window while it is open, the background runner otherwise (it hands
   // over at its next step). The count published here tells the background to keep a runner going after this window closes.

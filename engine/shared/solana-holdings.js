@@ -5,6 +5,7 @@ import {Buffer} from 'buffer';
 import {PublicKey} from '@solana/web3.js';
 import {TOKEN_PROGRAM_ID,TOKEN_2022_PROGRAM_ID,unpackMint,unpackAccount,getAssociatedTokenAddressSync} from '@solana/spl-token';
 import {sharedCatalog,TOKEN_CATALOG_URL} from './catalog-cache.js';
+import {solanaRpcBody} from './solana-rpc.js';
 const GENESIS='5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d';
 const ENDPOINT='https://xmr20.org/api/wallet';
 const CATALOG=TOKEN_CATALOG_URL;
@@ -46,17 +47,33 @@ function accountInfo(v){
  const data=Buffer.from(v.data[0],'base64');need(data.toString('base64')===v.data[0],'Invalid Solana account encoding.');
  return {...v,owner:new PublicKey(v.owner),data};
 }
-export async function loadSolanaHoldings(owner,{fetcher=fetch,signal,now=Date.now,endpoint=ENDPOINT,catalogEndpoint=CATALOG}={}){
- need(mintAddress(owner),'Invalid Solana address.');const sender=new PublicKey(owner);
- const scope=signal?AbortSignal.any([signal,AbortSignal.timeout(18000)]):AbortSignal.timeout(18000);
+// `endpoint`: one service that takes JSON-RPC inside {action:'walletRpc',rpc} (the xmr20.org read service, or the website's
+// read route), as before. `endpoints`: instead, a list of Solana nodes (or a function giving it) tried in turn until one
+// answers as mainnet and gives every balance; plain JSON-RPC, except the xmr20.org read service. The extension popup passes
+// the node chosen in Settings this way.
+export async function loadSolanaHoldings(owner,{fetcher=fetch,signal,now=Date.now,endpoint=ENDPOINT,endpoints=null,catalogEndpoint=CATALOG}={}){
+ need(mintAddress(owner),'Invalid Solana address.');
+ if(endpoints===null)return loadFrom(owner,{fetcher,signal,now,endpoint,catalogEndpoint,wrap:true,timeoutMs:18000});
+ const list=typeof endpoints==='function'?endpoints():endpoints;need(Array.isArray(list)&&list.length>0&&list.length<=5,'No Solana node configured.');
+ let last;
+ for(const url of list){
+  try{return await loadFrom(owner,{fetcher,signal,now,endpoint:url,catalogEndpoint,wrap:false,timeoutMs:list.length>1?10000:18000});}
+  catch(error){if(signal?.aborted)throw error;last=error;}
+ }
+ throw last;
+}
+async function loadFrom(owner,{fetcher,signal,now,endpoint,catalogEndpoint,wrap,timeoutMs}){
+ const sender=new PublicKey(owner);
+ const scope=signal?AbortSignal.any([signal,AbortSignal.timeout(timeoutMs)]):AbortSignal.timeout(timeoutMs);
  async function json(url,options={}){
   scope.throwIfAborted();const response=await fetcher(url,{...options,credentials:'omit',redirect:'error',cache:'no-store',signal:scope});
   need(response.ok,'Solana balances unavailable.');const text=await response.text();need(text.length<=4_000_000,'Solana balance response too large.');scope.throwIfAborted();return JSON.parse(text);
  }
  async function rpc(method,params){
-  // The existing wallet service enforces Helius mainnet and holds its key.
+  // Reads only. Whichever node answers, its network is checked (genesis hash) before its balances are used.
   need(['getGenesisHash','getMultipleAccounts'].includes(method),'Public balance reads only.');
-  const id=crypto.randomUUID(),value=await json(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'walletRpc',rpc:{jsonrpc:'2.0',id,method,params}})});
+  const id=crypto.randomUUID(),call={jsonrpc:'2.0',id,method,params};
+  const value=await json(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(wrap?{action:'walletRpc',rpc:call}:solanaRpcBody(endpoint,call))});
   need(value.jsonrpc==='2.0'&&value.id===id&&!value.error&&Object.hasOwn(value,'result'),'Helius balance read unavailable.');return value.result;
  }
  const checkedAt=genesisChecked.get(fetcher)?.get(endpoint),genesisKnown=Number.isFinite(checkedAt)&&now()-checkedAt<GENESIS_RECHECK_MS;

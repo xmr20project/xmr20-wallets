@@ -1,5 +1,5 @@
 // MONERO MARKET candidate (29 Oct 2026): the wallet side of the market, running in the extension's own market window.
-// A port of the lab's wallet process (research/monero-market-20261029/wallet/wallet-process.mjs) onto the real wallet:
+// A port of the market lab's wallet process onto the real wallet:
 //   - the engine is the token worker (holder.wasm with the market ops); every key stays there;
 //   - durable state is the ENCRYPTED market journal (private-journal.js, slot xmr20-market-journal, sealed with a key the
 //     worker derives from the account root): a seller signature is journaled BEFORE it leaves, a buyer's signed sale BEFORE
@@ -20,6 +20,20 @@ const publicError=e=>String(e?.message||e).replace(/[0-9a-f]{65,}/g,'…').slice
 const randomHex=n=>Array.from(crypto.getRandomValues(new Uint8Array(n)),x=>x.toString(16).padStart(2,'0')).join('');
 const sha256hex=async s=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s))),x=>x.toString(16).padStart(2,'0')).join('');
 const fail=(msg,status)=>Object.assign(Error(msg),{status});
+// The token and the lot of a signed listing, read from its own bytes: "XK1" header, chain genesis, ledger domain, token, lot.
+export const offerToken=wire=>typeof wire==='string'&&/^584b31fe[0-9a-f]{260,}$/.test(wire)?{asset:wire.slice(136,200),lot:wire.slice(200,264)}:null;
+// Names from the token list are shown on approval screens: no control or direction characters, bounded length.
+const plainText=(v,n)=>typeof v==='string'?v.replace(/[\u0000-\u001f\u007f-\u009f\u00ad\u061c\u200b-\u200f\u2028-\u202e\u2060-\u2069\ufeff]/g,'').trim().slice(0,n):'';
+const MINT=/^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+// The market page and the order book show every quantity with six decimals; a token with another number is not traded here.
+export const MARKET_DECIMALS=6;
+// The bridge's token list (its public "state" action, the list the main wallet names tokens from), for createMarketHost's
+// tokenList. Only names, mints, decimals and token ids are kept. The id names no account; an unknown id registers nothing.
+export function bridgeTokenList(endpoint,f=globalThis.fetch.bind(globalThis)){
+ return async()=>{const r=await f(String(endpoint).replace(/\/+$/,'')+'/action/state',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:'market-token-names'}),signal:AbortSignal.timeout(30000),credentials:'omit',redirect:'error'});
+  if(!r.ok)throw Error('token list '+r.status);const v=await r.json();
+  return (Array.isArray(v?.assets)?v.assets:[]).map(a=>({asset:a?.asset,symbol:a?.symbol??a?.ticker,name:a?.name,mint:a?.mint,decimals:a?.decimals}));};
+}
 // Input key images of a signed transaction (prefix: version, unlock time, then each to-key input 0x02: amount, ring offsets, key image).
 export function inputKeyImages(blob){
  const b=Uint8Array.from(String(blob).match(/../g)||[],x=>parseInt(x,16));let at=0;
@@ -36,11 +50,47 @@ export function emptyMarketState(){return {version:1,requests:{},approvals:{},tr
  * lotPayout (optional, Monero accounts service only): {address, sign(message)→SigV2} — token-lot sales pay that standard
  * address (the service's XMR wallet) instead of this wallet's own, and its relay key is attested by that address.
  * anchorMode (optional): 'spare' or 'inline' — default 'spare' everywhere but the offline lab chain (see spare anchors below).
+ * asset: the build's own token (XMR20). It stays the token of the session binding and of the single-token balance fields, and
+ * is the token of a saved entry that names none. Lots are made and handled for any token this wallet holds Open (14 Nov 2026).
+ * tokenList (optional): async () => the bridge's token rows [{asset, symbol, name, mint, decimals}], the list the main wallet
+ * names tokens from. Without it only the build's own token has a name.
  */
-export function createMarketHost({client,journal,ids,manifest,marketUrl,finality,asset,accountId,lotPayout=null,anchorMode=null,sessionId=randomHex(12),fetch:f=globalThis.fetch.bind(globalThis),now=()=>Math.floor(Date.now()/1000),log=()=>{},onChange=()=>{}}){
+export function createMarketHost({client,journal,ids,manifest,marketUrl,finality,asset,accountId,tokenList=null,lotPayout=null,anchorMode=null,sessionId=randomHex(12),fetch:f=globalThis.fetch.bind(globalThis),now=()=>Math.floor(Date.now()/1000),log=()=>{},onChange=()=>{}}){
  const {ownerKey,nativeAddress,tokenAddress}=ids;
  let doc=emptyMarketState(),holder=null,mst=null,synced=null,syncError=null,nftIndex={tokens:[],indexedHeight:-1,confirmations:finality},busy=Promise.resolve(),closed=false;
  const serial=fn=>{const p=busy.then(fn);busy=p.catch(()=>{});return p;};
+ // ---- Tokens (14 Nov 2026). Every lot, relist, offer and trade is saved with its token. An entry saved earlier names none:
+ // its token is the one the engine's lot list gives the lot, else the one in the signed listing kept with the entry. A lot that
+ // neither names was made by this wallet while it could only make lots of the build's own token.
+ const lotAsset=lot=>{
+  const own=doc.lots[lot]?.asset;if(own)return own;
+  const live=mst?.lots?.find(l=>l.id===lot)?.asset;if(live)return live;
+  for(const o of Object.values(doc.offers))if(o.lot===lot){if(o.asset)return o.asset;const w=offerToken(o.wire);if(w?.lot===lot)return w.asset;}
+  for(const t of Object.values(doc.trades))if(t.lot===lot&&t.kind!=='nft'){if(t.asset)return t.asset;const w=offerToken(t.offer);if(w?.lot===lot)return w.asset;}
+  return asset;};
+ const tradeAsset=t=>t.asset||offerToken(t.offer)?.asset||lotAsset(t.lot);
+ // Names: the bridge's token list (symbol, name, Solana mint and decimals per token id). The build's own token keeps its name
+ // without the list. The list is read at start, every 10 minutes, and once more (at most every 30 s) when a request is for a
+ // token it does not have; a read that fails or comes back empty keeps the last list.
+ const OWN_TOKEN={asset,symbol:'XMR20',name:'XMR20',mint:null,decimals:MARKET_DECIMALS};
+ let tokens=new Map(),tokensAsked=0,tokenRead=null;
+ const readTokens=()=>tokenRead??=(async()=>{
+  tokensAsked=Date.now();
+  try{const next=new Map();
+   for(const r of await tokenList()||[]){const symbol=plainText(r?.symbol??r?.ticker,16);
+    if(!hex32.test(r?.asset||'')||next.has(r.asset)||!symbol||!MINT.test(r.mint||'')||!Number.isInteger(r.decimals)||r.decimals<0||r.decimals>12)continue;
+    next.set(r.asset,{asset:r.asset,symbol,name:plainText(r.name,80)||symbol,mint:r.mint,decimals:r.decimals});}
+   if(next.size)tokens=next;
+  }catch(e){log('token list',publicError(e));}
+ })().finally(()=>{tokenRead=null;});
+ const tokenOf=a=>tokens.get(a)||(a===asset?OWN_TOKEN:null);
+ const named=async a=>{if(tokenList&&!tokenOf(a)){if(tokenRead)await tokenRead;else if(Date.now()-tokensAsked>30000)await readTokens();}return tokenOf(a);};
+ // What a review or a view says about a token: its name when the wallet has one, else the token id alone.
+ const tokenView=a=>tokenOf(a)||{asset:a,symbol:null,name:null,mint:null,decimals:null};
+ const tokenFields=a=>({asset:a,tokenInfo:tokenView(a)});
+ // A lot is made or bought only of a token the wallet can name on its approval screen.
+ const NO_NAME='This wallet has no name for that token right now, so it does not make or buy a lot of it. Try again in a moment.';
+ const nameOrRefuse=async a=>{const tk=await named(a);if(!tk)throw fail(NO_NAME,422);if(tk.decimals!==MARKET_DECIMALS)throw fail(`This market trades tokens with ${MARKET_DECIMALS} decimals only`,422);return tk;};
  const ns=j=>{j.market??={};const m=(j.market[tokenAddress]??=emptyMarketState());for(const k of Object.keys(emptyMarketState()))m[k]??=emptyMarketState()[k];return m;};
  // Durable update: the mutator runs on the latest journal content under the cross-window lock; the mirror follows the result.
  async function update(mutate,label=null){doc=await journal.write(j=>{const m=ns(j);mutate(m);if(label)m.events.push({at:Date.now(),label});if(m.events.length>200)m.events.splice(0,m.events.length-200);return JSON.parse(JSON.stringify(m));});onChange();return doc;}
@@ -112,7 +162,7 @@ export function createMarketHost({client,journal,ids,manifest,marketUrl,finality
   if(!p.ok){await update(x=>{x.spares[s.txid].status='refused';});await releaseSpareInputs().catch(e=>log('spare release',publicError(e)));throw Error('Spare anchor payment not accepted: '+(p.reason||p.status));}
   return s;
  }
- // Spares that will never confirm give their coin back (1 Nov 2026, owner's lots stuck at "Anchor payment sent · waiting for its
+ // Spares that will never confirm give their coin back (1 Nov 2026: lots could stay at "Anchor payment sent · waiting for its
  // first block"). (1) A spare the node refused kept its input reserved in the engine, and reservations are saved with the scan, so
  // every refused attempt (all of them before release 48) took one more ordinary coin out of use until the wallet asked for XMR
  // again. (2) A spare counted as coming for 6 hours while it was 'sent', also when the node no longer had it (another payment of
@@ -183,7 +233,7 @@ export function createMarketHost({client,journal,ids,manifest,marketUrl,finality
   if(!verifySigV2(await listingMessage(l),l.owner,e.signature))throw Error('Listing signature rejected');
   return listingId(l);
  }
- // ---- Stalled buyers (owner decision 30 Oct 2026). After an automatic approval the buyer has stallSeconds (default 10 min) to
+ // ---- Stalled buyers (30 Oct 2026). After an automatic approval the buyer has stallSeconds (default 10 min) to
  // put the sale in the node's pool; payBy travels with the seller's signature so the buyer's review can show it. Past that,
  // the seller's wallet cancels on chain (spending the anchor makes the released signature useless) and lists the same item
  // again at the same terms once it is ready: an NFT re-anchors (nftAnchoring() posts the listing when final); a lot is
@@ -206,9 +256,9 @@ export function createMarketHost({client,journal,ids,manifest,marketUrl,finality
      await update(x=>{const id='anchoring:'+t.token;x.nftListings[id]={id,token:t.token,price:t.price,lifetime,approval:'auto',stallSeconds:l?.stallSeconds||STALL_DEFAULT,anchorTxid:c.txid,anchorKeyImage:c.anchorKeyImage,status:'anchoring',relisted:t.listingId,createdAt:Date.now()};
       const tt=x.trades[t.tradeId];tt.stallCancel='cancelled';history(tt,'cancelled',why);},'stall-cancel');
     }else{
-     const o=doc.offers[t.offerId];
-     const r=await execute({kind:'cancelLot',review:{lot:t.lot,quantity:t.quantity,released:true}});
-     await update(x=>{x.relists[t.lot]={from:t.lot,offerId:t.offerId,quantity:t.quantity,price:t.price,lifetime:o?.lifetime||86400,stallSeconds:o?.stallSeconds||STALL_DEFAULT,cancelTxid:r.txid,stage:'cancelling',attempts:0,createdAt:Date.now()};
+     const o=doc.offers[t.offerId],ra=tradeAsset(t);
+     const r=await execute({kind:'cancelLot',review:{lot:t.lot,asset:ra,quantity:t.quantity,released:true}});
+     await update(x=>{x.relists[t.lot]={from:t.lot,asset:ra,offerId:t.offerId,quantity:t.quantity,price:t.price,lifetime:o?.lifetime||86400,stallSeconds:o?.stallSeconds||STALL_DEFAULT,cancelTxid:r.txid,stage:'cancelling',attempts:0,createdAt:Date.now()};
       const tt=x.trades[t.tradeId];tt.stallCancel='cancelled';history(tt,'cancelled',why);},'stall-cancel');
     }
    }catch(e){const msg=publicError(e);
@@ -224,10 +274,12 @@ export function createMarketHost({client,journal,ids,manifest,marketUrl,finality
     if(r.stage==='cancelling'){
      if(records().some(x=>x.kind==='lot-sale'&&x.status==='accepted'&&x.detail?.lot===r.from)){await set({stage:'sold'});continue;}
      const k=await w.lookup(r.cancelTxid).catch(()=>null);if(!k?.known||k.inPool||mst.lots.some(l=>l.id===r.from))continue;
-     if(BigInt(mst.openBalances[asset]||'0')<BigInt(r.quantity))continue;
+     // The new lot is of the stalled lot's own token (a relist saved without one: the token of its lot, see lotAsset).
+     const ra=r.asset||lotAsset(r.from);
+     if(BigInt(mst.openBalances[ra]||'0')<BigInt(r.quantity))continue;
      if(spareMode&&!freeSpares().length)continue;// spareWork keeps one coming once the market is used
-     const p=await execute({kind:'prepare',review:{asset,quantity:r.quantity,maxFee:'10000000000'}});
-     await set({stage:'preparing',lot:p.lot,prepareTxid:p.txid});
+     const p=await execute({kind:'prepare',review:{asset:ra,quantity:r.quantity,maxFee:'10000000000'}});
+     await set({stage:'preparing',asset:ra,lot:p.lot,prepareTxid:p.txid});
     }else{
      const lot=mst.lots.find(l=>l.id===r.lot);if(!lot?.tradable)continue;
      const o=await execute({kind:'list',review:{lot:r.lot,price:r.price,lifetime:r.lifetime,approval:'auto',stallSeconds:r.stallSeconds}});
@@ -248,10 +300,12 @@ export function createMarketHost({client,journal,ids,manifest,marketUrl,finality
   const reserve=[];for(const t of Object.values(doc.trades))if(t.role==='buyer'&&t.fundingKeyImages&&LIVE_BUYER.has(t.phase))reserve.push(...t.fundingKeyImages);
   if(reserve.length)await w.recoverReserve(reserve).catch(e=>log('recoverReserve',publicError(e)));
   await update(m=>{m.relayKey??=newRelayKey();m.events.push({at:Date.now(),label:'start',session:sessionId});});
+  if(tokenList)void readTokens();
  }
  async function tick(){
   if(closed)return;
   try{holder=await w.sync();mst=await w.marketStatus();synced=Date.now();syncError=null;}catch(e){syncError=publicError(e);onChange();return;}
+  if(tokenList&&!tokenRead&&Date.now()-tokensAsked>600000)void readTokens();
   if(nftsOn){
    try{nftIndex=await mk('/api/nfts');}catch(e){log('nft index',publicError(e));}
    try{nftLedger=await w.nftLedger();}catch(e){log('nft ledger',publicError(e));}
@@ -267,22 +321,23 @@ export function createMarketHost({client,journal,ids,manifest,marketUrl,finality
   await outbox().catch(e=>log('outbox',publicError(e)));
   onChange();
  }
- // Listing soon, for everyone (31 Oct 2026, owner: "so when someone lists a token it shows on everyones monero market"): a make-and-list
+ // Listing soon, for everyone (31 Oct 2026: a listed token shows on every wallet's Monero Market at once): a make-and-list
  // lot that waits for its anchor or for its first block is announced to the order book — signed by this wallet's Monero address over
  // an id that commits to asset, quantity, price, address and a nonce — and renewed every minute until it is listed. The nonce lives in
  // the approved listing terms, so the lot made from a waiting request keeps the same id (one public row from approval to listing).
+ // The asset is the lot's own token (14 Nov 2026; before, always the build's token).
  const announced=new Map();
  async function announcePending(){
   if(lotPayout)return;const t=Date.now(),items=[];
   for(const x of Object.values(doc.waiting))if(x.status==='waiting'&&x.kind==='prepare'&&x.review?.list?.price)
-   items.push({key:'w:'+x.id,stage:'anchor',quantity:x.review.quantity,price:x.review.list.price,nonce:x.review.list.pendNonce,save:n=>update(d=>{d.waiting[x.id].review.list.pendNonce=n;})});
+   items.push({key:'w:'+x.id,stage:'anchor',asset:x.review.asset||asset,quantity:x.review.quantity,price:x.review.list.price,nonce:x.review.list.pendNonce,save:n=>update(d=>{d.waiting[x.id].review.list.pendNonce=n;})});
   for(const l of Object.values(doc.lots)){const al=l.autoList;if(!al||al.status!=='waiting'||l.cancelTxid)continue;
-   items.push({key:'l:'+l.lot,stage:'lot',quantity:l.quantity,price:al.price,nonce:al.pendNonce,save:n=>update(d=>{d.lots[l.lot].autoList.pendNonce=n;})});}
+   items.push({key:'l:'+l.lot,stage:'lot',asset:lotAsset(l.lot),quantity:l.quantity,price:al.price,nonce:al.pendNonce,save:n=>update(d=>{d.lots[l.lot].autoList.pendNonce=n;})});}
   for(const it of items){
    if(t-(announced.get(it.key)||0)<60000)continue;announced.set(it.key,t);
    let nonce=it.nonce;if(!nonce){nonce=randomHex(32);await it.save(nonce);}
-   const id=await sha256hex(['xmr20-market-pending-v1',asset,it.quantity,it.price,nativeAddress,nonce].join('|'));
-   await mk('/api/pending',{asset,quantityAtoms:it.quantity,totalPiconero:it.price,payoutAddress:nativeAddress,nonce,stage:it.stage,relay:await attest(id)}).catch(e=>log('announce',publicError(e)));
+   const id=await sha256hex(['xmr20-market-pending-v1',it.asset,it.quantity,it.price,nativeAddress,nonce].join('|'));
+   await mk('/api/pending',{asset:it.asset,quantityAtoms:it.quantity,totalPiconero:it.price,payoutAddress:nativeAddress,nonce,stage:it.stage,relay:await attest(id)}).catch(e=>log('announce',publicError(e)));
   }
  }
  // Make and list: the listing approved with the lot is signed and posted once the lot is in a block (one approval in all).
@@ -330,7 +385,7 @@ export function createMarketHost({client,journal,ids,manifest,marketUrl,finality
    if(lotBusy(offer.lot))return refuse('This lot is reserved by another buyer’s trade');
    let ring=doc.rings[offer.lot];
    if(!ring){const r=await w.ring(offer.lot);ring={keyImage:r.keyImage,decoys:r.decoys,amount:r.amount};await update(d=>{d.rings[offer.lot]=ring;});}
-   const rec={role:'seller',tradeId:m.tradeId,peerKey:m.peerKey,offerId:m.body.offerId,offer:offer.wire,lot:offer.lot,buyer:m.from,counterparty:m.from,quantity:offer.quantity,price:offer.price,ring,createdAt:Date.now()};
+   const rec={role:'seller',tradeId:m.tradeId,peerKey:m.peerKey,offerId:m.body.offerId,offer:offer.wire,asset:offer.asset||offerToken(offer.wire)?.asset||lotAsset(offer.lot),lot:offer.lot,buyer:m.from,counterparty:m.from,quantity:offer.quantity,price:offer.price,ring,createdAt:Date.now()};
    history(rec,'ring-sent');await update(d=>{d.trades[m.tradeId]=rec;});
    return relay(m.from,'ring',m.tradeId,{offerId:m.body.offerId,ring});
   }
@@ -342,7 +397,7 @@ export function createMarketHost({client,journal,ids,manifest,marketUrl,finality
    if(t.kind!=='nft'&&doc.offers[t.offerId]?.status!=='listed'){await update(x=>{history(x.trades[t.tradeId],'failed','the listing was withdrawn');});return relay(t.buyer,'reject',t.tradeId,{reason:'The seller withdrew this listing'});}
    if(lotBusy(t.lot)){await update(x=>{history(x.trades[t.tradeId],'failed','another trade holds this lot');});return relay(t.buyer,'reject',t.tradeId,{reason:'This lot is reserved by another buyer’s trade'});}
    if(!dec.test(d.fee||'')||!dec.test(d.total||'')||BigInt(d.total)!==BigInt(t.price)+BigInt(d.fee))throw Error('draft totals are not price + fee');
-   const review={kind:'sell',tradeId:t.tradeId,offerId:t.offerId,lot:t.lot,quantity:t.quantity,price:t.price,payout:payoutAddress,buyer:t.buyer,fee:d.fee,total:d.total,expires:null};
+   const review={kind:'sell',tradeId:t.tradeId,offerId:t.offerId,lot:t.lot,...tokenFields(tradeAsset(t)),quantity:t.quantity,price:t.price,payout:payoutAddress,buyer:t.buyer,fee:d.fee,total:d.total,expires:null};
    const auto=doc.offers[t.offerId]?.approval==='auto';
    const a=newApproval('sell',review,{tradeId:t.tradeId,...autoStart(auto)});
    await update(x=>{x.trades[t.tradeId].draft=d;history(x.trades[t.tradeId],'awaiting-approval');x.approvals[a.id]=a;});
@@ -362,7 +417,11 @@ export function createMarketHost({client,journal,ids,manifest,marketUrl,finality
    }catch(e){await releaseFunding(t.tradeId,'failed',publicError(e));}
   }
   if(t.role==='buyer'&&m.type==='approval'&&t.phase==='awaiting-seller'){
-   const review={kind:'pay',tradeId:t.tradeId,offerId:t.offerId,lot:t.lot,quantity:t.quantity,price:t.price,fee:t.fee,total:t.total,payout:t.payout,seller:t.seller,confirmationsAtQuote:t.lotConfirmations,finalityDepth:finality,payBy:payByOf(m.body)};
+   // The payment is approved by name: the name saved with the trade when it was requested, or, for a trade begun before
+   // 14 Nov 2026, the name the wallet has now for the lot's token. Without a name the purchase stops before any signature.
+   const ta=tradeAsset(t),tk=t.tokenInfo?.symbol?t.tokenInfo:await named(ta);
+   if(!tk||tk.decimals!==MARKET_DECIMALS){await releaseFunding(t.tradeId,'failed','this wallet has no name for the lot’s token');relay(t.seller,'abandon',t.tradeId).catch(()=>{});return;}
+   const review={kind:'pay',tradeId:t.tradeId,offerId:t.offerId,lot:t.lot,asset:ta,tokenInfo:tk,quantity:t.quantity,price:t.price,fee:t.fee,total:t.total,payout:t.payout,seller:t.seller,confirmationsAtQuote:t.lotConfirmations,finalityDepth:finality,payBy:payByOf(m.body)};
    const a=newApproval('pay',review,{tradeId:t.tradeId});
    await update(x=>{const tt=x.trades[t.tradeId];tt.sellerApproval=approvalOf(m.body);tt.payBy=payByOf(m.body);history(tt,'awaiting-approval');x.approvals[a.id]=a;});
   }
@@ -496,7 +555,7 @@ export function createMarketHost({client,journal,ids,manifest,marketUrl,finality
  // ---- approvals (this window only)
  function newApproval(kind,review,extra={}){return {id:randomHex(10),kind,review,nonce:randomHex(16),status:'pending',createdAt:Date.now(),...extra};}
  const consuming=new Set();
- // Automatic seller approval (owner decision 30 Oct 2026): a listing made with sellerApproval 'auto' releases the sale signature
+ // Automatic seller approval (30 Oct 2026): a listing made with sellerApproval 'auto' releases the sale signature
  // without a click, through the same execute() checks as a manual approval (the engine refuses a draft that does not pay this
  // wallet the listed price). Called from tick(), which is already serialised. A failure before any signature declines the trade.
  // An automatic approval is written as 'approving' from the start (31 Oct 2026): written as 'pending' first, it showed in the
@@ -509,10 +568,23 @@ export function createMarketHost({client,journal,ids,manifest,marketUrl,finality
    await update(x=>{x.approvals[a.id].status='failed';x.approvals[a.id].error=msg;if(unsigned)history(x.trades[a.tradeId],'failed','automatic approval refused: '+msg);});
    if(unsigned)await relay(doc.trades[a.tradeId].buyer,'decline',a.tradeId).catch(()=>{});}
  }
+ // The token a lot review is about: saved in the review, or for an older review the token of its trade or lot.
+ const LOT_REVIEWS=new Set(['prepare','list','cancelLot','sell','pay']);
+ const reviewAsset=a=>a.review.asset||(doc.trades[a.tradeId]?tradeAsset(doc.trades[a.tradeId]):a.review.lot?lotAsset(a.review.lot):asset);
+ const reviewToken=a=>a.review.tokenInfo?.symbol?a.review.tokenInfo:tokenView(reviewAsset(a));
+ // A list or cancel review saved before 14 Nov 2026 names no token; until the first sync its lot may be one this wallet bought
+ // (not in its own lot records), so it is shown, and can be approved, only once the wallet's lot list is read.
+ const oldLotReview=a=>['list','cancelLot'].includes(a.kind)&&!a.review.asset;
  async function decide(id,nonce,decision){
   const a=doc.approvals[id];
   if(!a||a.status!=='pending'||a.nonce!==nonce||consuming.has(id))throw fail('Unknown, used or expired approval',409);
   consuming.add(id);
+  // A purchase is approved only by name (a payment review saved before 14 Nov 2026 has none until the token list gives one).
+  if(decision==='approve'&&a.kind==='pay'&&!(a.review.tokenInfo?.symbol||await named(reviewAsset(a)))){consuming.delete(id);throw fail(NO_NAME,409);}
+  // A lot review saved before 14 Nov 2026 learns its token from the wallet's lot list: not before the first sync.
+  if(decision==='approve'&&oldLotReview(a)&&!mst){consuming.delete(id);throw fail('The wallet has not synced yet',503);}
+  // The name lookup above can wait for the token list: the approval may have expired meanwhile.
+  if(doc.approvals[id]?.status!=='pending'){consuming.delete(id);throw fail('Unknown, used or expired approval',409);}
   await update(x=>{x.approvals[id].status=decision==='approve'?'approving':'declined';});
   if(decision!=='approve'){
    if(a.kind==='sell'||a.kind==='nftSell'){await update(x=>{history(x.trades[a.tradeId],'declined','seller declined');});await relay(doc.trades[a.tradeId].buyer,'decline',a.tradeId).catch(()=>{});}
@@ -530,7 +602,7 @@ export function createMarketHost({client,journal,ids,manifest,marketUrl,finality
  async function listLot(r){
   if(Object.values(doc.offers).some(o=>o.lot===r.lot&&['listed','posting'].includes(o.status)))throw Error('This lot is already listed');
   const o=await w.offer({lot:r.lot,price:r.price,now:now(),expires:now()+r.lifetime,...(lotPayout?{payout:lotPayout.address}:{})});
-  await update(x=>{x.offers[o.offerId]={offerId:o.offerId,wire:o.wire,lot:r.lot,quantity:o.quantity,price:o.price,payout:o.payout,expires:o.expires,lifetime:r.lifetime,status:'posting',approval:r.approval==='auto'?'auto':'manual',stallSeconds:r.stallSeconds??null};});
+  await update(x=>{x.offers[o.offerId]={offerId:o.offerId,wire:o.wire,asset:offerToken(o.wire)?.asset||lotAsset(r.lot),lot:r.lot,quantity:o.quantity,price:o.price,payout:o.payout,expires:o.expires,lifetime:r.lifetime,status:'posting',approval:r.approval==='auto'?'auto':'manual',stallSeconds:r.stallSeconds??null};});
   try{await mk('/api/offers',{wire:o.wire,relay:await attest(o.offerId)});await update(x=>{x.offers[o.offerId].status='listed';});}
   catch(e){if(e.status>=400&&e.status<500){await update(x=>{x.offers[o.offerId].status='rejected';});throw Error('The order book refused the listing: '+publicError(e));}log('post offer',publicError(e));}
   return {offerId:o.offerId,expires:o.expires};
@@ -541,7 +613,7 @@ export function createMarketHost({client,journal,ids,manifest,marketUrl,finality
   const q=await w.prepareLot({asset:r.asset,quantity:r.quantity,excludeNotes,...(spare?{anchor:'spare',anchorKeyImage:spare}:{})});
   if(BigInt(q.fee)>BigInt(r.maxFee)){await w.cancelBuild(q.buildId);throw Error(`Network fee ${q.fee} is above the approved ${r.maxFee}`);}
   const s=await w.sign(q.buildId);
-  await update(x=>{x.lots[s.notes[0]]={lot:s.notes[0],quantity:r.quantity,txid:s.txid,blob:s.blob,inputs:xa1Inputs(s.wire),anchor:s.anchorKeyImage||null,createdAt:Date.now(),...(r.list?{autoList:{...r.list,status:'waiting'}}:{})};},'lot-signed');
+  await update(x=>{x.lots[s.notes[0]]={lot:s.notes[0],asset:r.asset,quantity:r.quantity,txid:s.txid,blob:s.blob,inputs:xa1Inputs(s.wire),anchor:s.anchorKeyImage||null,createdAt:Date.now(),...(r.list?{autoList:{...r.list,status:'waiting'}}:{})};},'lot-signed');
   const p=await w.publishWithRecovery(s.blob,s.txid);if(!p.ok)throw Error('Lot preparation not accepted: '+(p.reason||p.status));
   return {txid:s.txid,lot:s.notes[0],fee:s.fee};
  }
@@ -558,8 +630,8 @@ export function createMarketHost({client,journal,ids,manifest,marketUrl,finality
   if(a.kind==='list')return listLot(r);
   if(a.kind==='cancelLot'){
    if(doc.lots[r.lot]?.cancelTxid)throw Error('A cancellation of this lot was already signed');
-   const q=await w.cancelLot(r.lot);const s=await w.sign(q.buildId);
-   await update(x=>{for(const o of Object.values(x.offers))if(o.lot===r.lot&&['listed','posting'].includes(o.status))o.status='cancelling';x.lots[r.lot]={...(x.lots[r.lot]||{}),cancelTxid:s.txid,cancelBlob:s.blob};
+   const la=lotAsset(r.lot),q=await w.cancelLot(r.lot);const s=await w.sign(q.buildId);
+   await update(x=>{for(const o of Object.values(x.offers))if(o.lot===r.lot&&['listed','posting'].includes(o.status))o.status='cancelling';x.lots[r.lot]={...(x.lots[r.lot]||{}),asset:la,cancelTxid:s.txid,cancelBlob:s.blob};
     for(const ap of Object.values(x.approvals))if(ap.kind==='sell'&&ap.status==='pending'&&x.trades[ap.tradeId]?.lot===r.lot){ap.status='expired';history(x.trades[ap.tradeId],'declined','seller cancelled the lot');}},'cancel-signed');
    for(const t of Object.values(doc.trades))if(t.role==='seller'&&t.lot===r.lot&&t.phase==='declined'&&!t.declineSent){await relay(t.buyer,'decline',t.tradeId).catch(()=>{});await update(x=>{x.trades[t.tradeId].declineSent=true;});}
    const p=await w.publishWithRecovery(s.blob,s.txid);if(!p.ok)throw Error('Cancellation not accepted: '+(p.reason||p.status));
@@ -672,26 +744,28 @@ export function createMarketHost({client,journal,ids,manifest,marketUrl,finality
   let rec={id,kind,status:'awaiting-approval',createdAt:Date.now()},approval=null;
   if(kind==='prepare'){
    if(!dec.test(b.quantityAtoms||'')||b.quantityAtoms==='0')throw fail('quantityAtoms: canonical positive decimal',400);
-   if(b.asset!==asset)throw fail('Unknown asset',400);
+   // Any token this wallet holds Open (until 14 Nov 2026: the build's own token only), and only one the wallet can name.
+   if(!hex32.test(b.asset||''))throw fail('Unknown asset',400);
    const open=BigInt(st.openBalances[b.asset]||'0');if(BigInt(b.quantityAtoms)>open)throw fail('Quantity is above your Open balance (Private balance is never used for a lot)',422);
+   const tk=await nameOrRefuse(b.asset);
    const maxFee=b.maxFeePiconero===undefined?'10000000000':b.maxFeePiconero;if(!dec.test(maxFee))throw fail('maxFeePiconero: canonical decimal',400);
    // Make and list: with listTotalPiconero the same approval also lists the lot at that price once it is in a block.
    let list=null;if(b.listTotalPiconero!==undefined){if(!dec.test(b.listTotalPiconero||'')||b.listTotalPiconero==='0')throw fail('listTotalPiconero: canonical positive decimal',400);
     list={price:b.listTotalPiconero,lifetime:Math.min(Math.max(Number(b.lifetimeSeconds)||86400,300),604800),...listingTerms(b)};}
-   approval=newApproval('prepare',{asset:b.asset,quantity:b.quantityAtoms,maxFee,openAfter:(open-BigInt(b.quantityAtoms)).toString(),finalityDepth:finality,...(list?{list,payout:payoutAddress}:{}),...(spareMode?{spare:freeSpares().length?'ready':'make'}:{})},{requestId:id});
+   approval=newApproval('prepare',{asset:b.asset,tokenInfo:tk,quantity:b.quantityAtoms,maxFee,openAfter:(open-BigInt(b.quantityAtoms)).toString(),finalityDepth:finality,...(list?{list,payout:payoutAddress}:{}),...(spareMode?{spare:freeSpares().length?'ready':'make'}:{})},{requestId:id});
   }else if(kind==='list'){
    const lot=st.lots.find(l=>l.id===b.lot);if(!lot)throw fail('Not one of your lots',422);
-   // Listed from the lot's first confirmation (owner, 30 Oct 2026); buyers still wait for D before anything moves.
+   // Listed from the lot's first confirmation (30 Oct 2026); buyers still wait for D before anything moves.
    if(!lot.anchorHeld)throw fail('This wallet no longer holds the lot',422);
    if(!(lot.confirmations>=1))throw fail('The lot is not in a block yet; list it after its first confirmation',422);
    if(!dec.test(b.totalPiconero||'')||b.totalPiconero==='0')throw fail('totalPiconero: canonical positive decimal',400);
    if(Object.values(doc.offers).some(o=>o.lot===b.lot&&['listed','posting'].includes(o.status))||Object.values(doc.approvals).some(a=>a.kind==='list'&&a.status==='pending'&&a.review.lot===b.lot))throw fail('This lot is already listed or awaiting your approval',409);
    const lifetime=Math.min(Math.max(Number(b.lifetimeSeconds)||86400,300),604800);
-   approval=newApproval('list',{lot:b.lot,quantity:lot.amount,price:b.totalPiconero,payout:payoutAddress,lifetime,finalityDepth:finality,...listingTerms(b)},{requestId:id});
+   approval=newApproval('list',{lot:b.lot,...tokenFields(lot.asset||lotAsset(b.lot)),quantity:lot.amount,price:b.totalPiconero,payout:payoutAddress,lifetime,finalityDepth:finality,...listingTerms(b)},{requestId:id});
   }else if(kind==='cancelLot'){
    const lot=st.lots.find(l=>l.id===b.lot);if(!lot)throw fail('Not one of your lots',422);
    const released=Object.values(doc.trades).some(t=>t.role==='seller'&&t.lot===b.lot&&t.phase==='released');
-   approval=newApproval('cancelLot',{lot:b.lot,quantity:lot.amount,released},{requestId:id});
+   approval=newApproval('cancelLot',{lot:b.lot,...tokenFields(lot.asset||lotAsset(b.lot)),quantity:lot.amount,released},{requestId:id});
   }else if(kind==='withdraw'){
    const o=doc.offers[b.offerId];if(!o)throw fail('Unknown offer',404);
    const released=Object.values(doc.trades).some(t=>t.role==='seller'&&t.lot===o.lot&&t.phase==='released');
@@ -740,11 +814,14 @@ export function createMarketHost({client,journal,ids,manifest,marketUrl,finality
    if(!c.final)throw fail(`Lot has ${c.confirmations} of ${finality} confirmations`,422);
    const dup=Object.values(doc.trades).find(t=>t.role==='buyer'&&t.offerId===c.offerId&&!['abandoned','declined','failed','refused'].includes(t.phase));
    if(dup)return {requestId:id,kind,status:'done',approvalId:null,approvalUrl:null,result:{tradeId:dup.tradeId,existing:true},error:null};
+   // The lot's token is the one the engine reads from the signed listing; the purchase goes on only with a name for it.
+   const ca=hex32.test(c.asset||'')?c.asset:null;if(!ca||offerToken(b.offer)?.asset!==ca)throw fail('The listing does not name its token',422);
+   const tk=await nameOrRefuse(ca);
    const maxFee=dec.test(b.maxFeePiconero||'')?b.maxFeePiconero:'10000000000';
    const entry=(await mk('/api/offers')).offers?.find(o=>o.offerId===c.offerId);
    const peerKey=sellerKey(c.offerId,entry?.relay,c.payout,lotPrefix);
    const tradeId=randomHex(16);
-   const t={role:'buyer',tradeId,peerKey,offerId:c.offerId,offer:b.offer,lot:c.lot,seller:c.seller,counterparty:c.seller,quantity:c.quantity,price:c.price,payout:c.payout,maxFee,lotConfirmations:c.confirmations,createdAt:Date.now()};
+   const t={role:'buyer',tradeId,peerKey,offerId:c.offerId,offer:b.offer,asset:ca,tokenInfo:tk,lot:c.lot,seller:c.seller,counterparty:c.seller,quantity:c.quantity,price:c.price,payout:c.payout,maxFee,lotConfirmations:c.confirmations,createdAt:Date.now()};
    // Spare anchors: the bought lot is anchored to a spare of this wallet; without a ready one the request waits (spareWork).
    const pick=spareMode?freeSpares()[0]:null;
    if(spareMode&&!pick){history(t,'waiting-anchor');await update(x=>{x.trades[tradeId]=t;x.requests[id]={...rec,status:'done',result:{tradeId,waiting:'anchor',readyInBlocks:DEFAULT_SPARE_BLOCKS}};});return view(doc.requests[id]);}
@@ -761,15 +838,22 @@ export function createMarketHost({client,journal,ids,manifest,marketUrl,finality
  // The extension has no approval URL a website could open: approvals live in this window (approvalUrl is null by contract).
  const view=r=>({requestId:r.id,kind:r.kind,status:r.status,approvalId:r.approvalId||null,approvalUrl:null,result:r.result||null,error:r.error||null});
  const pendingFor=tradeId=>Object.values(doc.approvals).find(a=>a.tradeId===tradeId&&a.status==='pending')||null;
- const tradeView=t=>({tradeId:t.tradeId,kind:t.kind||'lot',role:t.role,offerId:t.offerId||null,listingId:t.listingId||null,token:t.token||null,lot:t.lot||null,quantityAtoms:t.quantity,totalPiconero:t.price,feePiconero:t.fee||null,totalDebitPiconero:t.total||null,phase:t.phase,txid:t.txid||null,native:t.native||null,confirmations:t.confirmations||0,tokenError:t.tokenError||null,finalityDepth:finality,history:(t.history||[]).slice(-12),approvalUrl:null,approvalId:pendingFor(t.tradeId)?.id||null});
+ const tradeView=t=>({tradeId:t.tradeId,kind:t.kind||'lot',role:t.role,offerId:t.offerId||null,listingId:t.listingId||null,token:t.token||null,asset:t.kind==='nft'?null:tradeAsset(t),lot:t.lot||null,quantityAtoms:t.quantity,totalPiconero:t.price,feePiconero:t.fee||null,totalDebitPiconero:t.total||null,phase:t.phase,txid:t.txid||null,native:t.native||null,confirmations:t.confirmations||0,tokenError:t.tokenError||null,finalityDepth:finality,history:(t.history||[]).slice(-12),approvalUrl:null,approvalId:pendingFor(t.tradeId)?.id||null});
  const binding=()=>({network:manifest.network.kind,genesis:manifest.network.genesis,domain:manifest.ledgerDomain,accountId,ownerKey,payoutAddress:nativeAddress,sessionId,asset});
  function state(){
   const st=mst,n=holder?.native||null;
   const shielded=holder?.shielded?.balances?(holder.shielded.balances[asset]||'0'):null;
-  return {binding:binding(),sync:{state:syncError?'unavailable':(synced?'ready':'syncing'),tipHeight:synced&&st?st.tip:null,error:syncError},
+  // Per token (14 Nov 2026), beside the single-token fields: every token this wallet holds Open, in lots or Private; null
+  // until the wallet has synced (not known is not zero). `tokens` names every token the views mention.
+  const sh=holder?.shielded?.balances||null;
+  const assets=synced&&st?Object.fromEntries([...new Set([...Object.keys(st.openBalances||{}),...Object.keys(st.lotBalances||{}),...Object.keys(sh||{})])].filter(a=>hex32.test(a))
+   .map(a=>[a,{openAtoms:st.openBalances?.[a]||'0',lotAtoms:st.lotBalances?.[a]||'0',privateAtoms:sh?(sh[a]||'0'):null}]).filter(([,v])=>v.openAtoms!=='0'||v.lotAtoms!=='0'||(v.privateAtoms||'0')!=='0')):null;
+  const seen=new Set([asset,...Object.keys(assets||{}),...(st?.lots||[]).map(l=>l.asset||lotAsset(l.id)),...Object.values(doc.offers).map(o=>o.asset||lotAsset(o.lot)),...Object.values(doc.trades).filter(t=>t.kind!=='nft').map(tradeAsset),...Object.values(doc.waiting).map(x=>x.review?.asset||asset)]);
+  const tokenNames=Object.fromEntries([...seen].map(a=>tokenOf(a)).filter(Boolean).map(t=>[t.asset,{symbol:t.symbol,name:t.name,mint:t.mint,decimals:t.decimals}]));
+  return {binding:binding(),assets,tokens:tokenNames,sync:{state:syncError?'unavailable':(synced?'ready':'syncing'),tipHeight:synced&&st?st.tip:null,error:syncError},
    balances:{openAtoms:synced&&st?(st.openBalances[asset]||'0'):null,lotAtoms:synced&&st?(st.lotBalances[asset]||'0'):null,privateAtoms:synced?shielded:null,nativeAvailablePiconero:synced&&n?n.unlocked:null,nativeLockedPiconero:synced&&n?n.locked:null,nativeReservedPiconero:synced&&n?n.reserved:null},
-   lots:(st?.lots||[]).map(l=>({id:l.id,quantityAtoms:l.amount,height:l.height,confirmations:l.confirmations,tradable:l.tradable,anchorHeld:l.anchorHeld,listed:Object.values(doc.offers).find(o=>o.lot===l.id&&['listed','posting'].includes(o.status))?.offerId||null,released:Object.values(doc.trades).some(t=>t.role==='seller'&&t.lot===l.id&&t.phase==='released'),listable:Boolean(l.anchorHeld&&l.confirmations>=1),autoList:doc.lots[l.id]?.autoList?{status:doc.lots[l.id].autoList.status,totalPiconero:doc.lots[l.id].autoList.price,error:doc.lots[l.id].autoList.error||null}:null})),
-   offers:Object.values(doc.offers).map(o=>({offerId:o.offerId,lot:o.lot,quantityAtoms:o.quantity,totalPiconero:o.price,expires:o.expires,status:o.status==='posting'?'listed':o.status})),
+   lots:(st?.lots||[]).map(l=>({id:l.id,asset:l.asset||lotAsset(l.id),quantityAtoms:l.amount,height:l.height,confirmations:l.confirmations,tradable:l.tradable,anchorHeld:l.anchorHeld,listed:Object.values(doc.offers).find(o=>o.lot===l.id&&['listed','posting'].includes(o.status))?.offerId||null,released:Object.values(doc.trades).some(t=>t.role==='seller'&&t.lot===l.id&&t.phase==='released'),listable:Boolean(l.anchorHeld&&l.confirmations>=1),autoList:doc.lots[l.id]?.autoList?{status:doc.lots[l.id].autoList.status,totalPiconero:doc.lots[l.id].autoList.price,error:doc.lots[l.id].autoList.error||null}:null})),
+   offers:Object.values(doc.offers).map(o=>({offerId:o.offerId,asset:o.asset||lotAsset(o.lot),lot:o.lot,quantityAtoms:o.quantity,totalPiconero:o.price,expires:o.expires,status:o.status==='posting'?'listed':o.status})),
    trades:Object.values(doc.trades).sort((a,b)=>b.createdAt-a.createdAt).map(tradeView),
    nfts:ownedNfts().map(t=>({id:t.id,name:t.name,collection:t.collection,collectionName:t.collectionName,edition:t.edition,max:t.collectionMax,confirmations:t.confirmations,anchored:Boolean(t.anchor),anchorHeld:t.anchorHeld,anchorConfirmations:t.anchorConfirmations,tradable:!(t.anchorHeld&&t.anchorConfirmations<finality),saleReady:t.saleReady,listed:Object.values(doc.nftListings).find(l=>(l.listing?.token||l.token)===t.id&&['listed','posting','anchoring'].includes(l.status))?.id||null,released:Object.values(doc.trades).some(x=>x.kind==='nft'&&x.role==='seller'&&x.token===t.id&&x.phase==='released')})),
    nftListings:Object.values(doc.nftListings).map(l=>({id:l.id,token:l.listing?.token||l.token,pricePiconero:l.listing?.pricePiconero||l.price,expires:l.listing?.expires||null,status:l.status==='posting'?'listed':l.status,anchorTxid:l.anchorTxid||null})),
@@ -778,12 +862,12 @@ export function createMarketHost({client,journal,ids,manifest,marketUrl,finality
     maturing:(mst?.spares?.maturing||[]).filter(x=>!namedSpares().has(x.keyImage)).map(x=>({height:x.height})),
     sending:(()=>{const known=new Set([...(mst?.spares?.ready||[]),...(mst?.spares?.maturing||[])].map(x=>x.keyImage));return Object.values(doc.spares).filter(x=>x.status==='sent'&&!known.has(x.anchor)&&Date.now()-x.createdAt<6*3600e3).length;})(),
     sendingInBlock:(()=>{const known=new Set([...(mst?.spares?.ready||[]),...(mst?.spares?.maturing||[])].map(x=>x.keyImage));return Object.values(doc.spares).filter(x=>x.status==='sent'&&!known.has(x.anchor)&&x.blockHeight!=null&&Date.now()-x.createdAt<6*3600e3).map(x=>x.blockHeight).sort((a,b)=>a-b);})()},
-   waiting:Object.values(doc.waiting).filter(x=>x.status==='waiting').map(x=>({id:x.id,kind:x.kind,quantityAtoms:x.review.quantity,listTotalPiconero:x.review.list?.price||null,since:x.createdAt,spare:x.spare||null})),
+   waiting:Object.values(doc.waiting).filter(x=>x.status==='waiting').map(x=>({id:x.id,kind:x.kind,asset:x.review.asset||asset,quantityAtoms:x.review.quantity,listTotalPiconero:x.review.list?.price||null,since:x.createdAt,spare:x.spare||null})),
    pendingApprovals:Object.values(doc.approvals).filter(a=>a.status==='pending').map(a=>({approvalId:a.id,kind:a.kind,url:null}))};
  }
  async function handle(m){
   const method=String(m?.method||''),b=m?.body&&typeof m.body==='object'?m.body:{};
-  if(method==='handshake')return {protocol:PROTOCOL,adapterId:'xmr20-wallet-extension-market',binding:binding(),capabilities:['public-state','prepare-lot','make-and-list','list-offer','withdraw-offer','cancel-lot-native','buy-whole-lot','wallet-owned-review','journal-before-release','recover-saved','nft-list','nft-withdraw','nft-anchor','nft-buy','nft-cancel-native','spare-anchors'],realTradingEnabled:false,settlement:'anchored-lots-experimental-unreviewed',finalityDepth:finality};
+  if(method==='handshake')return {protocol:PROTOCOL,adapterId:'xmr20-wallet-extension-market',binding:binding(),capabilities:['public-state','prepare-lot','multi-asset-lots','make-and-list','list-offer','withdraw-offer','cancel-lot-native','buy-whole-lot','wallet-owned-review','journal-before-release','recover-saved','nft-list','nft-withdraw','nft-anchor','nft-buy','nft-cancel-native','spare-anchors'],realTradingEnabled:false,settlement:'anchored-lots-experimental-unreviewed',finalityDepth:finality};
   if(method==='state')return state();
   if(method==='request'){const r=doc.requests[String(m.id||'')];if(!r)throw fail('Unknown request',404);return view(r);}
   if(method==='trade'){const t=doc.trades[String(m.id||'')];if(!t)throw fail('Unknown trade',404);return tradeView(t);}
@@ -809,7 +893,7 @@ export function createMarketHost({client,journal,ids,manifest,marketUrl,finality
    +Object.values(doc.trades).filter(x=>!IDLE.has(x.phase)&&!(x.role==='buyer'&&x.phase==='awaiting-approval')&&x.createdAt>week).length;}
  return {
   start,tick:()=>serial(tick),handle,state,binding,activity,
-  approvals:()=>Object.values(doc.approvals).filter(a=>a.status==='pending').map(a=>({id:a.id,kind:a.kind,review:a.review,nonce:a.nonce,createdAt:a.createdAt,requestId:a.requestId||null,tradeId:a.tradeId||null})),
+  approvals:()=>Object.values(doc.approvals).filter(a=>a.status==='pending'&&!(oldLotReview(a)&&!mst)).map(a=>({id:a.id,kind:a.kind,review:LOT_REVIEWS.has(a.kind)?{...a.review,asset:reviewAsset(a),tokenInfo:reviewToken(a)}:a.review,nonce:a.nonce,createdAt:a.createdAt,requestId:a.requestId||null,tradeId:a.tradeId||null})),
   decide,
   get doc(){return doc;},get synced(){return synced;},get syncError(){return syncError;},
   close(){closed=true;},

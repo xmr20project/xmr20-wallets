@@ -11,10 +11,10 @@ Each file exists **once** in this repository, and the wallets import it from her
 | Folder | What it does |
 |---|---|
 | `token/` | **XMR20 tokens on Monero.** `token-format.js` handles Open and Private balances, sends (open to a Monero address, private to an `xmr20p1…` address), Make private / Make open, the private bridge to and from Solana with its fee checks, `xmr20p1…` addresses (bech32m form of the Penumbra address), and "Enable private transfers". Next to it are its two workers (`private-holder.worker.js`, `private-claim.worker.js`), the encrypted journal (`private-journal.js`), the scanner and carrier builder (`holder-*.js`), Monero-address certificates (`address-cert.js`), its screen styles (`private-format.css`) and the mainnet parameter manifest. |
-| `holder-wasm/` | **The holder engine.** Rust code compiled to `holder.wasm`: token keys (scheme XMR20-TKD1), local chain scanning, building and proving records, Monero carrier transactions, and the Monero Market's anchored lots (from block 3,796,100). `holder.wasm` is the built file the wallets use; the Rust sources are next to it ([README](holder-wasm/README.md)). |
-| `monero/` | **The XMR wallet.** `runtime/` holds the Monero worker exactly as installed in wallet 0.1.135: `native.worker.js` with its XMR20 coin guard (`native-carrier-guard.js`), `market-ordinary-guard.js`, `native-carrier-transaction.js` and `keys.worker.js`. `native-wallet-client.js` is the small client the website and the CLI use to talk to it. `patches/` keeps the three scripts that added the TKD1 change-freeze fix, the 3-coin split (`prepareSplit`) and the choice of 2 to 16 coins (`coins`) to the worker; `runtime/` already contains their result. |
+| `holder-wasm/` | **The holder engine.** Rust code compiled to `holder.wasm`: token keys (scheme XMR20-TKD1), local chain scanning, building and proving records, Monero carrier transactions, and the Monero Market's anchored lots (from block 3,796,100). `holder.wasm` is the built file the wallets use; the Rust sources are next to it ([README](holder-wasm/README.md)). `mordinals.wasm` is the same engine plus the Mordinals operations, which the extension's Collectibles tab runs (0.1.142+). |
+| `monero/` | **The XMR wallet.** `runtime/` holds the Monero worker exactly as installed in wallet 0.1.143: `native.worker.js` with its XMR20 coin guard (`native-carrier-guard.js`), `market-ordinary-guard.js`, `native-carrier-transaction.js` and `keys.worker.js`. `native-wallet-client.js` is the small client the website and the CLI use to talk to it. `patches/` keeps the four scripts that added the TKD1 change-freeze fix, the 3-coin split (`prepareSplit`), the choice of 2 to 16 coins (`coins`) and one transaction paying up to three exact amounts for a Mordinal purchase (`preparePayments`, 0.1.142) to the worker; `runtime/` already contains their result. |
 | `headless/` | **For programs without screens.** `token-ops.js` lets the CLI use the token engine: it fills the same fields and presses the same buttons a person would, and stops at every review. It does not repeat any engine logic. |
-| `shared/` | **Other code the extension and the website both use**, so it isn't copied twice: wallet helpers from the extension (`core.js`, prices, holdings, the native send and swap pages…), the older bridge SDK (`bridge-sdk/`), the native-market client and XN1 format (`native-market/`), the shared protocol constants (`protocol/`), two website modules the extension imports (`website/`), the extension's base stylesheet and the build plugin (`build-tools/`). |
+| `shared/` | **Other code the extension and the website both use**, so it isn't copied twice: wallet helpers from the extension (`core.js`, prices, holdings, the native send and swap pages…), the older bridge SDK (`bridge-sdk/`), the native-market client and XN1 format (`native-market/`), the shared protocol constants (`protocol/`), three website modules the extension imports (`website/`, among them the SOL ⇄ wXMR swap checks), the extension's base stylesheet and the build plugin (`build-tools/`). |
 | `tests/` | Engine tests (see below). |
 
 ## Build
@@ -32,7 +32,7 @@ This writes `engine/dist/`:
 - the Monero worker files
 - the Monero library, from the npm package `monero-ts` 0.11.16
 
-It then compares every file with the one installed in **XMR20 Wallet 0.1.135** and writes
+It then compares every file with the one installed in **XMR20 Wallet 0.1.143** and writes
 the result to `dist/HASHES.json`. All 13 files are byte-identical, with one checked exception: the token worker imports the
 market's CommonJS codec (`market-mapcodec.cjs`), and because `engine/` is an ES-module package esbuild adds a 2-character
 interop flag to that import. Without that flag the worker is byte-identical; `build.mjs` checks exactly this. The extension, website and CLI builds call this build
@@ -44,13 +44,16 @@ themselves.
 npm test -w engine
 ```
 
-- `engine-build.test.mjs`: the build is byte-identical to wallet 0.1.135 (apart from the interop flag above).
+- `engine-build.test.mjs`: the build is byte-identical to wallet 0.1.143 (apart from the interop flag above).
 - `xmr20p-address.test.mjs`: `xmr20p1…` ⇄ `penumbra1…` round trips, the BIP-350 vectors, and that a mistyped address
   is refused.
 - `worker-split.test.mjs`: the Monero worker's `prepareSplit` builds one transaction to yourself with 2 equal payments
   plus change, never relays it, refuses tiny balances, and refuses to spend an XMR20 carrier coin.
 - `worker-split-coins.test.mjs`: Split with 2 to 16 coins (Monero allows 16 outputs per transaction): equal payments to
   yourself plus change, at least 0.0002 XMR per coin, 3 coins when none is chosen, never relayed, carrier coins never spent.
+- `worker-payments.test.mjs`: `preparePayments` (0.1.142) pays up to three exact amounts in one transaction, never
+  relays it, and refuses an empty or longer list, a bad address or amount, this wallet's own address, and a transaction
+  that does not pay exactly what was asked.
 - `token-pending.test.mjs`: the real token module with its encrypted journal: right after a private send the private balance
   leaves out the notes the transfer holds ("200 pending"), and each pending operation is one compact row; tokens arriving show
   as Pending while they wait in the node's pool, then Confirming n/10, and the wallet's own change is not shown as received.
@@ -82,4 +85,10 @@ sources of 3 November 2026: extension 0.1.135 (the tester zip) and the website w
 release 63 (2 November 2026). The market files come from `wallet-extension/market/` (its patches are applied to six
 wallet files here) and the market engine from the Monero Market research folder. The one edit besides import paths is in
 `web-wallet/src/private-wallet-host.js`: it now imports the stylesheet from `shared/extension-style.css` and
-`token/private-format.css`, the two files the extension's `style.css` is built from.
+`token/private-format.css`, the two files the extension's `style.css` starts from.
+
+On 14 November 2026 the files the extension uses were brought up to extension 0.1.143: the Solana node choice
+(`shared/solana-rpc.js`, `core.js`, `public-balance.js`, `solana-holdings.js`, `preferences.js`), market lots of any
+token (`shared/market-host.js`, `market-reviews.js`), the swap checks (`shared/website/sol-wxmr-swap.js`) and the Monero
+worker's `preparePayments`. The website wallet and the CLI in this repository pass none of the new options; with the
+defaults these files work as before for them (the first free public Solana node, XMR20 lots only, no payments action).

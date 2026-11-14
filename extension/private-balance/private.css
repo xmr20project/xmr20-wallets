@@ -1,0 +1,10 @@
+/* Private balance screens (local devnet test copy). */
+.pb-note{margin:0 0 8px}
+.pb-actions{display:grid;gap:8px;margin:10px 0 4px}
+.pb-pair{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.pb-pair button{width:100%}
+.pb-history{margin:6px 0 0;font-size:12px;overflow-wrap:anywhere}
+.pb-review{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin:0 0 8px}
+.pb-review dt{color:var(--muted,#9aa0a6);font-size:12px}
+.pb-review dd{margin:0;overflow-wrap:anywhere;font-size:13px}
+#pb-asset{width:100%}

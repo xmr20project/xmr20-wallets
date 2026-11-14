@@ -1,5 +1,6 @@
 import bs58 from 'bs58';
 import {Keypair,PublicKey,SystemProgram,Transaction,Connection} from '@solana/web3.js';
+import {PUBLIC_SOLANA_RPCS,solanaSendEndpoint} from './solana-rpc.js';
 export {checkMoneroAddress} from './address.js';
 export {loadWalletHoldings,validateWalletHoldings,tokenAmount} from './holdings.js';
 export {Keypair,PublicKey,bs58};
@@ -23,8 +24,12 @@ export async function encryptVault(data,password){
 export async function decryptVault(box,password){
  try{if(box.version!==1||box.kdf!=='PBKDF2-SHA256'||box.iterations!==600000||box.ciphertext.length>2000000||un64(box.salt).length!==32||un64(box.iv).length!==12)throw Error();const key=await derive(password,un64(box.salt),['decrypt']);const plain=await crypto.subtle.decrypt({name:'AES-GCM',iv:un64(box.iv),additionalData:enc.encode('XMR20-extension-v1')},key,un64(box.ciphertext));try{const d=JSON.parse(dec.decode(plain));if(!Array.isArray(d.accounts)||d.accounts.length>100)throw Error();return d;}finally{new Uint8Array(plain).fill(0);}}catch{throw Error('Could not unlock. Check your password and backup file.');}
 }
-export const RPC='https://solana-rpc.publicnode.com';
-export const connection=new Connection(RPC,'confirmed');
+// Transactions are built and sent through the Solana node chosen in Settings (solana-rpc.js): the person's own node, or
+// the first free public node. `connection` always stands for the current choice.
+export const RPC=PUBLIC_SOLANA_RPCS[0];
+let rpcConnection=null,rpcConnectionUrl=null;
+export function solanaConnection(){const url=solanaSendEndpoint();if(url!==rpcConnectionUrl){rpcConnection=new Connection(url,'confirmed');rpcConnectionUrl=url;}return rpcConnection;}
+export const connection=new Proxy({},{get(_,key){const c=solanaConnection(),value=c[key];return typeof value==='function'?value.bind(c):value;}});
 export async function prepareSolSend(account,to,input){
  const from=new PublicKey(account.sol),recipient=new PublicKey(to),lamports=units(input,9);
  if(from.equals(recipient))throw Error('Choose a different recipient.');
