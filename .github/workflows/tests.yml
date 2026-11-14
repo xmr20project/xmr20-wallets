@@ -52,6 +52,9 @@ jobs:
         run: npm run test:engine -w cli
       - name: Build the Chrome extension
         run: npm run build:extension
+      # private-balance.js is kept prebuilt; this installs its own pinned dependencies and fails unless the rebuild is identical.
+      - name: Rebuild the extension's private-balance.js from source
+        run: npm run build:private-balance
       - name: Build the website wallet
         run: npm run build:web
       - name: Build the ready-to-run CLI download

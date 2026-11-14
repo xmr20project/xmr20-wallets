@@ -7,10 +7,11 @@
 // and the activity count go through the background. OFFLINE FAKECHAIN / STAGENET builds only (the engine refuses mainnet).
 import {createWorkerClient} from '../../engine/token/worker-client.js';import {openTokenWorker} from '../../engine/shared/market-open.js';
 import {createPrivateJournal} from '../../engine/token/private-journal.js';
-import {createMarketHost} from '../../engine/shared/market-host.js';
+import {createMarketHost,bridgeTokenList} from '../../engine/shared/market-host.js';
 import {MONERO_MARKET_ORIGIN} from './site-policy.js';
 import {MARKET_HOST_LOCK} from './market-runner-control.js';
 const API=typeof __XMR20_MONERO_MARKET_API__==='string'?__XMR20_MONERO_MARKET_API__:null;
+const TOKENS=typeof __XMR20_MONERO_MARKET_TOKENS__==='string'?__XMR20_MONERO_MARKET_TOKENS__:null;
 const NODE=typeof __XMR20_MONERO_MARKET_NODE__==='string'?__XMR20_MONERO_MARKET_NODE__:null,PARAMS=typeof __XMR20_MONERO_MARKET_PARAMS__==='string'?__XMR20_MONERO_MARKET_PARAMS__:null,ASSET=typeof __XMR20_MONERO_MARKET_ASSET__==='string'?__XMR20_MONERO_MARKET_ASSET__:null;
 const STEP_MS=3000;
 async function call(action,args={}){const r=await chrome.runtime.sendMessage({channel:'xmr20-market-runner',action,...args});if(!r||r.error||!Object.hasOwn(r,'value'))throw Error(r?.error||'Market runner stopped.');return r.value;}
@@ -31,13 +32,13 @@ const windowWaiting=async()=>(await navigator.locks.query()).pending?.some(l=>l.
   finally{keys.seed='';}
   await call('check',bind);
   if(!opened.marketJournalKey||!opened.market)throw Error('This token worker has no market support.');
-  // Mainnet (owner, 31 Oct 2026): only with an engine built with the market start block (lots count from it for every reader built alike).
+  // Mainnet (31 Oct 2026): only with an engine built with the market start block (lots count from it for every reader built alike).
   if(!['offline-fakechain','stagenet'].includes(opened.network?.kind)&&!(opened.network?.kind==='mainnet'&&opened.market?.activationHeight!=null))throw Error('Monero Market runs on mainnet only in a build with the market start block.');
   const store={get:key=>call('store',{...bind,op:'get',key}),set:(key,value)=>call('store',{...bind,op:'set',key,value})};
   const journal=createPrivateJournal({store,journalKey:'xmr20-market-journal',saltKey:'xmr20-market-journal-salt',aad:'XMR20-market-journal-v1'});
   journal.unlockWithKey(opened.marketJournalKey);
   const manifest=await (await fetch(chrome.runtime.getURL('vendor/parameters-manifest.json'))).json();
-  host=createMarketHost({client,journal,ids:{ownerKey:opened.ownerKey,nativeAddress:opened.nativeAddress,tokenAddress:opened.tokenAddress},manifest,marketUrl:API||MONERO_MARKET_ORIGIN,finality:opened.market.finalityDepth,asset:ASSET,accountId:keys.accountName,log:(...a)=>console.warn('[market runner]',...a)});
+  host=createMarketHost({client,journal,ids:{ownerKey:opened.ownerKey,nativeAddress:opened.nativeAddress,tokenAddress:opened.tokenAddress},manifest,marketUrl:API||MONERO_MARKET_ORIGIN,finality:opened.market.finalityDepth,asset:ASSET,accountId:keys.accountName,tokenList:TOKENS?bridgeTokenList(TOKENS):null,log:(...a)=>console.warn('[market runner]',...a)});
   const watch=setInterval(()=>{call('check',bind).catch(e=>{clearInterval(watch);stop(e.message);});},5000);
   let reported=-1,reportedAt=0,ticks=0,lastError='';
   void status('waiting','the market window is open');
