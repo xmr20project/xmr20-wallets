@@ -157,7 +157,7 @@ it also holds your saved operations and scan progress.
 
 - **The engine is not copied.** `cli/build.mjs` bundles `browser/host.js` with `engine/token`, `engine/monero` and
   `engine/shared`, and copies `engine/dist`. The engine build checks that its files are byte-identical to the installed
-  wallet 0.1.143.
+  wallet 0.1.144.
 - **Headless layer.** The token engine was written for screens. [`engine/headless/token-ops.js`](../engine/headless/token-ops.js)
   lets the CLI use it without one: it fills the same fields and presses the same buttons a person would. It stops at
   every review so the CLI can ask you. No engine logic is repeated.
@@ -185,9 +185,10 @@ address-book entry to the bridge, as every wallet does when it opens.
 
 ## Changes in 0.5.2
 
-0.5.2 copies the engine files of wallet 0.1.143. The one difference from 0.5.1 is the Monero worker's new
-`preparePayments` action (one transaction paying up to three exact amounts, which the Chrome extension uses to buy a
-Mordinal). The CLI does not call it. No new commands; the CLI's network allowlist is unchanged.
+0.5.2 copies the engine files of wallet 0.1.144. Two differences from 0.5.1: the Monero worker's new `preparePayments`
+action (one transaction paying up to three exact amounts, which the Chrome extension uses to buy a Mordinal; the CLI does
+not call it), and `holder.wasm` without the build machine's folder name in its error-message paths (no other byte
+changed). No new commands; the CLI's network allowlist is unchanged.
 
 ## Changes in 0.5.1
 
