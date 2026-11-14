@@ -36,7 +36,7 @@ const privateBridgeTest=typeof __XMR20_JOINT_PRIVATE_TEST__!=='undefined'&&__XMR
 import {createPrivateFormat} from '../../engine/token/token-format.js';
 const privateFormatTest=typeof __XMR20_PRIVATE_FORMAT_TEST__!=='undefined'&&__XMR20_PRIVATE_FORMAT_TEST__;
 let privateFormat=null;const pf=()=>privateFormatTest?(privateFormat??=createPrivateFormat({account,oneShot,workerClient:createWorkerClient,store,secret:()=>password,show,on,run,toast,esc,amount,units,compactTokenBalance,importSol,same,$,render:()=>{if(vault&&screen==='home')render();},close:()=>{modal.close();modal.innerHTML='';},tokenIcon:mint=>tokenImage(mint),solBalance:()=>(/^\d+$/.test(String(cache.sol??''))?cache.sol:null),usdOf:(mint,amountRaw)=>{const v=tokenUsd({mint,amountRaw},currentQuote(cache.prices,mint));return v===null?null:usd(v);},
- // 0.1.116 (owner: "Enable private transfers"): the token screen's split uses this account's Monero wallet (native worker
+ // 0.1.116: the token screen's split uses this account's Monero wallet (native worker
  // prepareSplit: one transaction to itself leaving 3 coins, behind the XMR20 coin guard; relay sends only that review).
  splitXmr:{prepare:async()=>{const e=epoch;const client=await nativeOpen(e);await nativeSync(e,client);same(e);return client.call('prepareSplit',{node:nodeFor(),carrierLookup:'local'},150000);},
   checkCoins:async()=>{const e=epoch;const client=await nativeOpen(e);same(e);return client.call('checkCarriers',{node:nodeFor(),carrierLookup:'node'},150000);},
@@ -121,7 +121,7 @@ function receivingXmr(x=cache.xmr){
  return {total,amount:'+'+compactTokenBalance(total.toString(),12)+' XMR',status};
 }
 // A catch-up sync when the wallet opens, unlocks or switches account, and on Refresh, so XMR shows without pressing Sync
-// (owner, 28 Oct 2026: Monero and XMR20 on Monero sync together, from the last sync). For a wallet with saved scan progress
+// (28 Oct 2026: Monero and XMR20 on Monero sync together, from the last sync). For a wallet with saved scan progress
 // (it resumes there) or one that starts at or after the XMR20 start (a short first scan); not more than once a minute, and
 // never while another task runs.
 async function autoCatchUp(){
@@ -187,8 +187,7 @@ function placeMoneroTokens(){
  if(st.syncing&&xmr){const note=xmr.querySelector('.asset-value small:last-child');if(note)note.innerHTML=`<span class="coin-syncing"><span class="pf-spin" aria-hidden="true"></span>Syncing · <span id="pf-pct">${st.pct??0}%</span></span>`;xmr.querySelector('.asset-info')?.insertAdjacentHTML('beforeend',`<span class="pf-bar coin-sync" role="progressbar" aria-label="Monero sync"><i id="pf-bar" style="width:${st.pct??3}%"></i></span>`);}
  pf().bind();
 }
-// 28 Oct 2026 (owner: "fix all of this, so that its just premium wallet UI, everything is intuitive and it all works for the new
-// open/private token format"): Send, Bridge and Receive list every asset by chain and open the right flow for it.
+// 28 Oct 2026: Send, Bridge and Receive list every asset by chain and open the right flow for it.
 const positiveRaw=v=>{try{return BigInt(v||'0')>0n;}catch{return false;}};
 function hubRow(id,coin,name,sub,value,note=''){return `<button class="asset hub-row" id="${id}">${coin}<span class="asset-info"><strong>${esc(name)}</strong><small>${esc(sub)}</small></span><span class="asset-value">${esc(value)}${note?`<small>${esc(note)}</small>`:''}</span></button>`;}
 const hubHead=(title,toMonero)=>`<span class="pf-screen" hidden></span><div class="pf-seg hub-seg" role="group" aria-label="${title}"><button class="${toMonero?'on':''}" id="hub-to-monero" aria-pressed="${toMonero}">To Monero<small>from Solana</small></button><button class="${toMonero?'':'on'}" id="hub-to-solana" aria-pressed="${!toMonero}">To Solana<small>from Monero</small></button></div>`;
@@ -430,7 +429,7 @@ async function refresh({forcePrices=false,forceHoldings=false}={}){if(typeof pf=
  await Promise.allSettled(jobs);if(!current())return;
  cache.loading=balanceReads.size>0;paint();
 }
-function inscriptionCard(r){const quote=currentQuote(cache.prices,r.mint),value=tokenUsd(r,quote);return `<article class="inscription-card"><div class="inscription-heading"><strong>${esc(r.name)}</strong><span class="pill">${esc(r.ticker)}</span></div><div class="inscription-balance">${esc(amount(r.amountRaw))} <span>${esc(r.network==='monero'?'Monero':'Solana')}</span></div><div class="inscription-usd">${value===null?'Price unavailable':usd(value)+' estimated'+(quote.stale||r.stale?' · Last known':'')}</div><a class="proof-link" href="${isJointHolding(r)?esc(r.receipt.url):'https://xmr20.org/#inscription/'+encodeURIComponent(r.id)}" target="_blank" rel="noopener noreferrer">View inscription <span aria-hidden="true">↗</span></a><div class="mint-field"><span>Solana mint</span><code>${esc(r.mint)}</code></div></article>`;}
+function inscriptionCard(r){const quote=currentQuote(cache.prices,r.mint),value=tokenUsd(r,quote);return `<article class="inscription-card"><div class="inscription-heading"><strong>${esc(r.name)}</strong><span class="pill">${esc(r.ticker)}</span></div><div class="inscription-balance">${esc(amount(r.amountRaw))} <span>${esc(r.network==='monero'?'Monero':'Solana')}</span></div><div class="inscription-usd">${value===null?'Price unavailable':usd(value)+' estimated'+(quote.stale||r.stale?' · Last known':'')}</div>${isJointHolding(r)||r.deployment?`<a class="proof-link" href="${isJointHolding(r)?esc(r.receipt.url):'https://xmr20.org/#inscription/'+encodeURIComponent(r.id)}" target="_blank" rel="noopener noreferrer">View inscription <span aria-hidden="true">↗</span></a>`:''}<div class="mint-field"><span>Solana mint</span><code>${esc(r.mint)}</code></div></article>`;}
 function jointPendingHTML(query=''){
  const rows=(cache.jointPending??[]).filter(r=>(r.name+' '+r.ticker+' '+r.mint).toLowerCase().includes(query));
  if(!rows.length)return '';
@@ -495,7 +494,7 @@ function setup(mode){
 }
 function receive(){const a=account();show('Receive',`<p class="subtle">Use the address for the correct network.</p>${a.sol?`<label>Solana · SOL & Solana tokens</label><div class="address">${esc(a.sol)}</div><button class="text-btn" id="copy-sol">Copy Solana address</button>`:''}${a.xmr?`<label>Monero · XMR & XMR20 inscriptions</label><div class="address">${esc(a.xmr)}</div><button class="text-btn" id="copy-xmr">Copy Monero address</button><p class="subtle">XMR20 must be sent using an XMR20 transfer. A native XMR payment does not transfer inscriptions.</p>`:''}${a.watch?'<div class="notice">Watch-only address. Make sure you control its recovery keys before receiving funds.</div>':''}`);on('copy-sol',()=>copy(a.sol));on('copy-xmr',()=>copy(a.xmr));}
 async function copy(value){try{await navigator.clipboard.writeText(value);toast('Address copied');}catch{toast('Select the address and copy it manually.');}}
-// 28 Oct 2026 (owner: "the UI should be consistent for xmr20 tokens"): every token screen has the same layout and the same two
+// 28 Oct 2026: every token screen has the same layout and the same two
 // actions. On Solana: Send + Bridge to Monero (the open/private bridge, which carries every launched token). Inscribed on Monero:
 // Send + Bridge to Solana (inscriptions move through the earlier bridge; from Solana they come back as open/private tokens).
 const tokenSheet=({row,actions,card,details})=>{const quote=currentQuote(cache.prices,row.mint),value=tokenUsd(row,quote);return `<span class="pf-screen" hidden></span><div class="token-sheet"><div class="pf-hero">${tokenCoin(row,true)}<div class="pf-total" title="${esc(amount(row.amountRaw))} ${esc(row.ticker)}">${esc(compactTokenBalance(row.amountRaw))}<span> ${esc(row.ticker)}</span></div>${value===null?'':`<p class="pf-usd">${usd(value)}${quote?.stale||row.stale?' · last known':''}</p>`}</div>
@@ -507,7 +506,7 @@ function detail(row){if(isJointHolding(row))return jointDetail(row);const onSola
  const carried=privateFormat&&pf().state?.backend?.assets?.some(x=>x.mint===row.mint);
  const card=!privateFormat?null:onSolana?{title:'Bridge to Monero',text:`Arrives as open ${esc(row.ticker)} on Monero in about 20 minutes. There you can send it, make it private, or bridge it back to Solana.${carried?'':' The first bridge of a token adds it to the bridge (about a minute).'}`}:{title:'Inscribed on Monero',text:`Bridge it to Solana; from there it can come back to Monero as open or private ${esc(row.ticker)}.`};
  show(row.name||row.ticker,tokenSheet({row,actions:[['send-token','send','Send'],...(privateFormat?[['token-bridge','swap',onSolana?'Bridge to Monero':'Bridge to Solana']]:[])],card,
-  details:`<label>Solana mint</label><div class="address pf-addr small">${esc(row.mint)}</div><label>Monero deployment</label><div class="address pf-addr small">${esc(row.deployment)}</div><a class="pf-link" href="https://xmrchain.net/tx/${esc(row.deployment)}" target="_blank" rel="noopener noreferrer">View proof ↗</a>`}));
+  details:`<label>Solana mint</label><div class="address pf-addr small">${esc(row.mint)}</div>${row.deployment?`<label>Monero deployment</label><div class="address pf-addr small">${esc(row.deployment)}</div><a class="pf-link" href="https://xmrchain.net/tx/${esc(row.deployment)}" target="_blank" rel="noopener noreferrer">View proof ↗</a>`:''}`}));
  on('send-token',()=>sendAsset('token',row));
  if(privateFormat)on('token-bridge',()=>onSolana?void run(()=>pf().openBridge(row.mint,'deposit',()=>detail(cache.rows.find(r=>r.mint===row.mint&&r.network==='solana')||row),{symbol:row.ticker,name:row.name,solanaBalance:row.amountRaw})):void bridgeUI.open({mint:row.mint,amountRaw:row.amountRaw,direction:'xmr-to-sol'}));
  if(onSolana)nativeConversionAction(row);}

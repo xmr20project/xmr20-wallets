@@ -5,6 +5,8 @@ export const WALLET_HOLDINGS_URL='/api/wallet-holdings';
 export const validTokenImage=image=>image===null||image===undefined||image==='/assets/tokens/covert-v1.png'||typeof image==='string'&&/^https:\/\/api\.xmr20\.org\/mainnet\/i\/[A-Za-z0-9_-]{20,80}$/.test(image);
 const key=(a,network='monero')=>'xmr20-public-holdings-v1:'+network+':'+a;
 const id=v=>typeof v==='string'&&/^[a-f0-9-]{36}$/.test(v);
+// A launch of the trading service held on Solana (solana-holdings.js): no launch record and no Monero inscription, known by its mint.
+const launchHolding=(r,network)=>network==='solana'&&r.venue==='xmr20-trade'&&r.id===r.mint&&r.deployment===null&&r.listed===false;
 function validAddress(address,network){if(network==='solana'){if(!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(address))throw Error('Invalid Solana address');return;}const a=checkMoneroAddress(address,'mainnet');if(!a.valid||a.kind!=='standard')throw Error('Invalid Monero address');}
 export function walletIndexMaxAge(s){
  if(s.source===undefined&&s.maxSnapshotAgeMs===undefined)return 180000;
@@ -14,13 +16,15 @@ export function walletIndexMaxAge(s){
 export function validateWalletHoldings(s,address,network='monero'){
  if(s?.schema!=='xmr20-wallet-holdings-v1'||s.address!==address||(s.network||'monero')!==network||s.moneroNetwork!=='mainnet'||s.solanaNetwork!=='mainnet-beta'||!Array.isArray(s.rows)||s.rows.length>10000||typeof s.complete!=='boolean'||!Number.isSafeInteger(s.checked)||s.checked<0)throw Error('Invalid wallet index');
  const maxAge=walletIndexMaxAge(s);
- const seen=new Set();const rows=s.rows.map(r=>{
-  if(!id(r.id)||seen.has(r.id)||typeof r.mint!=='string'||!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(r.mint)||typeof r.ticker!=='string'||r.ticker.length>10||typeof r.name!=='string'||r.name.length>256||!/^[a-f0-9]{64}$/.test(r.deployment)||typeof r.listed!=='boolean'||typeof r.stale!=='boolean'||typeof r.amountRaw!=='string'||!/^\d{1,16}$/.test(r.amountRaw)||BigInt(r.amountRaw)<=0n||BigInt(r.amountRaw)>1000000000000000n||!Number.isSafeInteger(r.checkedAt)||r.checkedAt<=0||r.checkedAt>Date.now()+60000)throw Error('Invalid holder');
+ const seen=new Set(),launchMints=new Set(),otherMints=new Set();const rows=s.rows.map(r=>{
+  const launch=launchHolding(r,network);
+  if(!(launch||id(r.id)&&/^[a-f0-9]{64}$/.test(r.deployment))||seen.has(r.id)||typeof r.mint!=='string'||!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(r.mint)||typeof r.ticker!=='string'||r.ticker.length>10||typeof r.name!=='string'||r.name.length>256||typeof r.listed!=='boolean'||typeof r.stale!=='boolean'||typeof r.amountRaw!=='string'||!/^\d{1,16}$/.test(r.amountRaw)||BigInt(r.amountRaw)<=0n||BigInt(r.amountRaw)>1000000000000000n||!Number.isSafeInteger(r.checkedAt)||r.checkedAt<=0||r.checkedAt>Date.now()+60000)throw Error('Invalid holder');
   if(!validTokenImage(r.image))throw Error('Invalid token image');
   if(r.priceUsd!==undefined&&r.priceUsd!==null&&(!Number.isFinite(r.priceUsd)||r.priceUsd<=0||r.priceUsd>1000000))throw Error('Invalid market price');
-  seen.add(r.id);let receipt=null;
+  if((launch?otherMints:launchMints).has(r.mint))throw Error('Invalid holder');
+  seen.add(r.id);(launch?launchMints:otherMints).add(r.mint);let receipt=null;
   if(r.receipt){if(network!=='monero'||!/^https:\/\/xmrchain.net\/tx\/[a-f0-9]{64}$/.test(r.receipt.url)||!['Latest bridge credit','Latest incoming transfer'].includes(r.receipt.label)||!Number.isSafeInteger(r.receipt.confirmations)||r.receipt.confirmations<10)throw Error('Invalid receipt');receipt={url:r.receipt.url,label:r.receipt.label,confirmations:r.receipt.confirmations};}
-  return {id:r.id,mint:r.mint,ticker:r.ticker,name:r.name,image:r.image||null,priceUsd:r.priceUsd??null,deployment:r.deployment,listed:r.listed,amountRaw:r.amountRaw,checkedAt:r.checkedAt,stale:r.stale||Date.now()-r.checkedAt>maxAge,receipt};
+  return {id:r.id,mint:r.mint,ticker:r.ticker,name:r.name,image:r.image||null,priceUsd:r.priceUsd??null,deployment:r.deployment,listed:r.listed,...(launch?{venue:r.venue}:{}),amountRaw:r.amountRaw,checkedAt:r.checkedAt,stale:r.stale||Date.now()-r.checkedAt>maxAge,receipt};
  });
  return {rows,complete:s.complete&&!rows.some(r=>r.stale),checked:s.checked,cached:false,...(s.source?{source:s.source,maxSnapshotAgeMs:maxAge}:{})};
 }

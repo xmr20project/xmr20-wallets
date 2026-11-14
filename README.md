@@ -66,6 +66,21 @@ background runner); the live page offers the site's own wallet.
 
 The settlement is experimental and has not had an independent security review. Trade small amounts.
 
+## What's new (14 November 2026)
+
+- **Tokens launched on the Monero curve show in the wallets.** A token launched on the trading service
+  (xmr20.org/trade) that you hold on Solana is listed under Solana with Send and Bridge, like any XMR20 token. Such a
+  token was not inscribed on Monero and has no launch record, so the wallets know it by its mint. The token list names
+  it with venue `xmr20-trade`; the wallets accept only that exact kind of entry and read its balance from the chain the
+  same way as for every other token (`catalogHoldings` in `engine/shared/solana-holdings.js`). Entries that carry a
+  launch id are checked exactly as before.
+- **Website wallet: a failed balance read no longer hides such a token.** The holder index does not list these tokens,
+  so when the read from the chain fails once, the ones this browser last saw stay listed as "last checked"
+  (`web-wallet/src/solana-chain-holdings.js`).
+- In the Chrome extension since 0.1.139 and on xmr20.org since 14 November 2026. The extension source in this
+  repository is still the 0.1.135 source plus this change: the private SOL and wXMR balances added in 0.1.136 to
+  0.1.138 are not in the repository yet.
+
 ## What's new (3 November 2026)
 
 - **Sign to trade: Feather and Cake Wallet on the Monero Market.** Anyone holding XMR20 at a plain Monero address can
