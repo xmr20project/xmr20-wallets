@@ -15,6 +15,27 @@ async function concurrently(items,limit,fn){const out=new Array(items.length);le
 const need=(v,m)=>{if(!v)throw Error(m);};
 const mintAddress=v=>{try{return typeof v==='string'&&new PublicKey(v).toBase58()===v;}catch{return false;}};
 const uuid=v=>typeof v==='string'&&/^[a-f0-9-]{36}$/.test(v);
+const labelled=t=>mintAddress(t.mint)&&typeof t.name==='string'&&t.name.length<=256&&typeof t.ticker==='string'&&t.ticker.length>0&&t.ticker.length<=10;
+// A launchpad token: a finalized mint with its launch record and its Monero inscription.
+const launchpadToken=t=>!t.hidden&&!t.halted&&!t.cancelledAt&&t.solanaFinalized===true&&uuid(t.id)&&labelled(t)&&/^[a-f0-9]{64}$/.test(t.moneroTxid||'');
+// A launch of the trading service (xmr20.org/trade): a mint the catalog lists as launched for bridging. It was not inscribed on
+// Monero and has no launch record, so it is known by its mint. The row kind is exact, the same rule the catalog's own merge
+// applies: none of a launchpad row's record fields (launch id, inscription id, finalized flag) and the known values of every
+// other field. A row that carries a launch id is a launchpad row and must pass the launchpad checks; this rule never admits it.
+export const LAUNCH_VENUE='xmr20-trade';
+const launchToken=t=>t.venue===LAUNCH_VENUE&&t.id===undefined&&t.moneroTxid===undefined&&t.solanaFinalized===undefined&&t.launchMode==='monero'&&t.state==='Launched'&&t.bridgeReady===true&&t.hidden===false&&!t.halted&&!t.cancelledAt&&t.transferTaxBps===0&&t.decimals===6&&t.moneroNetwork==='mainnet'&&labelled(t);
+// The catalog tokens whose Solana balance is read. A launch row for a mint that a row with a launch id names is left out: the
+// launchpad's row stands, whatever its state. Of several launch rows for one mint the first stands, as at the bridge, which
+// takes the first row the catalog has for a mint. Anything that is not a row is skipped.
+export function catalogHoldings(tokens){
+ const recorded=new Set(),launches=new Set();
+ for(const t of tokens)if(t&&typeof t==='object'&&t.id!==undefined)recorded.add(t.mint);
+ return tokens.filter(t=>{
+  if(!t||typeof t!=='object')return false;if(launchpadToken(t))return true;
+  if(!launchToken(t)||recorded.has(t.mint)||launches.has(t.mint))return false;
+  launches.add(t.mint);return true;
+ });
+}
 export function solanaDisplayRows(previous,result){
  const current=new Set(result.rows.map(r=>r.mint));
  return [...result.rows,...(result.complete?[]:previous.filter(r=>r.network==='solana'&&!current.has(r.mint)).map(r=>({...r,stale:true})))];
@@ -43,8 +64,8 @@ export async function loadSolanaHoldings(owner,{fetcher=fetch,signal,now=Date.no
  need(genesis===GENESIS,'Wrong Solana network.');
  if(!genesisKnown){if(!genesisChecked.has(fetcher))genesisChecked.set(fetcher,new Map());genesisChecked.get(fetcher).set(endpoint,now());}
  need(catalog?.schema==='xmr20-launches-v1'&&catalog.solanaNetwork==='mainnet-beta'&&catalog.moneroNetwork==='mainnet'&&Array.isArray(catalog.tokens)&&catalog.tokens.length<=10000,'Token catalog unavailable.');
- const tokens=catalog.tokens.filter(t=>!t.hidden&&!t.halted&&!t.cancelledAt&&t.solanaFinalized===true&&mintAddress(t.mint)&&uuid(t.id)&&typeof t.name==='string'&&t.name.length<=256&&typeof t.ticker==='string'&&t.ticker.length>0&&t.ticker.length<=10&&/^[a-f0-9]{64}$/.test(t.moneroTxid||''));
- need(new Set(tokens.map(t=>t.mint)).size===tokens.length&&new Set(tokens.map(t=>t.id)).size===tokens.length,'Duplicate token identity.');
+ const tokens=catalogHoldings(catalog.tokens);
+ need(new Set(tokens.map(t=>t.mint)).size===tokens.length&&new Set(tokens.map(t=>t.id??t.mint)).size===tokens.length,'Duplicate token identity.');
  // Bounded batches avoid one RPC per token and work through the existing
  // Helius allowlist. Each mint and its two possible ATAs share one slot. Up to
  // three batches travel at once; rows keep catalog order.
@@ -68,7 +89,8 @@ export async function loadSolanaHoldings(owner,{fetcher=fetch,signal,now=Date.no
     const holding=unpackAccount(keys[at],raw,info.owner);
     need(holding.isInitialized&&holding.owner.equals(sender)&&holding.mint.equals(mintKey)&&holding.amount<=1000000000000000n,'Token balance belongs to another wallet.');
     if(holding.amount===0n)continue;
-    rows.push({id:token.id,mint:token.mint,name:token.name,ticker:token.ticker,image:null,deployment:token.moneroTxid,listed:token.proofVerified===true,amountRaw:String(holding.amount),checkedAt:now(),stale:false,balanceSource:'solana-finalized',frozen:holding.isFrozen});
+    const launch=token.id===undefined;
+    rows.push({id:launch?token.mint:token.id,mint:token.mint,name:token.name,ticker:token.ticker,image:null,deployment:launch?null:token.moneroTxid,listed:!launch&&token.proofVerified===true,...(launch?{venue:LAUNCH_VENUE}:{}),amountRaw:String(holding.amount),checkedAt:now(),stale:false,balanceSource:'solana-finalized',frozen:holding.isFrozen});
    }catch{partial=true;}
   }
  }
