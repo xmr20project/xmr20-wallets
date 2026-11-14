@@ -17,7 +17,7 @@ This repository holds every XMR20 wallet in one place, plus the engine they all 
 ### Which one should I use?
 
 - **Just want to try XMR20?** Use the website: open https://xmr20.org and click **Connect wallet**. Nothing to download.
-- **Want your own wallet that keeps your keys in your browser?** Use the **Chrome extension** ([how](#2-the-chrome-extension)).
+- **Want your own wallet that keeps your keys in your browser?** Use the **Chrome extension** ([install guide](INSTALL.md), about 5 minutes).
 - **Comfortable with a terminal?** Use the **CLI** ([how](#3-the-terminal-wallet-cli)).
 
 All three can hold the same Monero wallet. The CLI and the extension can even use the same 25-word phrase. Only send
@@ -65,6 +65,47 @@ background runner); the live page offers the site's own wallet.
   never count twice.
 
 The settlement is experimental and has not had an independent security review. Trade small amounts.
+
+## What's new in Chrome extension 0.1.143 (14 November 2026)
+
+- **Easy install guide.** [INSTALL.md](INSTALL.md) walks through installing the ready-made zip step by step, with
+  pictures. No building and no terminal.
+- **Free public Solana nodes, or your own.** The extension reads Solana balances from free public mainnet nodes
+  (publicnode.com, then api.mainnet-beta.solana.com, then the xmr20.org read service). Under **Settings → Solana RPC**
+  you can enter your own https node instead; the wallet checks that it is Solana mainnet, then uses only that node for
+  balances and sends. Settings shows only its host name, never an API key in the address. (0.1.141)
+- **Private transfers on Solana.** SOL, wXMR and any other Solana token can be moved into a private balance and sent
+  privately (Helius private transfers, through `api.xmr20.org`). Home lists each private balance; **Withdraw** moves it
+  back to the public side. A private send costs 0.004 SOL on top of the network fee. (0.1.136 to 0.1.138, every token
+  since 0.1.142)
+- **Mordinals in Collectibles.** The Collectibles tab finds your Mordinals and lets you claim, send, sell and buy them,
+  paying from this wallet, with the same XMR721 settings as xmr20.org. (0.1.142)
+- **Market lots of any XMR20 token.** The market window lists, buys and sells lots of every XMR20 token, not only
+  XMR20. (0.1.140)
+- **wXMR and Swap.** Wrapped Monero (wXMR) has its own row on the home screen, valued at the XMR price and counted in
+  the total, with **Send**. The new **Swap** button swaps SOL ⇄ wXMR through Jupiter: it shows a live price and the
+  minimum you receive, checks the transaction before you approve it, and signs with your account's key. (0.1.143)
+- **My profile on xmr20.org** in Settings opens your profile page. (0.1.143)
+- **Fix: Solana token sends.** Sending a Solana token from the extension, XMR20 tokens included, failed with
+  "Transaction recentBlockhash required". Sends now carry the recent blockhash and the token's decimals. (0.1.143)
+- **Where the source is.** `XMR20-Wallet-0.1.143.zip` on the Releases page is exactly the installed and tested build.
+  The extension source in this repository is still 0.1.135 plus the launch-token change below; the source of the
+  0.1.136 to 0.1.143 additions is not in this repository yet.
+
+## What's new (14 November 2026)
+
+- **Tokens launched on the Monero curve show in the wallets.** A token launched on the trading service
+  (xmr20.org/trade) that you hold on Solana is listed under Solana with Send and Bridge, like any XMR20 token. Such a
+  token was not inscribed on Monero and has no launch record, so the wallets know it by its mint. The token list names
+  it with venue `xmr20-trade`; the wallets accept only that exact kind of entry and read its balance from the chain the
+  same way as for every other token (`catalogHoldings` in `engine/shared/solana-holdings.js`). Entries that carry a
+  launch id are checked exactly as before.
+- **Website wallet: a failed balance read no longer hides such a token.** The holder index does not list these tokens,
+  so when the read from the chain fails once, the ones this browser last saw stay listed as "last checked"
+  (`web-wallet/src/solana-chain-holdings.js`).
+- In the Chrome extension since 0.1.139 and on xmr20.org since 14 November 2026. The extension source in this
+  repository is still the 0.1.135 source plus this change: the private SOL and wXMR balances added in 0.1.136 to
+  0.1.138 are not in the repository yet.
 
 ## What's new (3 November 2026)
 
@@ -126,9 +167,9 @@ The settlement is experimental and has not had an independent security review. T
 The [Releases page](https://github.com/xmr20project/xmr20-wallets/releases) has files you can use without building
 anything:
 
-- **`XMR20-Wallet-0.1.135.zip`**: the Chrome extension, exactly the build that was tested. Unzip it and load it in
-  `chrome://extensions` ([steps](extension/README.md#install-from-a-tester-zip)).
-- **`xmr20-cli-0.5.1.zip`**: the terminal wallet with its engine already built. You need Node.js 22, then
+- **`XMR20-Wallet-0.1.143.zip`**: the Chrome extension, exactly the build that was tested. Unzip it and load it in
+  `chrome://extensions` ([step-by-step guide](INSTALL.md)).
+- **`xmr20-cli-0.5.1.zip`** (in the [3 November release](https://github.com/xmr20project/xmr20-wallets/releases/tag/wallets-2026-11-03)): the terminal wallet with its engine already built. You need Node.js 22, then
   `npm install`, `npm run setup` and `./xmr20` ([steps](cli/README.md#ready-made-download)).
 - **`SHA256SUMS.txt`**: each file's fingerprint, so you can check that your download is complete and unchanged.
 
@@ -160,6 +201,10 @@ Nothing to build. Open **https://xmr20.org** and click **Connect wallet**.
 To run your own copy on your computer (for developers), see [`web-wallet/README.md`](web-wallet/README.md).
 
 ### 2. The Chrome extension
+
+**Easiest:** download the ready-made zip and follow [INSTALL.md](INSTALL.md). No building needed.
+
+To build it from this repository instead:
 
 ```bash
 npm run build:extension

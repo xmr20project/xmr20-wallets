@@ -1,4 +1,7 @@
-# extension/ — XMR20 Wallet for Chrome (0.1.135)
+# extension/ — XMR20 Wallet for Chrome
+
+Latest ready-made version: **0.1.143** ([install guide](../INSTALL.md)). The source in this folder is 0.1.135 plus the
+launch-token change of 0.1.139; the additions of 0.1.136 to 0.1.143 are not in this folder yet.
 
 The XMR20 Wallet browser extension. It works in Chrome, Brave and Edge. It holds your SOL and Solana tokens, XMR, and
 XMR20 tokens on Monero (Open and Private). It also bridges between the two chains.
@@ -25,9 +28,9 @@ Chrome runs the wallet from that folder, so don't delete or move it. The extensi
 
 ## Install from a tester zip
 
-You can use a ready-made zip instead: `XMR20-Wallet-0.1.135.zip` from the
-[Releases page](https://github.com/xmr20project/xmr20-wallets/releases). It is exactly the build that was tested, `app.js`
-included (see [How it is built](#how-it-is-built)):
+You can use a ready-made zip instead: `XMR20-Wallet-0.1.143.zip` from the
+[Releases page](https://github.com/xmr20project/xmr20-wallets/releases). It is exactly the build that was installed and
+tested. [INSTALL.md](../INSTALL.md) has the same steps with pictures:
 
 1. Unzip it into a folder you will keep.
 2. In `chrome://extensions`, switch on **Developer mode**, click **Load unpacked**, and choose the unzipped folder.
