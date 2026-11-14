@@ -1,6 +1,7 @@
 node_modules/
 engine/dist/
 extension/dist/
+extension/private-balance/dist/
 web-wallet/dist/
 web-wallet/public/xmr20-private/
 web-wallet/public/xmr20-market/
@@ -11,5 +12,6 @@ web-wallet/public/monero-wallet/LICENSE.txt
 cli/.engine/
 cli/dist/
 engine/holder-wasm/target/
+engine/holder-wasm/mordinals/build/
 .DS_Store
 *.log

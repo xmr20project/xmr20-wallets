@@ -32,7 +32,9 @@
 
 | Path | What it is |
 |---|---|
-| `holder.wasm` | The built engine (`xmr20-holder-wasm 0.0.7-address-moves` with fast start and sign to trade, built with `XMR20_MARKET_MAINNET_ACTIVATION=3796100`, `XMR20_ADDRESS_MOVES_MAINNET_ACTIVATION=3797288` and `XMR20_TRADES_MAINNET_ACTIVATION=3797400`, sha256 `4b33f98d…`). Byte-identical to the one in XMR20 Wallet 0.1.135 and on xmr20.org (release 60 onwards). |
+| `holder.wasm` | The built engine (`xmr20-holder-wasm 0.0.7-address-moves` with fast start and sign to trade, built with `XMR20_MARKET_MAINNET_ACTIVATION=3796100`, `XMR20_ADDRESS_MOVES_MAINNET_ACTIVATION=3797288` and `XMR20_TRADES_MAINNET_ACTIVATION=3797400`, sha256 `4b33f98d…`). Byte-identical to the one in XMR20 Wallet 0.1.135–0.1.143 and on xmr20.org (release 60 onwards). |
+| `mordinals.wasm` | The Mordinals engine the Chrome extension runs as `vendor/mordinals.wasm` since 0.1.142 (sha256 `fbd2d908…`, the same file as the xmr20.org wallet's): this engine plus three operations in `mordinals/mordinals_ops.rs`. `mordinalsFind` finds which entries of the public Mordinals owner list belong to this wallet, `mordinalsClaimSign` signs a claim with the owner coin's one-time key, and `mordinalsSign` signs one line of text that starts with "Mordinals move/list/cancel/reserve: " or "XMR721 collection/mint/burn: ". None of them builds or spends a Monero transaction, and the keys never leave the engine. |
+| `mordinals/` | `mordinals_ops.rs` and `build.mjs`, which builds `mordinals.wasm` from a copy of `crate/` with that file added: one module line in `native.rs`, one dispatch line in `lib.rs`, the engine info string extended with `"mordinals":"local-candidate-2-xmr721"` (what the installed engine reports), and the package renamed `xmr20-holder-wasm-mordinals`. |
 | `crate/` | The wasm crate (`xmr20-holder-wasm-market`): `src/lib.rs` (token engine API), `src/native.rs` (the Monero side: scanning your XMR and building carrier transactions), `src/market_ops.rs` and `src/native_market.rs` (lots, sales and spare anchors), `src/nft_ops.rs` and `src/nft_v2.rs` (anchored NFT sales, not open yet). The `lab-adversary` feature is a separately built TEST-ONLY copy for the settlement tests; the wallets never use it. |
 | `core/` | `xmr20-market-core`: the token format (records, ledger rules, proofs over Penumbra's circuits) plus the market's lot rules (`src/market.rs`), sign to move (`src/address.rs`), sign to trade (`src/trade.rs`, tests `src/trade_tests.rs`), the daily checkpoint anchor (`src/checkpoint.rs`) and the activation gates. The bridge's indexer and issuer use it too, built with the same start block. |
 | `vendor/monero-wallet/` | A vendored copy of the `monero-wallet` crate, used to build Monero transactions. |
@@ -68,6 +70,10 @@ verifying keys from `../params/test-v2/manifest.json`. The other 6 build real pr
 (`spend_pk.bin`, `output_pk.bin` from `penumbra-sdk-proof-params` 2.1.1, about 29 MB) in `../params/penumbra-2.1.1/` and
 `../params/test-v2/`, which are not published here.
 
-The rebuilt file works the same, but it is not expected to be byte-identical to `holder.wasm`. Rust embeds source
+The Mordinals engine: `node engine/holder-wasm/mordinals/build.mjs` (add `--check` to only compile-check it; checked on
+14 November 2026). The output is in `engine/holder-wasm/mordinals/build/` (or under `CARGO_TARGET_DIR` when set).
+
+A rebuilt `holder.wasm` works the same but is not expected to be byte-identical to the committed one; the Mordinals
+engine was compile-checked only, and the same applies to it. Rust embeds source
 paths, and this layout's paths differ from the original build's. This layout was compile-checked on 3 November 2026
 (`cargo check --release --target wasm32-unknown-unknown`); the wallets use the committed `holder.wasm`.

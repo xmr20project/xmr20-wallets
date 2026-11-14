@@ -1,4 +1,4 @@
-# XMR20 terminal wallet (CLI) — 0.5.1
+# XMR20 terminal wallet (CLI) — 0.5.2
 
 A wallet you use by typing commands. It runs the **same engine** as the Chrome extension and xmr20.org
 ([`../engine`](../engine)), inside a private headless Chromium that has no window, no extensions and no website.
@@ -22,7 +22,8 @@ Every send shows a review: amount, recipient, network fee, and bridge fees if an
 ## Ready-made download
 
 If you don't want the whole repository, download **`xmr20-cli-0.5.1.zip`** from the
-[Releases page](https://github.com/xmr20project/xmr20-wallets/releases). Its engine files are already built. With Node.js
+[3 November release](https://github.com/xmr20project/xmr20-wallets/releases/tag/wallets-2026-11-03). Its engine files are
+already built. (0.5.2 differs only in one Monero worker action the CLI does not use; see "Changes in 0.5.2".) With Node.js
 22.12 or newer installed:
 
 1. Unzip it somewhere you will keep, and open a terminal in the unzipped folder.
@@ -156,7 +157,7 @@ it also holds your saved operations and scan progress.
 
 - **The engine is not copied.** `cli/build.mjs` bundles `browser/host.js` with `engine/token`, `engine/monero` and
   `engine/shared`, and copies `engine/dist`. The engine build checks that its files are byte-identical to the installed
-  wallet 0.1.135.
+  wallet 0.1.143.
 - **Headless layer.** The token engine was written for screens. [`engine/headless/token-ops.js`](../engine/headless/token-ops.js)
   lets the CLI use it without one: it fills the same fields and presses the same buttons a person would. It stops at
   every review so the CLI can ask you. No engine logic is repeated.
@@ -181,6 +182,12 @@ npm run check:readonly -- /path/to/test-account.json   # read-only mainnet sync 
 `check:readonly` imports a throwaway account into a temporary folder, syncs XMR and XMR20, and prints the balances. It
 never approves, signs or sends anything, and never prints keys. Opening the token wallet publishes the account's signed
 address-book entry to the bridge, as every wallet does when it opens.
+
+## Changes in 0.5.2
+
+0.5.2 copies the engine files of wallet 0.1.143. The one difference from 0.5.1 is the Monero worker's new
+`preparePayments` action (one transaction paying up to three exact amounts, which the Chrome extension uses to buy a
+Mordinal). The CLI does not call it. No new commands; the CLI's network allowlist is unchanged.
 
 ## Changes in 0.5.1
 
