@@ -1,7 +1,7 @@
 # extension/ — XMR20 Wallet for Chrome
 
-Latest ready-made version: **0.1.143** ([install guide](../INSTALL.md)). The source in this folder is the same version:
-`npm run build:extension` builds 0.1.143.
+Latest ready-made version: **0.1.143** ([install guide](../INSTALL.md)). The source in this folder is **0.1.144**, the same
+wallet with the cleaned engine files (see the main README): `npm run build:extension` builds 0.1.144.
 
 The XMR20 Wallet browser extension. It works in Chrome, Brave and Edge. It holds your SOL and Solana tokens, XMR, and
 XMR20 tokens on Monero (Open and Private). It also bridges between the two chains.
@@ -62,9 +62,9 @@ The first scan of an account takes 2–3 minutes. After that, only new blocks ar
 
 ## How it is built
 
-`build.mjs` follows the same recipe as the real releases (0.1.103–0.1.143):
+`build.mjs` follows the same recipe as the real releases (0.1.103–0.1.144):
 
-- **Start from the previous release's files.** These are in `prebuilt/`, kept exactly as installed in 0.1.143: the popup
+- **Start from the previous release's files.** These are in `prebuilt/`, kept exactly as installed in 0.1.144: the popup
   page, icons, background service worker, approval page, older workers, and three bundles the releases did not rebuild
   every time:
   - the Monero Market window `market-wallet.*` and background runner `market-runner.*` (since 0.1.126; lots of any XMR20
@@ -92,7 +92,7 @@ else.
 
 Checked on 14 November 2026:
 
-- Every file of `dist/` except `app.js` is byte-identical to the installed 0.1.143, `manifest.json` included, apart from
+- Every file of `dist/` except `app.js` is byte-identical to the installed 0.1.144, `manifest.json` included, apart from
   esbuild's 2-character interop flag in `vendor/private-holder.worker.js` (see `../engine/README.md`).
 - `app.js`: built with the npm libraries left out, this folder's source gives byte for byte the release's popup code,
   except in three shared files. `native-popup-channel.js` and `private-journal.js` keep their Monero Market hooks here,

@@ -29,6 +29,8 @@ jobs:
           cache: npm
       - name: Install
         run: npm ci
+      - name: No local home-folder paths in the repository files
+        run: node .github/no-local-paths.mjs
       - name: Install Chromium for the browser tests
         run: npx playwright install --with-deps chromium
       - name: Engine, extension and CLI tests

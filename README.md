@@ -66,6 +66,13 @@ background runner); the live page offers the site's own wallet.
 
 The settlement is experimental and has not had an independent security review. Trade small amounts.
 
+## What's new in Chrome extension 0.1.144 (14 November 2026)
+
+- **Engine files without the build machine's folder name.** Rust writes source-file paths into an engine's error
+  messages, so `holder.wasm` and `mordinals.wasm` carried the home folder of the computer they were built on. Those
+  paths now read `/Users/user/…`. No other byte changed and the wallets work the same. xmr20.org, the extension and the
+  zips on the Releases page now use the cleaned files. Otherwise 0.1.144 is 0.1.143.
+
 ## What's new in Chrome extension 0.1.143 (14 November 2026)
 
 - **Easy install guide.** [INSTALL.md](INSTALL.md) walks through installing the ready-made zip step by step, with
@@ -88,8 +95,8 @@ The settlement is experimental and has not had an independent security review. T
 - **My profile on xmr20.org** in Settings opens your profile page. (0.1.143)
 - **Fix: Solana token sends.** Sending a Solana token from the extension, XMR20 tokens included, failed with
   "Transaction recentBlockhash required". Sends now carry the recent blockhash and the token's decimals. (0.1.143)
-- **Source.** `XMR20-Wallet-0.1.143.zip` on the Releases page is exactly the installed and tested build, and
-  `npm run build:extension` builds the same version from this repository. [`extension/README.md`](extension/README.md#how-it-is-built)
+- **Source.** `npm run build:extension` builds the extension from this repository (0.1.144: the 0.1.143 wallet with the
+  cleaned engine files). [`extension/README.md`](extension/README.md#how-it-is-built)
   lists what is rebuilt from source and what is kept as installed.
 
 ## What's new (14 November 2026)
@@ -165,7 +172,7 @@ The settlement is experimental and has not had an independent security review. T
 The [Releases page](https://github.com/xmr20project/xmr20-wallets/releases) has files you can use without building
 anything:
 
-- **`XMR20-Wallet-0.1.143.zip`**: the Chrome extension, exactly the build that was tested. Unzip it and load it in
+- **`XMR20-Wallet-0.1.143.zip`**: the Chrome extension as tested, with the cleaned engine files of 0.1.144. Unzip it and load it in
   `chrome://extensions` ([step-by-step guide](INSTALL.md)).
 - **`xmr20-cli-0.5.1.zip`** (in the [3 November release](https://github.com/xmr20project/xmr20-wallets/releases/tag/wallets-2026-11-03)): the terminal wallet with its engine already built. You need Node.js 22, then
   `npm install`, `npm run setup` and `./xmr20` ([steps](cli/README.md#ready-made-download)).
@@ -245,7 +252,7 @@ instead of `./xmr20`. All commands are explained in [`cli/README.md`](cli/README
 
 - `npm run build:engine` puts the engine's browser files in `engine/dist/`. The extension, the website wallet and the CLI
   each copy them from there. The build checks that these files are byte-for-byte the same as in the installed wallet
-  0.1.143 (one known exception: a 2-character esbuild flag in the token worker, explained in `engine/build.mjs`).
+  0.1.144 (one known exception: a 2-character esbuild flag in the token worker, explained in `engine/build.mjs`).
 - The XMR20 token engine runs in the browser: the extension popup, the xmr20.org page, or the CLI's private headless
   Chromium. Your keys never leave your computer. Scanning, proving and signing happen locally.
 

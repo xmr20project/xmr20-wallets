@@ -1,5 +1,5 @@
 // Rebuilds private-balance.js, the private transfers of the Chrome extension (the screens in src/ and Helius's Solana Privacy
-// Rings SDK in one ES module, which the popup loads only when needed), with the settings of extension 0.1.142–0.1.143, and
+// Rings SDK in one ES module, which the popup loads only when needed), with the settings of extension 0.1.142–0.1.144, and
 // compares it with the file the extension build uses, ../prebuilt/private-balance.js.
 //   npm run build:private-balance        (from the repository folder: installs this folder's dependencies, then runs this)
 // This folder has its own package.json and package-lock.json and is not an npm workspace. The SDK needs @noble/curves 2.x
