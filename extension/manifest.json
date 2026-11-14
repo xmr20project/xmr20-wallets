@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "XMR20 Wallet — Bridge testing",
-  "version": "0.1.135",
+  "version": "0.1.143",
   "minimum_chrome_version": "120",
   "description": "SOL, Monero and indexed XMR20 inscriptions. Local encrypted wallets and watch-only accounts.",
   "action": {
@@ -27,7 +27,7 @@
     "http://127.0.0.1:8933/*"
   ],
   "content_security_policy": {
-    "extension_pages": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; object-src 'none'; style-src 'self'; img-src 'self' data:; connect-src 'self' https://xmr20.org https://api.xmr20.org https://solana-rpc.publicnode.com https://xmr-node.cakewallet.com:18081 https://node.sethforprivacy.com https://launch-mint-v1.raydium.io https://api-v3.raydium.io https://api.coingecko.com http://127.0.0.1:8928 http://127.0.0.1:8933 http://127.0.0.1:18941; worker-src 'self'; base-uri 'none'; form-action 'none'"
+    "extension_pages": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; object-src 'none'; style-src 'self'; img-src 'self' data:; connect-src 'self' https: https://xmr20.org https://api.xmr20.org https://solana-rpc.publicnode.com https://xmr-node.cakewallet.com:18081 https://node.sethforprivacy.com https://launch-mint-v1.raydium.io https://api-v3.raydium.io https://api.coingecko.com http://127.0.0.1:8928 http://127.0.0.1:8933 http://127.0.0.1:18941; worker-src 'self'; base-uri 'none'; form-action 'none'"
   },
   "icons": {
     "16": "icons/16.png",

@@ -9,6 +9,7 @@
   "scripts": {
     "build:engine": "node engine/build.mjs",
     "build:extension": "node extension/build.mjs",
+    "build:private-balance": "npm ci --prefix extension/private-balance && node extension/private-balance/build.mjs",
     "build:web": "npm run build -w web-wallet",
     "dev:web": "npm run dev -w web-wallet",
     "setup:cli": "npm run setup -w cli",

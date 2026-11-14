@@ -1,5 +1,5 @@
 // MONERO MARKET candidate (30 Oct 2026): the approval screens' text, shared by the extension's market window (market-wallet.js)
-// and the website wallet's market dialog (research/monero-market-20261029/website/), so both wallets show the same review.
+// and the website wallet's market dialog, so both wallets show the same review.
 // `where` only changes how automatic sale approval is explained ('extension': while the wallet is unlocked; 'website': while
 // the page is open). Pure functions; no DOM.
 export const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -8,6 +8,14 @@ export const exact=(a,d)=>{if(!isA(a))return '—';const n=BigInt(a),s=10n**BigI
 export const compact=(a,d)=>{if(!isA(a))return '—';const n=BigInt(a),s=10n**BigInt(d),w=n/s,fr=n%s,sh=fr*100n/s,lost=fr*100n%s!==0n;return (lost?'≈':'')+w.toString().replace(/\B(?=(\d{3})+(?!\d))/g,',')+'.'+sh.toString().padStart(2,'0');};
 export const T=a=>exact(a,6),X=a=>exact(a,12);
 export const short=h=>typeof h==='string'&&h.length>16?h.slice(0,8)+'…'+h.slice(-6):String(h??'—');
+// The token of a lot review (14 Nov 2026): its ticker in place of "XMR20", and under the amount one line with its name and short
+// Solana mint, because tickers repeat. A review without token details is the build's own token, XMR20, as before. A token
+// without a name (a review saved before lots had a token) shows its token id; such a purchase is not approved (market-host.js).
+export const tokenSymbol=r=>r?.tokenInfo?r.tokenInfo.symbol||'tokens':'XMR20';
+export function tokenLine(r){const t=r?.tokenInfo;if(!t)return '';
+ if(!t.symbol)return `<small>Token ${esc(short(r.asset))}</small>`;
+ if(!t.mint&&(t.name||t.symbol)===t.symbol)return '';
+ return `<small>${esc(t.name||t.symbol)}${t.mint?' · mint '+esc(short(t.mint)):''}</small>`;}
 export function lines(rows){return `<dl class="wl-lines">${rows.filter(Boolean).map(([k,v,cls])=>`<div class="${cls||''}"><dt>${esc(k)}</dt><dd>${v}</dd></div>`).join('')}</dl>`;}
 // Seller approval mode of a listing review: 'auto' (default) or 'manual'.
 const AUTO_WHERE={extension:'Your wallet approves sales at this price by itself while it is unlocked and your browser is running, even with this window closed. While you have listings, the wallet does not lock itself after inactivity; lock it to pause sales.',
@@ -17,30 +25,30 @@ const approvalNote=(r,where)=>r.approval==='manual'?'<p class="wl-note">Withdraw
 // The seller's wallet cancels a sale the buyer has not paid by payBy (automatic listings).
 export const payByNote=r=>r.payBy?`<p class="wl-note warn">Approve by ${new Date(r.payBy).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}. After that the seller’s wallet cancels this sale and your XMR stays with you.</p>`:'';
 export function review(a,where='extension'){
- const r=a.review;
- if(a.kind==='prepare')return `<h1 class="wl-title">Make a lot</h1><p class="wl-lead">Moves an exact amount of your Open XMR20 into one lot that only a sale or a cancellation can spend.</p>
-  <div class="wl-big"><span>Lot</span><strong>${esc(T(r.quantity))} XMR20</strong><small>${esc(r.quantity)} atomic units</small></div>
-  ${lines([['From','Open balance'],['Open balance after',`${esc(T(r.openAfter))} XMR20`],['Network fee',`at most ${esc(X(r.maxFee))} XMR, paid from this wallet`],
+ const r=a.review,S=esc(tokenSymbol(r)),N=tokenLine(r);
+ if(a.kind==='prepare')return `<h1 class="wl-title">Make a lot</h1><p class="wl-lead">Moves an exact amount of your Open ${S} into one lot that only a sale or a cancellation can spend.</p>
+  <div class="wl-big"><span>Lot</span><strong>${esc(T(r.quantity))} ${S}</strong>${N}<small>${esc(r.quantity)} atomic units</small></div>
+  ${lines([['From','Open balance'],['Open balance after',`${esc(T(r.openAfter))} ${S}`],['Network fee',`at most ${esc(X(r.maxFee))} XMR, paid from this wallet`],
    ...(r.list?[['Then list for',`${esc(X(r.list.price))} XMR`,'total'],['Paid to (your address)',`<span class="mono">${esc(r.payout)}</span>`],['Listing ends',`in ${Math.round(r.list.lifetime/3600)} h`]]:[]),
    [r.list?'Listed':'Listable','after 1 confirmation'],['Buyers can pay after',`${esc(r.finalityDepth)} confirmations`]])}
   ${r.list?`<p class="wl-note">This one approval also signs the public listing once the lot is in a block (about 2 minutes). Buyers see it straight away; payment opens after ${esc(r.finalityDepth)} confirmations.</p>${approvalNote({...r.list,finalityDepth:r.finalityDepth},where)}`:''}
   ${r.spare?`<p class="wl-note">${r.spare==='ready'?'The lot uses an anchor your wallet set aside earlier in a separate ordinary payment':'Your wallet first sets aside an anchor in a separate ordinary payment (a small network fee) and makes the lot automatically about 20 minutes later'}, so a later sale or cancellation does not reveal which Monero coin it spends. Your wallet then keeps one anchor ready for your next trade (a small network fee each time it makes one).</p>`:''}
-  <p class="wl-note">Your Private XMR20 is not touched. The lot is anchored to a 0 XMR output on this wallet’s separate anchor key, which ordinary Monero wallets restored from your phrase cannot see or spend.</p>`;
+  <p class="wl-note">Your Private ${S} is not touched. The lot is anchored to a 0 XMR output on this wallet’s separate anchor key, which ordinary Monero wallets restored from your phrase cannot see or spend.</p>`;
  if(a.kind==='list')return `<h1 class="wl-title">List a lot</h1><p class="wl-lead">Signs a public listing. Nothing is paid or moved.</p>
-  <div class="wl-big"><span>Lot</span><strong>${esc(T(r.quantity))} XMR20</strong><small>${esc(r.quantity)} atomic units</small></div>
+  <div class="wl-big"><span>Lot</span><strong>${esc(T(r.quantity))} ${S}</strong>${N}<small>${esc(r.quantity)} atomic units</small></div>
   ${lines([['Total price',`${esc(X(r.price))} XMR`,'total'],['Paid to (your address)',`<span class="mono">${esc(r.payout)}</span>`],['Listing ends',`in ${Math.round(r.lifetime/3600)} h`]])}
   ${approvalNote(r,where)}`;
- if(a.kind==='cancelLot')return `<h1 class="wl-title">Cancel lot on chain</h1><p class="wl-lead">Spends the lot’s Monero anchor in a transaction from this wallet; the lot becomes ordinary Open XMR20.</p>
-  <div class="wl-big"><span>Lot</span><strong>${esc(T(r.quantity))} XMR20</strong></div>
+ if(a.kind==='cancelLot')return `<h1 class="wl-title">Cancel lot on chain</h1><p class="wl-lead">Spends the lot’s Monero anchor in a transaction from this wallet; the lot becomes ordinary Open ${S}.</p>
+  <div class="wl-big"><span>Lot</span><strong>${esc(T(r.quantity))} ${S}</strong>${N}</div>
   ${lines([['Network fee','paid from this wallet']])}
   ${r.released?'<p class="wl-note warn">You already approved a sale of this lot. Once this cancellation is mined, that sale can no longer be paid. A chain reorganisation that removes the cancellation could still let the buyer complete the sale at your agreed price.</p>':''}`;
  if(a.kind==='sell')return `<h1 class="wl-title">Approve sale</h1><p class="wl-lead">Your wallet checked the buyer’s transaction against your keys.</p>
-  <div class="wl-big"><span>You sell</span><strong>${esc(T(r.quantity))} XMR20</strong><small>${esc(r.quantity)} atomic units · lot ${esc(short(r.lot))}</small></div>
+  <div class="wl-big"><span>You sell</span><strong>${esc(T(r.quantity))} ${S}</strong>${N}<small>${esc(r.quantity)} atomic units · lot ${esc(short(r.lot))}</small></div>
   ${lines([['You receive',`${esc(X(r.price))} XMR`,'total'],['Paid to (your address, checked)',`<span class="mono">${esc(r.payout)}</span>`],['Buyer',`<span class="mono">${esc(short(r.buyer))}</span>`],['Network fee',`${esc(X(r.fee))} XMR, paid by the buyer`]])}
   <p class="wl-note warn">After you approve, withdrawing the listing does not stop this sale. Only cancelling the lot on chain does.</p>
   <p class="wl-note">Experimental settlement, not independently reviewed. Trade small amounts.</p>`;
  if(a.kind==='pay')return `<h1 class="wl-title">Approve payment</h1><p class="wl-lead">One Monero transaction pays the seller and delivers the lot to you.</p>
-  <div class="wl-big"><span>You receive</span><strong>${esc(T(r.quantity))} XMR20</strong><small>${esc(r.quantity)} atomic units · lot ${esc(short(r.lot))}</small></div>
+  <div class="wl-big"><span>You receive</span><strong>${esc(T(r.quantity))} ${S}</strong>${N}<small>${esc(r.quantity)} atomic units · lot ${esc(short(r.lot))}</small></div>
   ${lines([['Lot price',`${esc(X(r.price))} XMR`],['Network fee',`${esc(X(r.fee))} XMR`],['Total from this wallet',`${esc(X(r.total))} XMR`,'total'],['Paid to (seller)',`<span class="mono">${esc(r.payout)}</span>`],['Lot depth',`${esc(r.confirmationsAtQuote)} confirmations (needs ${esc(r.finalityDepth)})`]])}
   ${payByNote(r)}
   <p class="wl-note warn">Experimental settlement, not independently reviewed. Delivery and payment stand or fall together unless the chain reorganises deeper than ${esc(r.finalityDepth)} blocks.</p>`;

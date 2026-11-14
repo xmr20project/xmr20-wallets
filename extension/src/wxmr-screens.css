@@ -1,0 +1,2 @@
+/* Swap on home (four actions) and the profile link. */
+.actions.four{grid-template-columns:repeat(4,1fr);gap:8px}.actions.four .action{font-size:11px;gap:8px}.link-btn{display:block;text-align:center}
