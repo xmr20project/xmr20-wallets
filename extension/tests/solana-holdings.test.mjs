@@ -71,3 +71,42 @@ test('account batches travel concurrently while rows keep catalog order',async()
  const slow=f.load;const delayed=(options={})=>slow({...options,fetcher:async(url,o)=>{if(o.method&&JSON.parse(o.body).rpc.method==='getMultipleAccounts'){inFlight++;peak=Math.max(peak,inFlight);await new Promise(r=>setTimeout(r,5));inFlight--;}return f.fetcher(url,o);}});
  const r=await delayed();assert.equal(r.rows.length,61);assert.deepEqual(r.rows.map(x=>x.mint),tokens.map(t=>t.mint));assert.ok(peak>=2&&peak<=3,'bounded concurrency, observed '+peak);
 });
+// Launches of the trading service: catalog rows of venue 'xmr20-trade', exactly as its catalog writes them.
+function launch(change={}){return {mint:Keypair.generate().publicKey.toBase58(),ticker:'TEST',name:'Test launch',owner:Keypair.generate().publicKey.toBase58(),venue:'xmr20-trade',launchMode:'monero',state:'Launched',bridgeReady:true,hidden:false,transferTaxBps:0,decimals:6,moneroNetwork:'mainnet',...change};}
+test('a launch of the trading service held on Solana is listed by its mint; no launch record or Monero inscription is invented',async()=>{
+ const t=launch(),r=await fixture([token(),t]).load();assert.equal(r.complete,true);assert.equal(r.rows.length,2);
+ const [pad,row]=r.rows;assert.match(pad.id,/^[a-f0-9-]{36}$/);assert.equal(pad.deployment,'ab'.repeat(32));assert.equal(pad.venue,undefined);assert.equal('venue' in pad,false);
+ assert.deepEqual({...row,checkedAt:0},{id:t.mint,mint:t.mint,name:'Test launch',ticker:'TEST',image:null,deployment:null,listed:false,venue:'xmr20-trade',amountRaw:'7530668912636',checkedAt:0,stale:false,balanceSource:'solana-finalized',frozen:false});
+});
+test('the launch row kind is exact: a row that is not launched for bridging, carries a launchpad record field, or has another value in a known field is left out',async()=>{
+ for(const change of [{state:'Reserved'},{state:undefined},{bridgeReady:false},{bridgeReady:'true'},{hidden:true},{hidden:undefined},{venue:'raydium-launchlab'},{venue:undefined},{halted:true},{cancelledAt:1793910155355},{ticker:''},{ticker:'ELEVENCHARS'},{name:7},{mint:'not-a-mint'},
+  {id:null},{id:''},{moneroTxid:'ab'.repeat(32)},{moneroTxid:null},{solanaFinalized:false},{solanaFinalized:true},{launchMode:'solana'},{launchMode:undefined},{decimals:9},{decimals:undefined},{transferTaxBps:150},{moneroNetwork:'stagenet'},{moneroNetwork:undefined}]){
+  const r=await fixture([launch()],{patchCatalog:value=>{value.tokens[0]={...value.tokens[0],...change};}}).load();assert.equal(r.complete,true,JSON.stringify(change));assert.deepEqual(r.rows,[],JSON.stringify(change));
+ }
+});
+test('a row with a launch id must pass the launchpad checks; dressing it as a trading-service launch admits nothing',async()=>{
+ for(const change of [{solanaFinalized:false},{moneroTxid:undefined},{moneroTxid:'ab'.repeat(31)},{hidden:true},{halted:true},{id:'not-a-launch-id'}]){
+  const t={...token(),venue:'xmr20-trade',launchMode:'monero',state:'Launched',bridgeReady:true,hidden:false,...change};
+  const r=await fixture([t]).load();assert.equal(r.complete,true,JSON.stringify(change));assert.deepEqual(r.rows,[],JSON.stringify(change));
+ }
+});
+test('the launchpad row stands when a launch row names the same mint, in either order and whatever its state',async()=>{
+ const pad=token();
+ for(const tokens of [[pad,launch({mint:pad.mint})],[launch({mint:pad.mint}),pad]]){const r=await fixture(tokens).load();assert.equal(r.complete,true);assert.equal(r.rows.length,1);assert.equal(r.rows[0].id,pad.id);assert.equal(r.rows[0].deployment,pad.moneroTxid);assert.equal('venue' in r.rows[0],false);}
+ // A row with a launch id that fails its own checks (hidden, or an id that is not one) still keeps a launch row for its mint out.
+ for(const change of [{hidden:true},{id:'not-a-launch-id'},{solanaFinalized:false}]){const failing={...token(),...change},none=await fixture([launch({mint:failing.mint}),failing]).load();assert.equal(none.complete,true,JSON.stringify(change));assert.deepEqual(none.rows,[],JSON.stringify(change));}
+});
+test('a repeated launch row is read once: the first row for the mint stands and no other balance is affected',async()=>{
+ const pad=token(),t=launch(),r=await fixture([pad,t,{...t,name:'Second row'},{...t}]).load();
+ assert.equal(r.complete,true);assert.deepEqual(r.rows.map(x=>[x.id,x.name]),[[pad.id,pad.name],[t.mint,'Test launch']]);
+ await assert.rejects(fixture([pad,{...pad}]).load(),/Duplicate token identity/,'a repeated launchpad row is refused as before');
+});
+test('a launch row is never marked as listed, and things that are not rows are skipped',async()=>{
+ const t=launch({proofVerified:true}),r=await fixture([token(),t],{patchCatalog:value=>{value.tokens=[null,5,'row',[],...value.tokens,null];}}).load();
+ assert.equal(r.complete,true);assert.equal(r.rows.length,2);assert.equal(r.rows[1].id,t.mint);assert.equal(r.rows[1].listed,false);
+});
+test('launch rows share the bounded batches and keep catalog order beside launchpad rows',async()=>{
+ const tokens=Array.from({length:40},(_,i)=>i%2?launch({ticker:'L'+i}):token(i)),f=fixture(tokens),r=await f.load();
+ assert.equal(r.complete,true);assert.deepEqual(r.rows.map(x=>x.mint),tokens.map(t=>t.mint));assert.equal(r.rows.filter(x=>x.venue==='xmr20-trade').length,20);
+ assert.equal(f.calls.filter(c=>c.o.method).length,3,'one network check and two account batches');
+});
