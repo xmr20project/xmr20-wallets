@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';
-import {siteSender,signInMessage,publicAccount,vaultUnlockMessage} from '../src/site-policy.js';
+import {siteSender,signInMessage,publicAccount,vaultUnlockMessage,pageOf} from '../src/site-policy.js';
 const source={url:'https://xmr20.org/index',origin:'https://xmr20.org',frameId:0,tab:{id:8},documentId:'document-a'};
 const now=Date.now(),wallet='11111111111111111111111111111111';
 const message=`Sign in to XMR20\nWebsite: https://xmr20.org\nWallet: ${wallet}\nNonce: 00000000-0000-0000-0000-000000000000\nIssued: ${new Date(now).toISOString()}\nExpires: ${new Date(now+300000).toISOString()}\nThis signature proves wallet ownership. It does not authorize a transaction.`;
@@ -26,4 +26,8 @@ test('vault unlock binds exact origin owner linked address network version and c
  const a={solana:wallet,monero};assert.equal(vaultUnlockMessage(unlock,a).address,monero);
  for(const bad of [unlock+'\n',unlock.replace('Version: 1','Version: 2'),unlock.replace('mainnet','stagenet'),unlock.replace('https://xmr20.org','https://evil.test'),unlock.replace(monero,monero.slice(0,-1)+'1'),unlock.replace(btoa('a'.repeat(32)),btoa('a'.repeat(31))),unlock.replace(wallet,'wrong'),unlock.replace('Backup ID: ','Backup ID: !'),unlock.replace('Never share this signature.','Please send funds.')])assert.throws(()=>vaultUnlockMessage(bad,a));
  assert.throws(()=>vaultUnlockMessage(unlock,{...a,monero:'other'}));assert.throws(()=>vaultUnlockMessage(unlock,a,'http://127.0.0.1:8897'));
+});
+test('a connection records its page: origin, path and query, not the part after #',()=>{
+ assert.equal(siteSender({...source,url:'https://xmr20.org/market/?a=1#/nft/7'}).page,'https://xmr20.org/market/?a=1');
+ assert.equal(siteSender(source).page,'https://xmr20.org/index');assert.equal(pageOf('not an address'),null);
 });

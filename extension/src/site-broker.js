@@ -1,4 +1,4 @@
-import {siteSender,siteSigningRequest,publicAccount,publicMoneroAccount,bridgeLaunch,MARKET_READ_ORIGIN,MONERO_MARKET_ORIGIN} from './site-policy.js';
+import {siteSender,siteSigningRequest,publicAccount,publicMoneroAccount,bridgeLaunch,MARKET_READ_ORIGIN,MONERO_MARKET_ORIGIN,SITE_ORIGIN,pageOf} from './site-policy.js';
 import {MARKET_ORIGIN,marketLaunch} from './market-policy.js';
 import {isWalletPopup} from './native-popup-channel.js';
 const SLOT='xmr20-site-connection';
@@ -29,10 +29,12 @@ export function createSiteBroker({chrome,readSession,unlock,readVault,sign,signC
   // A dedicated lab origin may only use the market actions; when the market page lives on the site itself, the site's own actions stay available.
   if(moneroMarketSource&&MONERO_MARKET_ORIGIN!=='https://xmr20.org'&&!['ping','connectMonero','status','disconnect','result','openMoneroMarket','market'].includes(m.action))throw Error('Use XMR20 Wallet to review market operations.');
   if(source.origin===MARKET_READ_ORIGIN&&!['ping','connect','status','disconnect','result'].includes(m.action))throw Error('The local market may only connect and read the public account.');
-  if(source.origin===MARKET_ORIGIN&&!['ping','connect','connectMonero','status','disconnect','result','openMarket',...(moneroMarket?['openMoneroMarket','market']:[])].includes(m.action))throw Error('Use XMR20 Wallet to review market operations.');
+  if(source.origin===MARKET_ORIGIN&&!['ping','connect','connectMonero','status','disconnect','result','openMarket',...(moneroMarket?['openMoneroMarket','market']:[]),...(source.origin===SITE_ORIGIN?['openXmr721','openMordinals']:[])].includes(m.action))throw Error('Use XMR20 Wallet to review market operations.');
   if(m.action==='connectMonero'&&!(nativeMarket&&source.origin===MARKET_ORIGIN)&&!moneroMarketSource)throw Error('Monero connection is only available to the configured market.');
   if(m.action==='ping')return {name:'XMR20 Wallet',version:chrome.runtime.getManifest().version,jointBridge,nativeMarket,moneroMarket};
-  const state=await load(),session=await clean(state),grant=state.grants[key(source)];await save(state);
+  const state=await load(),session=await clean(state);
+  for(const list of [state.grants,state.requests,state.markets||{}])for(const [id,r]of Object.entries(list))if(r.tabId===source.tabId&&typeof r.documentId==='string'&&r.documentId!==source.documentId)delete list[id];
+  const grant=state.grants[key(source)];await save(state);
   if(m.action==='disconnect'){delete state.grants[key(source)];for(const [id,r]of Object.entries(state.requests))if(same(r,source))delete state.requests[id];for(const [id,r]of Object.entries(state.markets||{}))if(same(r,source))delete state.markets[id];await save(state);return true;}
   if(m.action==='status')return grant?{account:grant.account}:null;
   if(m.action==='result'){
@@ -72,14 +74,19 @@ export function createSiteBroker({chrome,readSession,unlock,readVault,sign,signC
    state.markets[id]={...source,id,market,account:grant.account,moneroOnly:grant.moneroOnly===true,sessionId:session.id,windowId:window.id,approvalTabId:window.tabs[0].id};await save(state);
    return {opened:true,account:grant.account};
   }
-  if(!['connect',...(nativeMarket||moneroMarket?['connectMonero']:[]),'signIn',...(jointBridge?['openBridge']:[])].includes(m.action))throw Error('Use the extension to send or approve transactions.');
+  if(!['connect',...(nativeMarket||moneroMarket?['connectMonero']:[]),'signIn',...(jointBridge?['openBridge']:[]),...(source.origin===SITE_ORIGIN?['openXmr721','openMordinals']:[])].includes(m.action))throw Error('Use the extension to send or approve transactions.');
   if(grant?.moneroOnly&&['signIn','openBridge'].includes(m.action))throw Error('This Monero connection does not authorize Solana operations.');
   if(Object.values(state.requests).some(r=>!r.result&&!r.error))throw Error('Finish or close the open wallet request first.');
   if(m.action==='signIn'){if(!grant)throw Error('Connect your wallet first.');siteSigningRequest(m.message,grant.account,now(),source.origin);}
   if(m.action==='openBridge'&&(!grant||!session||grant.sessionId!==session.id||!grant.account.monero))throw Error('Connect an account with linked Solana and Monero wallets first.');
   const id=uuid(),request={...source,id,action:m.action,expires:now()+300000,message:m.action==='signIn'?m.message:null,accountId:grant?.account.id,sessionId:session?.id};
   if(m.action==='openBridge')request.bridge=bridgeLaunch(m.bridge);
-  const window=await chrome.windows.create({url:chrome.runtime.getURL(m.action==='openBridge'?'popup.html':'approval.html')+'?request='+id,type:'popup',width:420,height:740});
+  if(m.action==='openXmr721'||m.action==='openMordinals'){
+   if(!grant||!session||grant.sessionId!==session.id||!grant.account.monero)throw Error('Sign in with XMR20 Wallet on this page first.');
+   if(session.activeId!==grant.account.id)throw Error('Select '+grant.account.name+' in XMR20 Wallet, then try again.');
+   if(m.action==='openXmr721'){if(typeof m.record!=='string'||!/^(?:[0-9a-f]{2}){1,1000}$/.test(m.record))throw Error('Malformed XMR721 record.');request.record=m.record;request.expires=now()+1800000;}
+  }
+  const window=await chrome.windows.create({url:chrome.runtime.getURL(['openBridge','openXmr721','openMordinals'].includes(m.action)?'popup.html':'approval.html')+'?request='+id,type:'popup',width:420,height:740});
   request.windowId=window.id;request.approvalTabId=window.tabs[0].id;state.requests[id]=request;await save(state);return {requestId:id};
  }
  async function internal(m,sender){
@@ -129,11 +136,24 @@ export function createSiteBroker({chrome,readSession,unlock,readVault,sign,signC
    // never reachable from onMessageExternal or the website connection result.
    return {seed:a.xmrSeed,address:a.xmr};
   }
-  if(sender.id!==chrome.runtime.id||![chrome.runtime.getURL('approval.html'),...(jointBridge?[chrome.runtime.getURL('popup.html')]:[])].includes(sender.url?.split('?')[0]))throw Error('Not an approval window.');
+  if(sender.id!==chrome.runtime.id||![chrome.runtime.getURL('approval.html'),chrome.runtime.getURL('popup.html')].includes(sender.url?.split('?')[0]))throw Error('Not an approval window.');
   const state=await load();await clean(state);const r=state.requests[m.requestId];
   if(!r||r.result||r.error||sender.tab?.id!==r.approvalTabId)throw Error('Request expired or already handled.');
-  if(sender.url?.split('?')[0]!==chrome.runtime.getURL(r.action==='openBridge'?'popup.html':'approval.html'))throw Error('Not the bound approval surface.');
+  if(sender.url?.split('?')[0]!==chrome.runtime.getURL(['openBridge','openXmr721','openMordinals'].includes(r.action)?'popup.html':'approval.html'))throw Error('Not the bound approval surface.');
   if(m.action==='reject'){r.error='Request rejected.';await save(state);return true;}
+  if(r.action==='openXmr721'||r.action==='openMordinals'){
+   const session=await readSession(),grant=state.grants[key(r)];
+   if(!session||session.id!==r.sessionId||grant?.sessionId!==session.id||grant.account.id!==r.accountId)throw Error('Wallet connection changed. Connect again.');
+   const tab=await chrome.tabs.get(r.tabId);if(new URL(tab.url).origin!==r.origin)throw Error('The requesting website has changed.');
+   const vault=await readVault(session),a=vault.accounts.find(a=>a.id===r.accountId);
+   if(!a?.xmrSeed||a.watch||a.xmr!==grant.account.monero)throw Error('Recover this Monero account in XMR20 Wallet first.');
+   const current=await readSession();if(!current||current.id!==session.id)throw Error('Wallet locked. Connect again.');
+   if(m.action==='view')return {origin:r.origin,xmr721:r.action,account:publicMoneroAccount(a),record:r.record??null};
+   if(m.action!=='done'||m.accountId!==r.accountId)throw Error('Unsupported approval result.');
+   if(r.action==='openMordinals'){r.result={opened:true};await save(state);return true;}
+   if(!/^[0-9a-f]{64}$/.test(m.result?.id||'')||typeof m.result.state!=='string'||m.result.state.length>24)throw Error('Unsupported approval result.');
+   r.result={id:m.result.id,state:m.result.state};await save(state);return true;
+  }
   if(r.action==='openBridge'){
    const session=await readSession(),grant=state.grants[key(r)];
    if(!session||session.id!==r.sessionId||grant?.sessionId!==session.id||grant.account.id!==r.accountId)throw Error('Wallet connection changed. Connect again.');
@@ -173,14 +193,18 @@ export function createSiteBroker({chrome,readSession,unlock,readVault,sign,signC
   }
   // A manual lock or vault edit while decryption/signing was running invalidates approval.
   const current=await readSession();if(!current||current.id!==session.id)throw Error('Wallet locked. Connect again.');
-  if(r.action==='connect'||moneroOnly)state.grants[key(r)]={origin:r.origin,tabId:r.tabId,documentId:r.documentId,account:result.account,moneroOnly,sessionId:session.id};
+  if(r.action==='connect'||moneroOnly)state.grants[key(r)]={origin:r.origin,tabId:r.tabId,documentId:r.documentId,page:r.page,account:result.account,moneroOnly,sessionId:session.id};
   r.result=result;r.sessionId=session.id;await save(state);return true;
  }
- async function revokeTab(tabId,{navigation=false}={}){
+ // A page that only changes the part of its address after # (the XMR721 views on xmr20.org/market/, Back and Forward
+ // between them) is still the same document: its connection, open request and market window stay. A reload (no new
+ // address), another page or a closed tab ends them as before; a new document of the same page ends them when it speaks.
+ async function revokeTab(tabId,{navigation=false,url=null}={}){
   const state=await load();
-  for(const [id,r]of Object.entries(state.grants))if(r.tabId===tabId)delete state.grants[id];
-  for(const [id,r]of Object.entries(state.requests))if(r.tabId===tabId)delete state.requests[id];
-  for(const [id,r]of Object.entries(state.markets||{}))if(r.tabId===tabId||!navigation&&r.approvalTabId===tabId)delete state.markets[id];
+  const kept=r=>navigation&&typeof url==='string'&&typeof r.page==='string'&&pageOf(url)===r.page;
+  for(const [id,r]of Object.entries(state.grants))if(r.tabId===tabId&&!kept(r))delete state.grants[id];
+  for(const [id,r]of Object.entries(state.requests))if(r.tabId===tabId&&!kept(r))delete state.requests[id];
+  for(const [id,r]of Object.entries(state.markets||{}))if(r.tabId===tabId&&!kept(r)||!navigation&&r.approvalTabId===tabId)delete state.markets[id];
   await save(state);
  }
  async function revokeNativePopup(id){

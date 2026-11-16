@@ -46,6 +46,6 @@ if(typeof __XMR20_NATIVE_MARKET__!=='undefined'&&__XMR20_NATIVE_MARKET__){
  // New extension windows can emit loading before their URL is available.
  // Navigation invalidates website documents; only removal closes a bound
  // packaged host. Its exact internal sender/tab checks still apply on reload.
- chrome.tabs.onUpdated.addListener((tabId,change)=>{if(change.status==='loading')void serial(()=>broker.revokeTab(tabId,{navigation:true}));});
+ chrome.tabs.onUpdated.addListener((tabId,change)=>{if(change.status==='loading')void serial(()=>broker.revokeTab(tabId,{navigation:true,url:change.url??null}));});
  chrome.tabs.onRemoved.addListener(tabId=>{void serial(()=>broker.revokeTab(tabId));});
 }
