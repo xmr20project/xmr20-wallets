@@ -66,6 +66,22 @@ background runner); the live page offers the site's own wallet.
 
 The settlement is experimental and has not had an independent security review. Trade small amounts.
 
+## What's new in Chrome extension 0.1.145 (16 November 2026)
+
+- **Mordinals on xmr20.org with XMR20 Wallet.** Sign in on xmr20.org with XMR20 Wallet (top right), open the
+  **Monero Market → Mordinals / XMR721** tab and press **Connect wallet**: your Mordinals open in the wallet, where you
+  find, claim, send, sell and buy them. Listing, stopping a sale, sending, burning or minting an XMR721 NFT from the
+  website is approved in the wallet's own window with one press. The website only sees your public Monero address and,
+  after you approve a record, its code and state.
+- **Stays signed in on the market.** Moving between the market's tabs and views (or pressing Back) no longer signs the
+  website out of the wallet. A reload or another page still does.
+- Feather and Cake Wallet keep working on xmr20.org without the extension: open a Mordinal and sign a message in your
+  wallet.
+- **Source.** The two new website requests (`openMordinals`, `openXmr721`) and the connection that survives a change
+  after `#` are in `extension/src/site-broker.js` and `site-policy.js`; the wallet window's side is `xmr721Request`
+  at the end of `extension/src/app.js` and the record approval in `extension/src/mordinals/xmr721-records.js`.
+  [`extension/README.md`](extension/README.md#how-it-is-built) says what was checked against the release.
+
 ## What's new in Chrome extension 0.1.144 (14 November 2026)
 
 - **Engine files without the build machine's folder name.** Rust writes source-file paths into an engine's error
@@ -172,7 +188,7 @@ The settlement is experimental and has not had an independent security review. T
 The [Releases page](https://github.com/xmr20project/xmr20-wallets/releases) has files you can use without building
 anything:
 
-- **`XMR20-Wallet-0.1.143.zip`**: the Chrome extension as tested, with the cleaned engine files of 0.1.144. Unzip it and load it in
+- **`XMR20-Wallet-0.1.145.zip`**: the Chrome extension as tested. Unzip it and load it in
   `chrome://extensions` ([step-by-step guide](INSTALL.md)).
 - **`xmr20-cli-0.5.1.zip`** (in the [3 November release](https://github.com/xmr20project/xmr20-wallets/releases/tag/wallets-2026-11-03)): the terminal wallet with its engine already built. You need Node.js 22, then
   `npm install`, `npm run setup` and `./xmr20` ([steps](cli/README.md#ready-made-download)).

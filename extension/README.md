@@ -1,7 +1,7 @@
 # extension/ — XMR20 Wallet for Chrome
 
-Latest ready-made version: **0.1.143** ([install guide](../INSTALL.md)). The source in this folder is **0.1.144**, the same
-wallet with the cleaned engine files (see the main README): `npm run build:extension` builds 0.1.144.
+Latest ready-made version: **0.1.145** ([install guide](../INSTALL.md)). The source in this folder is the same version:
+`npm run build:extension` builds 0.1.145.
 
 The XMR20 Wallet browser extension. It works in Chrome, Brave and Edge. It holds your SOL and Solana tokens, XMR, and
 XMR20 tokens on Monero (Open and Private). It also bridges between the two chains.
@@ -28,7 +28,7 @@ Chrome runs the wallet from that folder, so don't delete or move it. The extensi
 
 ## Install from a tester zip
 
-You can use a ready-made zip instead: `XMR20-Wallet-0.1.143.zip` from the
+You can use a ready-made zip instead: `XMR20-Wallet-0.1.145.zip` from the
 [Releases page](https://github.com/xmr20project/xmr20-wallets/releases). It is exactly the build that was installed and
 tested. [INSTALL.md](../INSTALL.md) has the same steps with pictures:
 
@@ -62,9 +62,9 @@ The first scan of an account takes 2–3 minutes. After that, only new blocks ar
 
 ## How it is built
 
-`build.mjs` follows the same recipe as the real releases (0.1.103–0.1.144):
+`build.mjs` follows the same recipe as the real releases (0.1.103–0.1.145):
 
-- **Start from the previous release's files.** These are in `prebuilt/`, kept exactly as installed in 0.1.144: the popup
+- **Start from the previous release's files.** These are in `prebuilt/`, kept exactly as installed in 0.1.145: the popup
   page, icons, background service worker, approval page, older workers, and three bundles the releases did not rebuild
   every time:
   - the Monero Market window `market-wallet.*` and background runner `market-runner.*` (since 0.1.126; lots of any XMR20
@@ -77,7 +77,9 @@ The first scan of an account takes 2–3 minutes. After that, only new blocks ar
 - **Rebuild from source:**
   - `app.js` (the wallet) from `src/app.js`, with `../engine/token`, `../engine/shared` and `src/mordinals`. The popup's
     private transfers rows (0.1.136–0.1.142), the Mordinals screens in Collectibles (0.1.142) and the Solana node choice
-    (0.1.141) are plain source here; the release builds added the first two while bundling.
+    (0.1.141) are plain source here; the release builds added the first two while bundling. Since 0.1.145 the popup also
+    answers xmr20.org when it asks for this account's Mordinals screens or for the approval of one XMR721 record
+    (`xmr721Request` at the end of `src/app.js`, with `src/mordinals/xmr721-records.js`).
   - `vendor/` (the engine files) from `../engine/build.mjs`
   - `vendor/mordinals.worker.js` from `src/mordinals/mordinals.worker.js`, and `vendor/mordinals.wasm`, the Mordinals
     engine (`../engine/holder-wasm/mordinals.wasm`, source in `../engine/holder-wasm/mordinals/`)
@@ -90,7 +92,21 @@ The Mordinals screens use the XMR721 rule library in `src/mordinals/rules/`, cop
 reader's address and the ledger's settings (`mordinals` in `build.mjs`); the screens refuse a reader that serves anything
 else.
 
-Checked on 14 November 2026:
+Checked on 16 November 2026 (0.1.145):
+
+- Every file of `dist/` except `app.js` is byte-identical to the installed 0.1.145, `background.js` and `manifest.json`
+  included, apart from the same 2-character flag in `vendor/private-holder.worker.js`.
+- `app.js`: built with the npm libraries left out, this folder's source gives byte for byte the 0.1.145 release's popup
+  code, with the same three-file exception as on 14 November (below).
+- `src/background.js`, `src/site-broker.js` and `src/site-policy.js` are the 0.1.145 release's sources of
+  `background.js` line for line; only the import paths differ.
+- The released 0.1.145 files were checked in Chromium with a throwaway wallet and a stand-in xmr20.org market page: the
+  connection stays while the part after `#` changes and ends on reload; a new document of the page does not inherit
+  it; `openMordinals` opens the Mordinals screens; for a mint record, closing the window signs nothing and one press
+  signs it and hands it to a stand-in relay; malformed records and other actions are refused. Nothing real was signed,
+  sent or paid.
+
+Checked on 14 November 2026 (0.1.144):
 
 - Every file of `dist/` except `app.js` is byte-identical to the installed 0.1.144, `manifest.json` included, apart from
   esbuild's 2-character interop flag in `vendor/private-holder.worker.js` (see `../engine/README.md`).
@@ -111,7 +127,9 @@ bundles three copies. This repository installs one copy, so its `app.js` is smal
 
 `src/` is the code only the extension uses. Code the website wallet also uses is in `../engine/shared/`.
 `background.js` and `approval.js` are kept prebuilt, like the release recipe does; their sources are in `src/` for
-reading.
+reading. The 0.1.145 `background.js` was bundled from `src/background.js`, `src/site-broker.js` and `src/site-policy.js`
+as they are here, but with the copies of `holdings.js`, `core.js` and `preferences.js` (now in `../engine/shared/`) from
+before 0.1.139 and 0.1.141: those releases changed the three files for the popup and did not rebuild the background.
 
 ### Rebuild private-balance.js (optional)
 
@@ -137,7 +155,7 @@ send costs 0.004 SOL on top of the network fee.
 npm test -w extension
 ```
 
-This runs 51 of the extension's unit-test files (461 tests). They cover bridge reads and retries, holdings and prices,
+This runs 51 of the extension's unit-test files (465 tests). They cover bridge reads and retries, holdings and prices,
 site connection policy, saved scan progress, max amounts, pending debits, the Solana node choice, wXMR reads, token
 sends, market lots of two tokens and more. The remaining test files of the main repository need its review bundles or
 older build outputs, so they stay there.

@@ -7,11 +7,11 @@ function fixture({jointBridge=false}={}){
  const broker=createSiteBroker({chrome,jointBridge,readSession:async()=>session,unlock:async password=>{if(password!=='correct')throw Error('Incorrect password');session={id:'unlock-2'};},readVault:async()=>({accounts}),sign:async()=>{signs++;return 'signature';},now:()=>now,uuid:()=>String(++number)});
  const sender={url:'https://xmr20.org/',origin:'https://xmr20.org',frameId:0,tab:{id:1},documentId:'d1'};
  const external=(action,props={},source=sender)=>broker.external({channel:'xmr20-site',action,...props},source);
- const internal=(requestId,action,props={},tabId)=>broker.internal({requestId,action,...props},{id:'extension',url:chrome.runtime.getURL(data['xmr20-site-connection'].requests[requestId]?.action==='openBridge'?'popup.html':'approval.html')+'?request='+requestId,tab:{id:tabId??data['xmr20-site-connection'].requests[requestId].approvalTabId}});
+ const internal=(requestId,action,props={},tabId)=>broker.internal({requestId,action,...props},{id:'extension',url:chrome.runtime.getURL(['openBridge','openXmr721','openMordinals'].includes(data['xmr20-site-connection'].requests[requestId]?.action)?'popup.html':'approval.html')+'?request='+requestId,tab:{id:tabId??data['xmr20-site-connection'].requests[requestId].approvalTabId}});
  const message=()=>`Sign in to XMR20\nWebsite: https://xmr20.org\nWallet: ${account.sol}\nNonce: 00000000-0000-0000-0000-000000000000\nIssued: ${new Date(now).toISOString()}\nExpires: ${new Date(now+300000).toISOString()}\nThis signature proves wallet ownership. It does not authorize a transaction.`;
- return {external,internal,account,accounts,select:id=>session.activeId=id,message,windows,lock:()=>session=null,advance:ms=>now+=ms,signs:()=>signs};
+ return {external,internal,broker,sender,account,accounts,select:id=>session.activeId=id,message,windows,lock:()=>session=null,advance:ms=>now+=ms,signs:()=>signs};
 }
-test('connect discloses nothing before approval and binds approval/results to tab and document',async()=>{const f=fixture(),r=await f.external('connect');assert.equal(await f.external('status'),null);assert.deepEqual(await f.external('result',r),{done:false});await assert.rejects(f.internal(r.requestId,'approve',{accountId:'account-a'},999));await f.internal(r.requestId,'approve',{accountId:'account-a'});await assert.rejects(f.external('result',r,{url:'https://xmr20.org/',origin:'https://xmr20.org',frameId:0,tab:{id:1},documentId:'d2'}));const result=await f.external('result',r);assert.equal(result.value.account.solana,f.account.sol);assert.ok(!JSON.stringify(result).includes('SECRET'));await assert.rejects(f.external('result',r));});
+test('connect discloses nothing before approval and binds approval/results to tab and document',async()=>{const f=fixture(),r=await f.external('connect');assert.equal(await f.external('status'),null);assert.deepEqual(await f.external('result',r),{done:false});await assert.rejects(f.internal(r.requestId,'approve',{accountId:'account-a'},999));await f.internal(r.requestId,'approve',{accountId:'account-a'});await assert.rejects(f.external('result',r,{url:'https://xmr20.org/',origin:'https://xmr20.org',frameId:0,tab:{id:2},documentId:'d1'}));const result=await f.external('result',r);assert.equal(result.value.account.solana,f.account.sol);assert.ok(!JSON.stringify(result).includes('SECRET'));await assert.rejects(f.external('result',r));});
 test('reject, close, timeout and lock all prevent website approval',async()=>{for(const mode of ['reject','close','expire','lock']){const f=fixture(),r=await f.external('connect');if(mode==='reject')await f.internal(r.requestId,'reject');if(mode==='close')f.windows.clear();if(mode==='expire')f.advance(300001);if(mode==='lock'){await f.internal(r.requestId,'approve',{accountId:'account-a'});f.lock();}await assert.rejects(f.external('result',r));assert.equal(f.signs(),0);}});
 test('sign-in needs a grant plus a second approval and is revoked by disconnect or lock',async()=>{const f=fixture();await assert.rejects(f.external('signIn',{message:f.message()}));const c=await f.external('connect');await f.internal(c.requestId,'approve',{accountId:'account-a'});await f.external('result',c);const r=await f.external('signIn',{message:f.message()});assert.equal(f.signs(),0);await f.internal(r.requestId,'approve',{accountId:'account-a'});assert.equal(f.signs(),1);assert.equal((await f.external('result',r)).value.signature,'signature');await f.external('disconnect');assert.equal(await f.external('status'),null);await assert.rejects(f.external('signIn',{message:f.message()}));});
 test('unsupported signing cannot open an approval and connections never touch idle time',async()=>{const f=fixture();await assert.rejects(f.external('signTransaction',{transaction:'anything'}));assert.equal(f.windows.size,0);assert.equal(f.signs(),0);const r=await f.external('connect');await assert.rejects(f.external('connect'));f.windows.clear();const next=await f.external('connect');assert.notEqual(r.requestId,next.requestId);});
@@ -42,4 +42,42 @@ test('vault unlock requires separate approval and rechecks linked address before
  const r=await f.external('signIn',{message});assert.equal(f.signs(),0);const v=await f.internal(r.requestId,'view');assert.equal(v.signingKind,'vaultUnlock');assert.equal(v.unlock.address,f.account.xmr);
  const original=f.account.xmr;f.account.xmr='changed';await assert.rejects(f.internal(r.requestId,'approve',{accountId:f.account.id}),/Monero account changed/);assert.equal(f.signs(),0);f.account.xmr=original;
  await f.internal(r.requestId,'approve',{accountId:f.account.id});assert.equal(f.signs(),1);assert.equal((await f.external('result',r)).done,true);
+});
+
+// 0.1.145: what an older document of a tab left ends when a new document of that tab speaks.
+test('a new document of the same tab ends the older document\'s connection and open requests',async()=>{
+ const f=fixture(),c=await f.external('connect');await f.internal(c.requestId,'approve',{accountId:'account-a'});await f.external('result',c);
+ assert.equal((await f.external('status')).account.id,'account-a');
+ const pending=await f.external('connect'),next={...f.sender,documentId:'d2'};
+ assert.equal(await f.external('status',{},next),null);await assert.rejects(f.external('result',pending,next),/expired/);
+ await assert.rejects(f.external('result',pending),/expired/);assert.equal(await f.external('status'),null);
+});
+// 0.1.145: the XMR721 views on xmr20.org/market/ change only the part after #; that keeps the connection.
+test('a navigation that keeps origin, path and query keeps the connection; a reload, another page or a closed tab ends it',async()=>{
+ for(const [url,kept] of [['https://xmr20.org/market/#/nft/7',true],['https://xmr20.org/market/',true],[null,false],['https://xmr20.org/market/?view=1',false],['https://xmr20.org/launch/',false],['close',false]]){
+  const f=fixture(),source={...f.sender,url:'https://xmr20.org/market/#/xmr721'},c=await f.external('connect',{},source);
+  await f.internal(c.requestId,'approve',{accountId:'account-a'});await f.external('result',c,source);
+  await f.broker.revokeTab(1,url==='close'?{}:{navigation:true,url});
+  assert.equal(Boolean(await f.external('status',{},source)),kept,String(url));
+ }
+});
+test('xmr20.org may open the Mordinals screens or one XMR721 record approval for its connected, selected account',async()=>{
+ const f=fixture(),record='ab'.repeat(40),code='a'.repeat(64);
+ const local={url:'http://127.0.0.1:8893/',origin:'http://127.0.0.1:8893',frameId:0,tab:{id:3},documentId:'local'};
+ await assert.rejects(f.external('openMordinals',{},local),/Use the extension/);
+ await assert.rejects(f.external('openMordinals'),/Sign in with XMR20 Wallet/);await assert.rejects(f.external('openXmr721',{record}),/Sign in with XMR20 Wallet/);assert.equal(f.windows.size,0);
+ const c=await f.external('connect');await f.internal(c.requestId,'approve',{accountId:'account-a'});await f.external('result',c);
+ for(const bad of [undefined,'','abc','AB'.repeat(4),'zz','ab'.repeat(1001)])await assert.rejects(f.external('openXmr721',{record:bad}),/Malformed XMR721 record/);
+ f.accounts.push({...f.account,id:'account-b',name:'Second'});f.select('account-b');await assert.rejects(f.external('openMordinals'),/Select Account in XMR20 Wallet/);f.select('account-a');
+ const r=await f.external('openXmr721',{record}),view=await f.internal(r.requestId,'view');
+ assert.deepEqual(view,{origin:'https://xmr20.org',xmr721:'openXmr721',account:{id:'account-a',name:'Account',solana:null,monero:'public-monero',canSign:false,canSignMonero:true},record});
+ assert.ok(!/SECRET|DISPOSABLE/.test(JSON.stringify(view)));
+ assert.deepEqual(await f.external('result',r),{done:false});f.advance(600000);assert.deepEqual(await f.external('result',r),{done:false});
+ await assert.rejects(f.internal(r.requestId,'done',{accountId:'account-b',result:{id:code,state:'pending'}}),/Unsupported approval result/);
+ await assert.rejects(f.internal(r.requestId,'done',{accountId:'account-a',result:{id:'not-a-code',state:'pending'}}),/Unsupported approval result/);
+ await f.internal(r.requestId,'done',{accountId:'account-a',result:{id:code,state:'pending',signature:'not passed on'}});
+ assert.deepEqual(await f.external('result',r),{done:true,value:{id:code,state:'pending'}});
+ const m=await f.external('openMordinals');assert.equal((await f.internal(m.requestId,'view')).xmr721,'openMordinals');
+ await f.internal(m.requestId,'done',{accountId:'account-a'});assert.deepEqual(await f.external('result',m),{done:true,value:{opened:true}});
+ assert.equal(f.signs(),0);
 });
