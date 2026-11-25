@@ -1,0 +1,247 @@
+{
+  "source": "https://raw.githubusercontent.com/monero-project/monero/v0.18.4.0/tests/crypto/tests.txt",
+  "fullSourceSha256": "48e04476d6d0e24565863ed1f7da9d0550427d87a01ed6808f5ac6780f28382b",
+  "selection": "First 40 check_signature rows, in source order; public test material only",
+  "vectors": [
+    {
+      "messageHash": "57fd3427123988a99aae02ce20312b61a88a39692f3462769947467c6e4c3961",
+      "publicKey": "a5e61831eb296ad2b18e4b4b00ec0ff160e30b2834f8d1eda4f28d9656a2ec75",
+      "signature": "cd89c4cbb1697ebc641e77fdcd843ff9b2feaf37cfeee078045ef1bb8f0efe0bb5fd0131fbc314121d9c19e046aea55140165441941906a757e574b8b775c008",
+      "valid": true
+    },
+    {
+      "messageHash": "92c1259cddde43602eeac1ab825dc12ffc915c9cfe57abcca04c8405df338359",
+      "publicKey": "9fa6c7fd338517c7d45b3693fbc91d4a28cd8cc226c4217f3e2694ae89a6f3dc",
+      "signature": "b027582f0d05bacb3ebe4e5f12a8a9d65e987cc1e99b759dca3fee84289efa5124ad37550b985ed4f2db0ab6f44d2ebbc195a7123fd39441d3a57e0f70ecf608",
+      "valid": false
+    },
+    {
+      "messageHash": "f8628174b471912e7b51aceecd9373d22824065cee93ff899968819213d338c3",
+      "publicKey": "8a7d608934a96ae5f1f141f8aa45a2f0ba5819ad668b22d6a12ad6e366bbc467",
+      "signature": "d7e827fbc168a81b401be58c919b7bcf2d7934fe10da6082970a1eb9d98ca609c660855ae5617aeed466c5fd832daa405ee83aef69f0c2661bfa7edf91ca6201",
+      "valid": true
+    },
+    {
+      "messageHash": "ec9deeaca9ce8f248337213e1411276b9c41e8d4369fc60981b0385653c0f170",
+      "publicKey": "df7f028022cb1b960f2bd740d13c9e44d25c344e57f8978459ffa3c384cd541c",
+      "signature": "2c2c8e7c83b662b58e561871f4de4287576946f4e26545ba40e78354c6d0b36f69ea44892f39a46cf3fd5c2813cbc1c525dac199ada6fd5ca8e1e04cff947700",
+      "valid": false
+    },
+    {
+      "messageHash": "114e8fffb137c2ce87dd59eff7f4b8e6cc167fdd28c3ea77d345d2c8c00989a1",
+      "publicKey": "d257f46216be34be5589e0b12094e643d1b31bc3c50e006d044d1ea885b5007d",
+      "signature": "9579b6e8dc108633ac8b67004699921aef479b6e7ee9590073fbe1404ee4b3d533dec29fd35540f13ac531c3ae49abb62cbc11d36b0cc3353db77a294d8d3d92",
+      "valid": false
+    },
+    {
+      "messageHash": "ce03e1fa5476167c3ebce1a400ca1d2d375176b5cb9ed180913efa1a688ddc97",
+      "publicKey": "a05a3a6776f85c5d04c42fa2c6a731831c3d3a4e3a12f967f9ba0b1ecd1aee98",
+      "signature": "4992de4fec265113710ec3a211e86784581f96241f0305d069a1e4629b504d03b3a1561fd9e73597db89ba00beeb60d2107c1f835176949bd354e8a173d46705",
+      "valid": true
+    },
+    {
+      "messageHash": "7db838c96a3e1fb14156986aef37b70f932ee79d3cbc8233cdd76997eaa0c0c2",
+      "publicKey": "306593abefdbe99beec4752ebb135131a93e8361fc35f60a1c56fc4501c6782f",
+      "signature": "5bd47b285d25ede033bc5c2049edf3feb06fe29091e2c90ba25128c6c1a050713f28db1b9106013d22d5e0ba05bbaca43c4d30b6f0bbad8768e6cb89b205c20c",
+      "valid": false
+    },
+    {
+      "messageHash": "2d96536cad13a409d5a46a6bde1f5cf1d9255e741d5a17309248dd910e02d1c3",
+      "publicKey": "c2257e5386cdef44b989ce395532b8e03dde166ba26c18759e1c440738242fe4",
+      "signature": "2f5e7a5c690c0d3bb2974e47eaa159d0bb2205a636b8cd09736add9fe8d75bee4249b30f8e1b99c1dea45999842f5709d2ee1d8e450807319723625074c69605",
+      "valid": false
+    },
+    {
+      "messageHash": "87625d63fcb5653575416de00c82ab4d893d6d5b64bb79eec564f61fe6cbe4de",
+      "publicKey": "8d4c678d19b93fe24e90e1e78ba439e3ab8c3d6fc8c2eb89bd343b92040de1b3",
+      "signature": "02f424dc88a9fa42b262707cb874d1e480f74a366bca7ae96bade60cd0c9e5515e993b892609b1d8dd2835177568911df548717b0396f9ecafa6d977dded2303",
+      "valid": false
+    },
+    {
+      "messageHash": "83824c2a42fd2d1f9f74106ce128ea3402261eb67a2cbcc74603b8fc52c694ed",
+      "publicKey": "f5834a5bffe7f8fd69ae6626e2d95902f470b309968c65834cefae251c408425",
+      "signature": "0e652aa0db24b0346fb2923b9c16d94f7038687a66e491c2dba3aa62a5ce27a3f15127deb15af6f02190486e65f4e48946a2dcaa85c54ba0273ddd84815e630f",
+      "valid": false
+    },
+    {
+      "messageHash": "bce37b33f7ee148282c3ccc12565da4f7c53af9646df616b17d95631ef209d14",
+      "publicKey": "13f4ba800ef35daefed6b8e54e865113b1d523a8719a5d22f596fc12203298a1",
+      "signature": "40cd174bf8b7a7564ed09b8f5c15d1b2134e5b8a36ba907dcffa5d76eb201c842eb63d40eefa4fb71a7e6f7fdadb96229daf56a121e64484e12e2455a12760bb",
+      "valid": false
+    },
+    {
+      "messageHash": "1d7a83ae9338726c1b6776f5fafdd78a79df32b1f8bd2702727d9c17f8771caa",
+      "publicKey": "42f746e23416bb1ca24b486424c3462291d9d6fa7436da6e66e59bae0ab43162",
+      "signature": "9417c063b682475fdc01a623b1a88043f176b1df0965b28b54de2712193a740e66f56b22815a05bcecbbaccd5494d29f7bbce32456201a8a21f0cca1892187cb",
+      "valid": false
+    },
+    {
+      "messageHash": "b921adf724750c6305c33cf98dc866dab70ac24ac2c6aba47b9cfb621aa0b691",
+      "publicKey": "53fd594636a7e10be480b78eb51a8188ea610be58fcf98b16202d2481dee3662",
+      "signature": "f624b6b8bda7df029d85e5c9a4a2a206fa84354ac703eeedc44a1f5c9d33e306bca16faef19fb8af6f7ff8aba005092ffa1781592ea0c193f5edbe1ed2bcb11c",
+      "valid": false
+    },
+    {
+      "messageHash": "06f6ea8e3a4cc5e6da4a5c300b8056eab7d9a260bdd8d445146a906a46377003",
+      "publicKey": "d4f328c185fa9ef3398acc0e62a47b738f9f799e6649dccc0ade5f6b0b5388bb",
+      "signature": "c26cc73e7891b1d1c4c7e8166c835198317fa6c024e245693ccb8a9a456c9b04edf11f00b64eb317d1617be12d1d49606f25195017666db6242a58e98f839789",
+      "valid": false
+    },
+    {
+      "messageHash": "9409e7a481efcc779b8ee25b012ecb057cba3967296ff2e540c4c0f4dda0e82e",
+      "publicKey": "2c7814a245fc1a24ea25ce395415bfb715a9c84832d49f2e560d108afac578dd",
+      "signature": "567acbabea38bfffae0a7c2b745c574197471e12b239aa410fa77f497a372ea941711917c6018502e340860930494c112cd107d0f6bf48dea68c18ed6b8bbce7",
+      "valid": false
+    },
+    {
+      "messageHash": "ef83026149b0a2f22f2e086c8d4b8b237b25b82acef3f90214fc0b2dd8434516",
+      "publicKey": "6ea89899209ea552694676dd68debaedae8188a6bf0ec95ef64ff8ccfbe79a68",
+      "signature": "a00ac22a9ef1cd65832759ec6d5f868c38ec719ea6831090e8d93799929eaf72fd476f9257eebde6bc449d942cf20ed71d14bdc1852521942f2ddc4690a21bd7",
+      "valid": false
+    },
+    {
+      "messageHash": "1b246206e60db2d7d2f54356a2973ff6dfc8921229923f57ecd2096f087952d8",
+      "publicKey": "d7b213889dec8fbef903f80df2b7e96881eb8faf8267fe0df3041359230aef90",
+      "signature": "b81181559d0ec72984bb9fba9e1ef5eb3c3904add1d57197d19a04f0b3d5d5578f4ad39becb2d1d12dfbb0a9294df4e0ff5eadcc29a7a9d6d52920c7cd5ac70c",
+      "valid": false
+    },
+    {
+      "messageHash": "6d18e81cf4dcd5dfea5b12c2287ef3317089aa5a5eeb813d4156ea08958db8a3",
+      "publicKey": "6e3649ed3894b5423adecdab1d1782be4640a92ed310aa2199c5861cb3405e96",
+      "signature": "e99b6acc2c6169e1635adcfa55777c2c8b3023af17fb4fbcb2ed44435ac6da10afa8743f402cea715f4b59323ca6a3d74df2dfd955194f8c1574e4234ac66700",
+      "valid": false
+    },
+    {
+      "messageHash": "9a42386a99a81416028a9fa66cc49d8aa66af6982bf709e8d5c46d60f5eb57f7",
+      "publicKey": "55290789bf61a9d623dc8453275660fa69f753a8dd25836dfa1a55a836c08659",
+      "signature": "f67d12a33595183573e2708e02df73e301d988cb75bad371d59ea92a4304ea8ea879a5bdfec3a68b9ce0d53bfd72808567ab897ff8758b18401ed3cd688459aa",
+      "valid": false
+    },
+    {
+      "messageHash": "b49f3b74d8da9917c016e5ac06f8437b671463b8a81b2671243df2b2b8052fb2",
+      "publicKey": "aa248b65faf63026d2bd3e159c7273a69af4d1e2ed917d4cedd0f24eb0d61991",
+      "signature": "ef92065a1f1e51568ae40238a4be93f811fc06885193c60d85b76dd3fe68b6d63eead361ad0090e2e270d5d2f199c6b95d19f9942c21cfc20fdf313e43f39b03",
+      "valid": false
+    },
+    {
+      "messageHash": "fafbfe9233c1be9051ca8e2ac1b331b8341842d91de0f802817a5c30c234f391",
+      "publicKey": "416f5246a8a8a3402e137a8befc05d6f02db534e67461397023fbe0e29b77aa2",
+      "signature": "542e9b73109b1febc0c9cfa6384e43cdc0f0c170c746849ffccc626232355860c717f1c4d11ee6fe90a75b0294fae2dfe025462ba44704f193ef54092e9d5808",
+      "valid": false
+    },
+    {
+      "messageHash": "61154b91c6610d2d001a1e6f6f2652faecfdfffec237dfa844ac799b393de4f5",
+      "publicKey": "14c3d2ad74ba443296102139cf94b421a72ff62f2b8727e303e53d6a22ac7faa",
+      "signature": "9e4bfd899e87b3b88b7d39f4546605ae892675315b0ed83176edf9947924ab069750696702856e7ecc1561cefa65d149540223b15578b378926f6196d8572f0d",
+      "valid": false
+    },
+    {
+      "messageHash": "40e0758cd9c9f8f8f7d0fbf351084863973a3622c92dab501ffdee610278f86a",
+      "publicKey": "f79812b95048683d47eb5435bdd97c5a39532c6693dc8b965af76d7f3ab88e92",
+      "signature": "a9ba1cb8bf2898e21c12bfd23788994fe20d45ef6f775c197ab157d7c2721100f2123c19395f13ff79941e4fc9ac33b2f70077a79c552b4ebc97a4321ae66e09",
+      "valid": true
+    },
+    {
+      "messageHash": "3b49a4ba1b62db697c7826a66b3a24f5c00054ba8c212ddf6094654059ce973e",
+      "publicKey": "aaa6eebac75c052fdf2abbe18e4718c3b388ff919bf4a514ab61bcac661b4409",
+      "signature": "5d156005ee2588edcf470dc653a0635dbf3afc393eb2d89a75054a93b271ee02e46d532ac2d65d7f661113093a68d2ce6516a5abf08231104d0fdcbe6649e80f",
+      "valid": true
+    },
+    {
+      "messageHash": "088144dfd67a5cd013db2318eadf14a2ec30f7b11f75e687c3e76aac5b0ea584",
+      "publicKey": "21e031f6f3d406f53e14e57741c9861ca785cc9bc6fe041aa8c2f0282e8db52f",
+      "signature": "44c354bb8980cb86ff17758d9a834cd1f1c6b82b9de7a2d074f0ab8dd3507d221bbd53afe01180305555444a085d0b73b4353a26fa980d594ae33fa4600c120f",
+      "valid": false
+    },
+    {
+      "messageHash": "b1930f6d59fe22b002a0a822e0ca2f3168f792e02f8be89e5d565de7a2eca4d4",
+      "publicKey": "43e773d2046d30e002cc231c85057f834d508bae0ac5eae3ec581da291736efe",
+      "signature": "e5c0205493e59f6a644ecd4ff30b2892b266a26f17ba9a00f604fc62f1c40d0313ce08d0c303a8696bc638ee0bf6835562cfdff9086bd221c236f7441357470b",
+      "valid": false
+    },
+    {
+      "messageHash": "916ceda80ef84b8538e06c5fec7f04810a960d878f31c390705c6bba01814a93",
+      "publicKey": "86fef19663f5fca7d6c425944140a2941c2f2c131cbe881868bebd1e733bc432",
+      "signature": "68fb16d0429f61bbd63ff328b4defbc7ff03b5d3d3b83618da159fe02a808f0a22c86ea632e4b7b32a662e70bb7bbd8fb381fe10950c340d82ae5c0931b07a06",
+      "valid": true
+    },
+    {
+      "messageHash": "9f2ca44de5b87bb7d90cf57dedf6c5e6a232372b28e9542be6cd6943e69984ca",
+      "publicKey": "9078fa24f1b212816e0c9f483db8004d2a6f6d267b441292218392c5d033b01a",
+      "signature": "6bd88d6d4b2a2e16e823241fea53e2d50625506b89b1067b9aa038f8d55f480ff018813c937ad2a7a09162b7538e179785b9c40ed6f4367b30cf7d76d076960e",
+      "valid": false
+    },
+    {
+      "messageHash": "c16ea334df0501f4fa8e6d31fc733cd9728128759d77a94ce662f343fd2b4b45",
+      "publicKey": "30c16767c8353a7e7dd0a3ca1449a0cd3756135970333f0c96e7e6b151e00f54",
+      "signature": "548167935d72bbd001a9d8ffb805d3ef661453e4d39fece6b131acbfa3c1bb0df10c0232da00ddbeb9181b55d174f3d38c423d17227e9b6265f23e33389a05b2",
+      "valid": false
+    },
+    {
+      "messageHash": "7a94605c0d43ec0f35eac8963231dc1c08b972045007d3d6c3905e142b3e2829",
+      "publicKey": "5fd4c73fd1f146f41e16276ea18919b7babecb5928a06acee7e24c006cc2417f",
+      "signature": "1d6c46b9de850979c7a7bfb5304072c3c778027801a5dccf19d78bbd5741ff02b743f1d88f7bc3e9b32a054f6e5c3334d456a69b5a943bb9e52f046748e1d0b5",
+      "valid": false
+    },
+    {
+      "messageHash": "9343ac2dd894b368e76537fb7fa61672b6f2d00d7393cd4ab725218f59dbebeb",
+      "publicKey": "b1e869915645764bd9a15ad6674cf11be4371903cb6a63c412c1379384938045",
+      "signature": "c0d2b432ab43a41c03d923227f7e5fa6367cad41bb34c3408d42bfe2a6018407c3bb22aff17b69dc4cbb95fc0743bd774ca7a889f72b911418c38e8a9d9bef0e",
+      "valid": true
+    },
+    {
+      "messageHash": "70cbcab50667a8840352d1a38e9871a517d142da5174e84423e55e0dbc7ab634",
+      "publicKey": "076daae7755177728b0e21499d3520b86777e53113547091ccda04528a4e8cc9",
+      "signature": "9943b01dd217dcf746ceb09647807001de56542936169240d12700451e309e0ff1193f04ce3848b92bbca3d306f9ca9c84a0bd4dd7342aa68bb94712a87c2b0a",
+      "valid": true
+    },
+    {
+      "messageHash": "c620fdeda0c01518fbf903bfdab96296b6d68a6e54f77349de9dd0a89b8f2dab",
+      "publicKey": "f45f889e87b9cdd172424336880a16fc99e8a72e5a68b19d503416d276aedeac",
+      "signature": "973aa8034a1995ffa58819a4856dc851f4625bfe1b583c1e06fb6295f1d36001ee5d974a06316274e3af8db48b79ad03adc6f822ffb695436fa7ac274c2c268d",
+      "valid": false
+    },
+    {
+      "messageHash": "883f1ae53940841369bc477089d27c369b2771200c36afc80a1e862be23218c5",
+      "publicKey": "1e5ddaa318b8f3bb6e1d3211f3fdf3844deb3433e7a58ca81c4c494dfde87745",
+      "signature": "42be7f838c60b965abfc3ba5b5fa849d5a73fbc9d907d440431265a07ac00d74c89b3d4dc3a5d1330f87a894df74a0bb084200ebe8fb78a5443938d7e3b0b70b",
+      "valid": false
+    },
+    {
+      "messageHash": "086b76c066b5d34b4062a2058591a193680f8269a68b2f75611d9420002c0659",
+      "publicKey": "e331c38217bec0115ad936c96efb5228d0e26c8e2104b4695f6e566f81e5fec7",
+      "signature": "e073048df4f0eecff9a5c9219c1eb64557ca16bc0e45038d08b94e7fbc185a1263842d2665209ec99fd948799d45e1ad569637a88a0bc0eed31829393ee73713",
+      "valid": false
+    },
+    {
+      "messageHash": "32738c9f04e480f9a8f3d1a37c1733558cfa23c833247030b74f1a9126d6cbfa",
+      "publicKey": "933b2ea675a4fc4cea830daad6b25053f2e766fb12bf4d16a22146405b0cf7c8",
+      "signature": "3d47f7d43de5cda1b762ba108687885cc4c19510bc924aa6180a3d33d570e2edc430d9afda75fd07bd1a3325698a36b3cac3bf85b61ac5c3667b5c9e5ee8a708",
+      "valid": false
+    },
+    {
+      "messageHash": "afda9dd111f115f0358a17fbdadd526398ae14d845e3670db7537bd06e1b4f04",
+      "publicKey": "7c67e16e80f007bc9723135cc3d0283920943a1faee59f84c19e10f82c799426",
+      "signature": "3df1783d5419fd49279a99128959a7490cada9403aab910a51d5e9deb4ede202f04881770a6deb7e01ef223d9358ff0b4cd519f0b7ed2549643945c95af06cec",
+      "valid": false
+    },
+    {
+      "messageHash": "d247d2c85ed257022ec9b0c152d4c2c40e80f2637667ee93245b417fc3f65332",
+      "publicKey": "ea47eb53b525f087b830ba9a6f053f223f97cd914d711d1d8987592997db5dd9",
+      "signature": "ea792a023be8c1884ef85aa47212cd92cd2aec696b910e039095a845a7941f0b1f19c23ec412fb6b003578beb4a18560619bdfed401762fa4473a6fa61658503",
+      "valid": true
+    },
+    {
+      "messageHash": "f4d765776aeae815d6f079033c69b1b7e65376471b8e530825295f6f1cbd4a32",
+      "publicKey": "110e566bbad531298eb9da49615a5ec08acaa5779f7ee71c39f04cc2ecedc7b7",
+      "signature": "65b3c6794184a3d826d3ac155a9d87d648a5de48b7a31246007dc226b04d210e03c02d590af27d03975a796119ec87e9b9a9cb7128df16eff175816fed2ce030",
+      "valid": false
+    },
+    {
+      "messageHash": "08f24fe3b0dab6cddf18ea6c763c5c667d57733f32081b7cce88933c6dbd90ac",
+      "publicKey": "d2fcd90cb246e55a86ef47a0bcc49ff902c0e45a2909cdb33065b4ba21e33014",
+      "signature": "2b76f7b81cc72fb56bf780002d48fb4a1a7005fe5b5ac26d2fd82a444b59fe05b2d25d914550e6b9dbd0e4a5b57f54ffc22405907318f6f5f2f84a0f00b0ab0b",
+      "valid": false
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+target/
+# Penumbra proving keys (29 MB): fetched, not kept in the repository. See params/README.md.
+params/**/*_pk.bin
+params/penumbra-2.1.1
+# Written by review-parity/gen.mjs (about 21 MB).
+review-parity/*.json
