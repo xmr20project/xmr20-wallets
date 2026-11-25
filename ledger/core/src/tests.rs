@@ -379,3 +379,66 @@ fn fragment_duplicates_are_not_stored_and_pending_counts_stay_exact() {
     assert_eq!(fresh.summary()["state"]["root"], w.pool.summary()["state"]["root"]);
     assert_eq!(fresh.summary()["pendingParts"], w.pool.summary()["pendingParts"]);
 }
+
+/// The names of the state-hash sections that differ between two states.
+fn sections_changed(a: &[pool::StateSection], b: &[pool::StateSection]) -> Vec<&'static str> {
+    a.iter().zip(b).filter(|(x, y)| x != y).map(|(x, _)| x.name).collect()
+}
+
+/// State hash over real records, the shielded ones included: every accepted record moves exactly the sections it touches, a
+/// refused record moves nothing, and a pool built again from the same records has the same hash after every one of them
+/// (which is what a reader does after a restart, and after a reorganisation for the records that remain).
+#[test]
+fn state_hash_follows_real_records_and_every_replay_agrees() {
+    let mut w = World::new();
+    let (r, r2) = (root(), root());
+    let (sk, key, key2) = (owner_signing_key(&r, 0), token_spend_key(&r, 0), token_spend_key(&r2, 0));
+    let a = owner_key(&sk);
+    let mut log: Vec<(Vec<u8>, String, u64)> = vec![];
+    let mut seen = vec![w.pool.state_sections()];
+    let mut step = |w: &mut World, wire: Vec<u8>, expect: &str, changed: &[&str]| {
+        let txid = w.txid();
+        let res = w.pool.apply(Some(&wire), &txid, w.height, &w.vks);
+        assert_eq!(res["record"], expect, "{res}");
+        log.push((wire, txid, w.height));
+        let now = w.pool.state_sections();
+        assert_eq!(sections_changed(seen.last().unwrap(), &now), changed, "after {}", res["kind"]);
+        seen.push(now);
+    };
+    let credit = public::Credit::build(public::KIND_DEPOSIT, w.asset, 10_000_000, a, [1u8; 32], &w.issuer, &w.domain).unwrap().encode();
+    step(&mut w, credit.clone(), "accepted", &["notes", "minted", "credits"]);
+    step(&mut w, credit, "rejected", &[]);
+    let (s, _) = shield::Shield::build(w.asset, w.note_ids(&a), 10_000_000, 7_000_000, &shielded_address(&key), &sk, &keys().output_pk, &w.domain).unwrap();
+    step(&mut w, s.encode(), "accepted", &["shielded-root", "roots", "history", "notes", "spent-notes", "shielded-in"]);
+    let notes = w.pool.ledger.unspent_notes(key.full_viewing_key());
+    let built = private2::build(&w.pool.ledger, &key, &notes, &shielded_address(&key2), 4_000_000, &keys().spend_pk, &keys().output_pk, &w.domain).unwrap();
+    step(&mut w, built.b.encode(), "pending", &["pending-b"]);
+    step(&mut w, built.a.encode(), "accepted", &["shielded-root", "nullifiers", "roots", "history", "pending-b", "completed"]);
+    let mine = w.pool.ledger.unspent_notes(key.full_viewing_key()).into_iter().find(|n| u128::from(n.amount()) == 3_000_000).unwrap();
+    let (u, _) = shield::Unshield::build(&w.pool.ledger, &key, &mine, 2_000_000, a, &keys().spend_pk, &keys().output_pk, &w.domain).unwrap();
+    step(&mut w, u.encode(), "accepted", &["shielded-root", "nullifiers", "roots", "history", "notes", "shielded-out"]);
+    let total: u64 = w.pool.notes_of_owner(&a).iter().map(|(_, n)| n.amount).sum();
+    let burn = public::Burn::build(w.asset, w.note_ids(&a), 1_500_000, PublicOutput { owner: a, amount: total - 1_500_000 }, [3u8; 32], &sk, &w.domain).unwrap();
+    step(&mut w, burn.encode(), "accepted", &["notes", "spent-notes", "burned", "redemptions"]);
+    w.invariant();
+    // a second pool, given the same records in the same blocks, agrees after every record
+    let mut again = Pool::new(w.domain);
+    assert_eq!(again.state_sections(), seen[0]);
+    for (i, (wire, txid, height)) in log.iter().enumerate() {
+        again.apply(Some(wire), txid, *height, &w.vks);
+        assert_eq!(again.state_sections(), seen[i + 1], "after record {i}");
+    }
+    assert_eq!(again.state_hash(), w.pool.state_hash());
+    assert_eq!(pool::state_total(seen.last().unwrap()), w.pool.state_hash());
+    // a reader whose host writes transaction ids in capitals has the same state hash
+    let mut capitals = Pool::new(w.domain);
+    for (wire, txid, height) in &log {
+        capitals.apply(Some(wire), &txid.to_uppercase(), *height, &w.vks);
+    }
+    assert!(capitals.notes.values().all(|n| n.txid == n.txid.to_uppercase()) && capitals.redemptions.len() == 1);
+    assert_eq!(capitals.state_sections(), w.pool.state_sections());
+    // the same record in another block or another transaction is another state
+    let mut moved = Pool::new(w.domain);
+    moved.apply(Some(&log[0].0), &log[0].1, log[0].2 + 1, &w.vks);
+    assert_eq!(sections_changed(&seen[1], &moved.state_sections()), ["notes", "credits"]);
+}

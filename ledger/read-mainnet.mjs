@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Reads the XMR20 token ledger of Monero mainnet from a Monero node, with the reader built from this folder, and prints
-// what it finds: the record list hash at every 720th block and the ledger summary at the newest block.
+// what it finds: the record list hash and the ledger state hash at every 720th block, and the state hash and the ledger
+// summary at the newest block.
 //
 //   cargo build --release --manifest-path indexer/Cargo.toml
 //   node read-mainnet.mjs --node http://127.0.0.1:18081 --state ./xmr20-state [--bin <reader binary>] [--once]
@@ -39,10 +40,10 @@ async function main(){
    for(let before=null,tip=(await ask({op:'status'})).tip??-1;tip!==before;){before=tip;await ask({op:'sync',maxBlocks:500});const s=await ask({op:'status'});tip=s.tip??-1;
     if(tip!==before)console.error(`read to block ${tip} (${s.records} records)`);
     for(let h=Math.max(shown+EVERY,Math.ceil((s.startHeight||0)/EVERY)*EVERY);h<=tip;h+=EVERY){
-     try{const c=await ask({op:'checkpoint',height:h});console.log(JSON.stringify({height:c.height,blockHash:c.blockHash,records:c.records,listHash:c.listHash}));}catch{}
+     try{const c=await ask({op:'checkpoint',height:h});console.log(JSON.stringify({height:c.height,blockHash:c.blockHash,records:c.records,listHash:c.listHash,...(c.stateHash?{stateHash:c.stateHash}:{})}));}catch{}
      shown=h;}}
    const s=await ask({op:'status'}),sum=await ask({op:'summary'});
-   console.log(JSON.stringify({tip:s.tip,tipHash:s.tipHash,records:s.records,invariant:s.invariant?.ok,summary:sum.state}));
+   console.log(JSON.stringify({tip:s.tip,tipHash:s.tipHash,records:s.records,invariant:s.invariant?.ok,...(sum.stateHash?{stateHash:sum.stateHash}:{}),summary:sum.state}));
    if(has('once'))break;
    await new Promise(done=>setTimeout(done,30000));}
  }finally{try{child.stdin.write('{"op":"close"}\n');child.stdin.end();}catch{}}

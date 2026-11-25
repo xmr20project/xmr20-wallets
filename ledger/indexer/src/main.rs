@@ -8,7 +8,7 @@
 //!     over stored hashes, both logs are truncated at the fork (atomic rewrite), the pool is rebuilt and syncing resumes;
 //!   - every sync verifies the hash chain (each new block's previous hash equals the stored one) and that the daemon's
 //!     network and genesis are the manifest's. A mainnet daemon is refused unless the manifest says mainnet and XMR20_MAINNET_PILOT=I-UNDERSTAND is set.
-//! Ops: sync · status · summary · owner · record · tx · verify · view · events · marketRules · close
+//! Ops: sync · status · summary · stateSections · owner · record · tx · verify · view · events · marketRules · close
 //!   Moves by Monero address: addressOwner · addressHoldings · addressMovePrepare · addressMoveFinalize · addressRules ·
 //!   relayFees · relayFeeAddress · relayPayments. With XMR20_RELAY_FEES=<file {"address","viewKey"}> the indexer also watches
 //!   the relay's fee wallet (VIEW key only: it can see payments, never spend them) for payments to its one-time subaddresses
@@ -29,6 +29,16 @@
 //!                           made by a fresh indexer from the start height) at a common block height and hash: blocks, records,
 //!                           relay payments and claim payment facts, and with parameters also the ledger state rebuilt from
 //!                           them (pool summary and every record's result). Exit status 1 when they differ.
+//!
+//! State hashes: the hash of the whole ledger state (core `Pool::state_hash`) is taken at the end of every block whose height
+//! is a multiple of 720, after the block's records are applied and its claims are settled, when the block is committed. The
+//! ledger view is not saved: it is rebuilt from the record log on every start and after a reorganisation, and the hashes are
+//! taken again during that rebuild at the same points, so they are held for every such block the directory holds, whichever
+//! build read it, and the hashes of blocks a reorganisation removed are gone with them. `state-hashes.json` {every, hashes:
+//! [{height, blockHash, stateHash}]} keeps what was computed, for comparison only: on a start, a kept hash for a block still
+//! held that differs from the rebuilt one is reported (event `state-hash-differs`, `status`), then the file is written again
+//! from the rebuilt hashes. A missing or unreadable file changes nothing (a directory written by a build without it loads as
+//! before). The file is not part of the commit log: nothing reads the ledger from it.
 //!
 //! Market rules: lot records (XA1/XL1) apply from the activation height built into the core
 //! (`market::activation`; mainnet: block 3,796,100). A lot moves only in a transaction that
@@ -53,6 +63,27 @@ use std::{
 };
 use xmr20_unshielded_core::{self as core, keys::owner_vk, pool::Pool};
 use xmr20_unshielded_lab::{chain::Params, native};
+
+/// The state hash is taken at the end of every block whose height is a multiple of this.
+const STATE_HASH_EVERY: u64 = 720;
+const STATE_HASHES: &str = "state-hashes.json";
+/// The ledger state hash at the end of a block, as this reader computed it.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+struct StateHashRow {
+    height: u64,
+    #[serde(rename = "blockHash")]
+    block_hash: String,
+    #[serde(rename = "stateHash")]
+    state_hash: String,
+}
+/// state-hashes.json. Every field has a default, so a file written by another build still reads.
+#[derive(Serialize, Deserialize, Default)]
+struct StateHashFile {
+    #[serde(default)]
+    every: u64,
+    #[serde(default)]
+    hashes: Vec<StateHashRow>,
+}
 
 fn txt<'a>(v: &'a J, k: &str) -> Result<&'a str> {
     v[k].as_str().context(format!("Text field {k}"))
@@ -199,18 +230,34 @@ impl State {
     }
     /// Rebuild from the record log (every record re-verified; results recomputed).
     fn rebuild(p: &Params, records: &[RecordRow], claim_payments: &BTreeMap<[u8; 32], core::trade::PaymentFacts>) -> Self {
+        Self::rebuild_at(p, records, claim_payments, &[]).0
+    }
+    /// The same rebuild, which also takes the state hash at the end of each block of `heights` (ascending): after every
+    /// record at or below that height is applied and that block's claims are settled, before any later record.
+    fn rebuild_at(p: &Params, records: &[RecordRow], claim_payments: &BTreeMap<[u8; 32], core::trade::PaymentFacts>, heights: &[u64]) -> (Self, BTreeMap<u64, String>) {
         let mut st = Self::new(p);
+        let mut hashes = BTreeMap::new();
+        let mut todo = heights.iter().copied().peekable();
+        // Every block of `todo` below `below` ends in the state `st` is in now (hashed once, however many blocks share it).
+        let mut take = |st: &State, below: Option<u64>| {
+            let mut hash: Option<String> = None;
+            while let Some(h) = todo.next_if(|h| below.is_none_or(|b| *h < b)) {
+                hashes.insert(h, hash.get_or_insert_with(|| hex::encode(st.pool.state_hash())).clone());
+            }
+        };
         let mut last = 0;
         for r in records {
             // A block's claims settle at its end, before the next block's records.
             if r.height > last {
                 st.settle(last, claim_payments);
+                take(&st, Some(r.height));
             }
             last = r.height;
             st.apply_row(r, p);
         }
         st.settle(last, claim_payments);
-        st
+        take(&st, None);
+        (st, hashes)
     }
     /// Settle the pool's pending claims of block `height` with the kept payment facts; record results follow.
     fn settle(&mut self, height: u64, claim_payments: &BTreeMap<[u8; 32], core::trade::PaymentFacts>) -> Vec<J> {
@@ -285,6 +332,10 @@ struct Follower {
     last_discarded: Option<J>,
     /// What the last recovery of the state directory found and changed (open, or reload after a failed clean-up).
     recovery: J,
+    /// The state hash at the end of every held block whose height is a multiple of STATE_HASH_EVERY (see the module note).
+    state_hashes: BTreeMap<u64, String>,
+    /// Kept state hashes that the rebuild from the record log did not reproduce (empty unless something is wrong).
+    state_hash_differs: Vec<J>,
 }
 fn parse_rows<T: for<'a> Deserialize<'a>>(name: &str, lines: &[String]) -> Result<Vec<T>> {
     lines.iter().enumerate().map(|(i, l)| serde_json::from_str(l).with_context(|| format!("{name}:{}", i + 1))).collect()
@@ -358,7 +409,7 @@ impl Follower {
         if !loaded.report.actions.is_empty() || !loaded.report.warnings.is_empty() {
             eprintln!("state recovery: {}", report_json(&loaded.report));
         }
-        let mut f = Self { dir: dir.to_path_buf(), logs, blocks: vec![], records: vec![], st: State::new(p), events: vec![], start: p.manifest.network.start_height.max(1), payments: vec![], fees, claim_payments: BTreeMap::new(), fp: logs::Failpoints::default(), failpoints_allowed, discarded: 0, last_discarded: None, recovery: J::Null };
+        let mut f = Self { dir: dir.to_path_buf(), logs, blocks: vec![], records: vec![], st: State::new(p), events: vec![], start: p.manifest.network.start_height.max(1), payments: vec![], fees, claim_payments: BTreeMap::new(), fp: logs::Failpoints::default(), failpoints_allowed, discarded: 0, last_discarded: None, recovery: J::Null, state_hashes: BTreeMap::new(), state_hash_differs: vec![] };
         f.load(loaded, p)?;
         // Open tokens: stored blocks were read under the stored opening. Another one is taken only when it changes nothing
         // about them: there was none, and the new one starts above the stored tip. Otherwise the blocks must be read again.
@@ -370,6 +421,7 @@ impl Follower {
                 logs::write_atomic(dir, "meta.json", &serde_json::to_vec_pretty(&meta)?)?;
             }
         }
+        f.check_kept_state_hashes();
         Ok(f)
     }
     /// Take the recovered rows as the committed state and rebuild the ledger view from them.
@@ -379,7 +431,7 @@ impl Follower {
         self.payments = parse_rows(logs::PAYMENTS, &loaded.payments)?;
         let facts: Vec<J> = parse_rows(logs::CLAIMS, &loaded.claims)?;
         self.claim_payments = facts.iter().map(|v| core::trade::facts_from_json(v).map(|f| (f.txid, f))).collect::<Result<BTreeMap<_, _>>>()?;
-        self.st = State::rebuild(p, &self.records, &self.claim_payments);
+        self.rebuild(p);
         if !loaded.report.actions.is_empty() || !loaded.report.warnings.is_empty() {
             self.events.push(json!({"at":now(),"event":"state-recovery","detail":report_json(&loaded.report)}));
         }
@@ -390,10 +442,101 @@ impl Follower {
     fn reload(&mut self, p: &Params) -> Result<()> {
         let (logs, loaded) = logs::Logs::open(&self.dir, false)?;
         self.logs = logs;
-        self.load(loaded, p)
+        self.load(loaded, p)?;
+        self.check_kept_state_hashes();
+        Ok(())
     }
     fn tip(&self) -> Option<&BlockRow> {
         self.blocks.last()
+    }
+    /// Rebuild the ledger view from the committed rows, with the state hash of every held block that has one.
+    fn rebuild(&mut self, p: &Params) {
+        let heights: Vec<u64> = self.blocks.iter().map(|b| b.height).filter(|h| h % STATE_HASH_EVERY == 0).collect();
+        let (st, hashes) = State::rebuild_at(p, &self.records, &self.claim_payments, &heights);
+        self.st = st;
+        self.state_hashes = hashes;
+    }
+    fn state_hash_rows(&self) -> Vec<StateHashRow> {
+        let hash_of: BTreeMap<u64, &String> = self.blocks.iter().filter(|b| b.height % STATE_HASH_EVERY == 0).map(|b| (b.height, &b.hash)).collect();
+        self.state_hashes.iter().filter_map(|(h, s)| Some(StateHashRow { height: *h, block_hash: (*hash_of.get(h)?).clone(), state_hash: s.clone() })).collect()
+    }
+    /// Write state-hashes.json from the hashes held now. The file is a note for the next start's comparison, not state: a
+    /// failure to write it is reported and stops nothing.
+    fn save_state_hashes(&mut self) {
+        let file = StateHashFile { every: STATE_HASH_EVERY, hashes: self.state_hash_rows() };
+        let written = serde_json::to_vec(&file).map_err(anyhow::Error::from).and_then(|b| logs::write_atomic(&self.dir, STATE_HASHES, &b));
+        if let Err(e) = written {
+            self.events.push(json!({"at":now(),"event":"state-hashes-not-saved","detail":format!("{e:#}")}));
+        }
+    }
+    /// After a start: compare the kept state hashes with the rebuilt ones (same block, by height and hash), report every
+    /// difference, then keep the rebuilt ones. No file, an unreadable file or one of another interval compares nothing.
+    fn check_kept_state_hashes(&mut self) {
+        let now_rows = self.state_hash_rows();
+        let path = self.dir.join(STATE_HASHES);
+        let kept: Option<StateHashFile> = match fs::read(&path) {
+            Ok(b) => match serde_json::from_slice(&b) {
+                Ok(f) => Some(f),
+                Err(e) => {
+                    self.events.push(json!({"at":now(),"event":"state-hashes-unreadable","detail":e.to_string()}));
+                    None
+                }
+            },
+            Err(_) => None,
+        };
+        let kept_rows = kept.filter(|f| f.every == STATE_HASH_EVERY).map(|f| f.hashes);
+        for k in kept_rows.iter().flatten() {
+            if let Some(n) = now_rows.iter().find(|n| n.height == k.height && n.block_hash == k.block_hash) {
+                if n.state_hash != k.state_hash {
+                    let d = json!({"height":k.height,"blockHash":k.block_hash,"kept":k.state_hash,"rebuilt":n.state_hash});
+                    eprintln!("state hash differs from the one kept for this block: {d}");
+                    self.events.push(json!({"at":now(),"event":"state-hash-differs","detail":d}));
+                    self.state_hash_differs.push(d);
+                }
+            }
+        }
+        if kept_rows.as_ref() != Some(&now_rows) {
+            self.save_state_hashes();
+        }
+    }
+    /// The ledger state hash of the newest state, with its sections (core `Pool::state_sections`).
+    fn state_sections(&self) -> J {
+        let sections = self.st.pool.state_sections();
+        json!({"tip":self.tip().map(|b|b.height),"stateHash":hex::encode(core::pool::state_total(&sections)),"sections":sections.iter().map(|s| json!({"name":s.name,"count":s.count,"hash":hex::encode(s.hash)})).collect::<Vec<_>>()})
+    }
+    /// The checkpoint of a held block: the hash of the record list at or below it, and the state hash at its end when the
+    /// height is one the state hash is taken at (null otherwise).
+    fn checkpoint(&self, height: u64) -> Result<J> {
+        let block = self.blocks.iter().rev().find(|b| b.height == height).context("Checkpoint height not held by this indexer")?.clone();
+        let mut lines = String::new();
+        let mut n = 0u64;
+        for r in self.records.iter().filter(|r| r.height <= height) {
+            lines.push_str(&format!("{}:{}\n", r.height, r.txid));
+            n += 1;
+        }
+        Ok(json!({"height":height,"blockHash":block.hash,"records":n,"listHash":hex::encode(core::hash(lines.as_bytes())),"stateHash":self.state_hashes.get(&height),"tip":self.tip().map(|b|b.height)}))
+    }
+    /// Cut the committed state back to `fork_h` (the newest block this chain shares with the node's) and rebuild the view.
+    fn roll_back(&mut self, p: &Params, fork_h: u64, previous_tip: u64) -> Result<J> {
+        let blocks: Vec<BlockRow> = self.blocks.iter().filter(|b| b.height <= fork_h).cloned().collect();
+        let records: Vec<RecordRow> = self.records.iter().filter(|r| r.height <= fork_h).cloned().collect();
+        let payments: Vec<PaymentRow> = self.payments.iter().filter(|r| r.height <= fork_h).cloned().collect();
+        let claims: BTreeMap<[u8; 32], core::trade::PaymentFacts> = self.claim_payments.iter().filter(|(_, f)| f.height <= fork_h).map(|(k, f)| (*k, f.clone())).collect();
+        let fork_hash = blocks.last().filter(|b| b.height == fork_h).map(|b| b.hash.clone());
+        let facts: Vec<J> = claims.values().map(core::trade::facts_to_json).collect();
+        self.logs.reorg(fork_h, fork_hash.as_deref(), &lines_of(&blocks)?, &lines_of(&records)?, &lines_of(&payments)?, &lines_of(&facts)?, &self.fp)?;
+        let removed_blocks = self.blocks.len() - blocks.len();
+        let removed_records = self.records.len() - records.len();
+        self.blocks = blocks;
+        self.records = records;
+        self.payments = payments;
+        self.claim_payments = claims;
+        // The view and its state hashes are rebuilt from what remains: a hash of a removed block is not held any more.
+        self.rebuild(p);
+        self.save_state_hashes();
+        let reorg = json!({"forkHeight":fork_h,"previousTip":previous_tip,"removedBlocks":removed_blocks,"removedRecords":removed_records});
+        self.events.push(json!({"at":now(),"event":"reorganisation","detail":reorg}));
+        Ok(reorg)
     }
     fn note_discarded(&mut self, height: u64, e: &anyhow::Error) {
         self.discarded += 1;
@@ -482,6 +625,7 @@ impl Follower {
         if let Some(n) = note {
             self.events.push(json!({"at":now(),"event":"commit-note","detail":n}));
         }
+        let height = s.block.height;
         self.blocks.push(s.block);
         self.records.extend(s.records);
         self.payments.extend(s.payments);
@@ -490,6 +634,11 @@ impl Follower {
         }
         if let Some(st) = s.state {
             self.st = st;
+        }
+        // The block is committed and `st` is the ledger at its end (records applied, claims settled).
+        if height % STATE_HASH_EVERY == 0 {
+            self.state_hashes.insert(height, hex::encode(self.st.pool.state_hash()));
+            self.save_state_hashes();
         }
         Ok(s.applied)
     }
@@ -524,22 +673,7 @@ impl Follower {
             }
             let fork_h = fork.unwrap_or(self.start - 1);
             if fork_h < t.height {
-                let blocks: Vec<BlockRow> = self.blocks.iter().filter(|b| b.height <= fork_h).cloned().collect();
-                let records: Vec<RecordRow> = self.records.iter().filter(|r| r.height <= fork_h).cloned().collect();
-                let payments: Vec<PaymentRow> = self.payments.iter().filter(|r| r.height <= fork_h).cloned().collect();
-                let claims: BTreeMap<[u8; 32], core::trade::PaymentFacts> = self.claim_payments.iter().filter(|(_, f)| f.height <= fork_h).map(|(k, f)| (*k, f.clone())).collect();
-                let fork_hash = blocks.last().filter(|b| b.height == fork_h).map(|b| b.hash.clone());
-                let facts: Vec<J> = claims.values().map(core::trade::facts_to_json).collect();
-                self.logs.reorg(fork_h, fork_hash.as_deref(), &lines_of(&blocks)?, &lines_of(&records)?, &lines_of(&payments)?, &lines_of(&facts)?, &self.fp)?;
-                let removed_blocks = self.blocks.len() - blocks.len();
-                let removed_records = self.records.len() - records.len();
-                self.blocks = blocks;
-                self.records = records;
-                self.payments = payments;
-                self.claim_payments = claims;
-                self.st = State::rebuild(p, &self.records, &self.claim_payments);
-                reorg = json!({"forkHeight":fork_h,"previousTip":t.height,"removedBlocks":removed_blocks,"removedRecords":removed_records});
-                self.events.push(json!({"at":now(),"event":"reorganisation","detail":reorg}));
+                reorg = self.roll_back(p, fork_h, t.height)?;
             }
         }
         // 2. fetch forward
@@ -587,6 +721,7 @@ impl Follower {
         let (ok, rows) = self.st.pool.invariant();
         let lens = self.logs.committed();
         json!({"tip":self.tip().map(|b|b.height),"tipHash":self.tip().map(|b|b.hash.clone()),"startHeight":self.start,"blocks":self.blocks.len(),"records":self.records.len(),"network":p.manifest.network.kind,"domain":p.config.domain,"manifestSha256":p.manifest_sha256,"invariant":{"ok":ok,"rows":rows},"pendingParts":self.st.pool.pending_records,"completedOperations":self.st.pool.completed.len(),"events":self.events.len(),
+            "stateHashes":{"every":STATE_HASH_EVERY,"held":self.state_hashes.len(),"last":self.state_hashes.iter().next_back().map(|(h,s)|json!({"height":h,"stateHash":s})),"differFromKept":self.state_hash_differs},
             "commit":{"atomic":true,"discardedBlocks":self.discarded,"lastDiscarded":self.last_discarded,"reloadRequired":self.logs.reload_required,"stalePending":self.logs.stale_pending,"stalePendingHeight":self.logs.stale_height,"journals":journals(&self.dir),"recovery":self.recovery,"committedBytes":lens}})
     }
     fn confirmations(&self, height: u64) -> u64 {
@@ -685,9 +820,11 @@ fn compare_state(a: &Path, b: &Path, height: Option<u64>, params: Option<&Params
         let keys: Vec<&String> = pa.as_object().into_iter().flat_map(|o| o.keys()).filter(|k| pa[*k] != pb[*k]).collect();
         let (ia, ib) = (serde_json::to_value(&sa.index)?, serde_json::to_value(&sb.index)?);
         let ids: Vec<String> = sa.index.keys().chain(sb.index.keys()).filter(|k| ia[k.as_str()] != ib[k.as_str()]).cloned().collect::<std::collections::BTreeSet<_>>().into_iter().take(20).collect();
-        let same = pa == pb && ia == ib;
+        let (xa, xb) = (sa.pool.state_sections(), sb.pool.state_sections());
+        let sections: Vec<&str> = xa.iter().zip(&xb).filter(|(x, y)| x != y).map(|(x, _)| x.name).collect();
+        let same = pa == pb && ia == ib && xa == xb;
         equal &= same;
-        diff.insert("ledgerState".into(), json!({"equal":same,"poolSummaryKeysDiffer":keys,"recordResultsDiffer":ids,"invariantA":pa["invariant"],"invariantB":pb["invariant"]}));
+        diff.insert("ledgerState".into(), json!({"equal":same,"poolSummaryKeysDiffer":keys,"recordResultsDiffer":ids,"stateHashA":hex::encode(core::pool::state_total(&xa)),"stateHashB":hex::encode(core::pool::state_total(&xb)),"stateSectionsDiffer":sections,"invariantA":pa["invariant"],"invariantB":pb["invariant"]}));
     } else {
         diff.insert("ledgerState".into(), json!({"compared":false,"note":"pass --params <dir> --trusted-manifest <file> to compare the rebuilt ledger state too"}));
     }
@@ -705,7 +842,9 @@ async fn dispatch(f: &mut Follower, rpc: &native::Rpc, p: &Params, q: &J) -> Res
     match txt(q, "op")? {
         "sync" => f.sync(rpc, p, q["maxBlocks"].as_u64().unwrap_or(500) as usize).await,
         "status" => Ok(f.status(p)),
-        "summary" => Ok(json!({"tip":f.tip().map(|b|b.height),"state":f.st.pool.summary()})),
+        "summary" => Ok(json!({"tip":f.tip().map(|b|b.height),"state":f.st.pool.summary(),"stateHash":hex::encode(f.st.pool.state_hash())})),
+        // The state hash of the newest state with the hash of each of its sections, to find where two readers differ.
+        "stateSections" => Ok(f.state_sections()),
         "owner" => {
             let o: [u8; 32] = hex::decode(txt(q, "owner")?)?.try_into().map_err(|_| anyhow::anyhow!("owner key"))?;
             owner_vk(&o)?;
@@ -771,6 +910,7 @@ async fn dispatch(f: &mut Follower, rpc: &native::Rpc, p: &Params, q: &J) -> Res
         // ledger from them (it fetches each from the node itself and re-checks every record) instead of every block; and the
         // checkpoint of that list at a height: listHash = SHA-256 over "height:txid\n" lines of every listed transaction at or
         // below it. The list is exactly what every reader applies (lots and address moves only from their start blocks).
+        // stateHash = the hash of the whole ledger state at the end of that block (every 720th block; see the module note).
         "recordTxs" => {
             let from = q["from"].as_u64().unwrap_or(0);
             let tip = f.tip().context("Indexer has no blocks yet")?.clone();
@@ -778,17 +918,7 @@ async fn dispatch(f: &mut Follower, rpc: &native::Rpc, p: &Params, q: &J) -> Res
             // Open tokens: a list written with the open-token rules says so, as the wallet engine's saved progress does.
             Ok(json!({"tip":tip.height,"tipHash":tip.hash,"from":from,"txs":txs,"rules":f.st.pool.open.map(|_| "open-tokens-1")}))
         }
-        "checkpoint" => {
-            let height = q["height"].as_u64().context("height")?;
-            let block = f.blocks.iter().rev().find(|b| b.height == height).context("Checkpoint height not held by this indexer")?.clone();
-            let mut lines = String::new();
-            let mut n = 0u64;
-            for r in f.records.iter().filter(|r| r.height <= height) {
-                lines.push_str(&format!("{}:{}\n", r.height, r.txid));
-                n += 1;
-            }
-            Ok(json!({"height":height,"blockHash":block.hash,"records":n,"listHash":hex::encode(core::hash(lines.as_bytes())),"tip":f.tip().map(|b|b.height)}))
-        }
+        "checkpoint" => f.checkpoint(q["height"].as_u64().context("height")?),
         "relayFees" => Ok(match &f.fees { Some(x) => json!({"configured":true,"primary":x.primary,"lookahead":x.lookahead}), None => json!({"configured":false}) }),
         "relayFeeAddress" => {
             let x = f.fees.as_ref().context("Relay fees are not configured")?;
@@ -949,5 +1079,187 @@ mod tests {
         let e = format!("{:#}", r.expect_err("a parent that cannot be opened must be refused"));
         assert!(e.contains("cannot sync") && e.contains("locked"), "{e}");
         fs::remove_dir_all(root).unwrap();
+    }
+
+    // ---------------------------------------------------------------- state hashes
+    use decaf377_rdsa::{SigningKey, SpendAuth, VerificationKey};
+
+    /// The offline test chain's parameters with an issuer key made here, so the tests can write credits (nothing is proved,
+    /// so no proving key is read).
+    fn test_params() -> (Params, SigningKey<SpendAuth>) {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../params/test-v2");
+        let (manifest, manifest_sha256) = xmr20_unshielded_lab::chain::read_manifest(&dir.join("manifest.json")).unwrap();
+        let issuer = SigningKey::<SpendAuth>::from(decaf377::Fr::from(7u64));
+        let mut config = manifest.config.clone();
+        config.issuer_vk = hex::encode(VerificationKey::from(&issuer).to_bytes());
+        config.domain = hex::encode(config.computed_domain().unwrap());
+        let domain = config.domain().unwrap();
+        let vks = core::pool::Vks { spend: core::penumbra::read_vk(core::penumbra::Circuit::Spend, &config.spend_vk).unwrap(), output: core::penumbra::read_vk(core::penumbra::Circuit::Output, &config.output_vk).unwrap(), issuer: VerificationKey::from(&issuer) };
+        (Params { manifest, manifest_sha256, config, domain, spend_pk: None, output_pk: None, vks }, issuer)
+    }
+    /// One block, applied and committed the way `stage_block` and `commit` do it for a block without claims: its records go
+    /// to a copy of the view, then rows and view are committed. `salt` makes the block hash (another salt = another chain).
+    fn push_block(f: &mut Follower, p: &Params, height: u64, salt: &str, wires: &[Vec<u8>]) {
+        let mut state: Option<State> = None;
+        let (mut records, mut applied) = (vec![], vec![]);
+        for (i, w) in wires.iter().enumerate() {
+            let row = RecordRow { height, txid: hex::encode(core::hash(format!("tx {height} {i} {salt}").as_bytes())), wire: hex::encode(w), anchors: vec![] };
+            let st = state.get_or_insert_with(|| f.st.clone());
+            let r = st.apply_row(&row, p);
+            assert_eq!(r["result"]["record"], "accepted", "{r}");
+            applied.push(r);
+            records.push(row);
+        }
+        let hash = core::hash(format!("block {height} {salt}").as_bytes());
+        f.commit(Staged { block: BlockRow { height, hash: hex::encode(hash) }, hash, records, payments: vec![], facts: vec![], state, applied }).unwrap();
+    }
+    fn kept_file(dir: &Path) -> StateHashFile {
+        serde_json::from_slice(&fs::read(dir.join(STATE_HASHES)).unwrap()).unwrap()
+    }
+    fn tip_hash(f: &Follower) -> String {
+        hex::encode(f.st.pool.state_hash())
+    }
+
+    /// The state hash is taken at the end of every 720th block (that block's own records included, later ones not), is the
+    /// same after a restart, whether or not the hashes were kept on disk, and a rollback drops the hashes of removed blocks.
+    #[test]
+    fn state_hashes_at_every_720th_block_survive_restart_and_rollback() {
+        let (p, issuer) = test_params();
+        let dir = tmpdir("state-hashes");
+        let asset = core::asset_for_mint("TestMint1111111111111111111111111111111111").unwrap();
+        let (ska, skb) = (core::keys::owner_signing_key(&[5; 32], 0), core::keys::owner_signing_key(&[6; 32], 0));
+        let (a, b) = (core::keys::owner_key(&ska), core::keys::owner_key(&skb));
+        let credit = |owner: [u8; 32], amount: u64, n: u8| core::public::Credit::build(core::public::KIND_DEPOSIT, asset, amount, owner, [n; 32], &issuer, &p.domain).unwrap().encode();
+        let mut f = Follower::open(&dir, &p).unwrap();
+        assert!(f.state_hashes.is_empty());
+        let empty = tip_hash(&f);
+        push_block(&mut f, &p, 718, "x", &[credit(a, 1000, 1)]);
+        push_block(&mut f, &p, 719, "x", &[credit(b, 500, 2)]);
+        let before_720 = tip_hash(&f);
+        assert!(f.state_hashes.is_empty(), "719 is not a checkpoint block");
+        // the checkpoint block's own record is part of its state hash
+        let notes: Vec<[u8; 32]> = f.st.pool.notes_of_owner(&a).iter().map(|(id, _)| hex::decode(id).unwrap().try_into().unwrap()).collect();
+        let outs = vec![core::PublicOutput { owner: b, amount: 300 }, core::PublicOutput { owner: a, amount: 700 }];
+        let transfer = core::public::Transfer::build(asset, notes, outs, &ska, &p.domain).unwrap().encode();
+        push_block(&mut f, &p, 720, "x", &[transfer]);
+        let at_720 = tip_hash(&f);
+        assert_ne!(at_720, before_720);
+        assert_ne!(at_720, empty);
+        assert_eq!(f.state_hashes, BTreeMap::from([(720, at_720.clone())]));
+        // a later record is not
+        push_block(&mut f, &p, 721, "x", &[credit(a, 50, 3)]);
+        let after_721 = tip_hash(&f);
+        assert_ne!(after_721, at_720);
+        assert_eq!(f.state_hashes[&720], at_720);
+        for h in 722..=1440 {
+            push_block(&mut f, &p, h, "x", &[]);
+        }
+        push_block(&mut f, &p, 1441, "x", &[credit(b, 9, 4)]);
+        let live = f.state_hashes.clone();
+        assert_eq!(live, BTreeMap::from([(720, at_720.clone()), (1440, after_721.clone())]), "a block without records ends in the state before it");
+        let live_tip = tip_hash(&f);
+        assert_ne!(live_tip, after_721);
+        // the checkpoint answer carries the hash for these blocks and null for any other
+        let c = f.checkpoint(1440).unwrap();
+        assert_eq!(c["stateHash"], after_721.as_str());
+        assert_eq!(c["records"], 4);
+        assert!(f.checkpoint(1439).unwrap()["stateHash"].is_null());
+        assert!(f.checkpoint(1442).is_err(), "a block that is not held has no checkpoint");
+        let sections = f.state_sections();
+        assert_eq!(sections["stateHash"], live_tip.as_str());
+        assert_eq!(sections["sections"].as_array().unwrap().len(), 21);
+        assert_eq!(f.status(&p)["stateHashes"]["held"], 2);
+        // kept on disk with the block each belongs to
+        let kept = kept_file(&dir);
+        assert_eq!(kept.every, 720);
+        assert_eq!(kept.hashes, vec![StateHashRow { height: 720, block_hash: hex::encode(core::hash(b"block 720 x")), state_hash: at_720.clone() }, StateHashRow { height: 1440, block_hash: hex::encode(core::hash(b"block 1440 x")), state_hash: after_721.clone() }]);
+        drop(f);
+
+        // restart: the view and the hashes are rebuilt from the record log and equal the ones taken while reading
+        let f = Follower::open(&dir, &p).unwrap();
+        assert_eq!(f.state_hashes, live);
+        assert_eq!(tip_hash(&f), live_tip);
+        assert!(f.state_hash_differs.is_empty());
+        drop(f);
+        // a directory written by a build that kept no hashes (no file), and one with a file of another shape, load the same
+        for other in [None, Some("{}"), Some("not json"), Some(r#"{"every":100,"hashes":[{"height":700,"blockHash":"00","stateHash":"00"}]}"#)] {
+            match other {
+                None => fs::remove_file(dir.join(STATE_HASHES)).unwrap(),
+                Some(text) => fs::write(dir.join(STATE_HASHES), text).unwrap(),
+            }
+            let f = Follower::open(&dir, &p).unwrap();
+            assert_eq!(f.state_hashes, live, "{other:?}");
+            assert!(f.state_hash_differs.is_empty(), "{other:?}");
+            assert_eq!(kept_file(&dir).hashes.len(), 2, "written again from the rebuilt hashes");
+        }
+        // a kept hash that the rebuild does not reproduce is reported; the rebuilt one is what the reader answers with
+        let mut wrong = kept_file(&dir);
+        wrong.hashes[0].state_hash = "00".repeat(32);
+        wrong.hashes.push(StateHashRow { height: 2160, block_hash: "11".repeat(32), state_hash: "22".repeat(32) });
+        fs::write(dir.join(STATE_HASHES), serde_json::to_vec(&wrong).unwrap()).unwrap();
+        let mut f = Follower::open(&dir, &p).unwrap();
+        assert_eq!(f.state_hashes, live);
+        assert_eq!(f.state_hash_differs.len(), 1, "the row of a block that is not held is dropped without a report");
+        assert_eq!(f.state_hash_differs[0]["height"], 720);
+        assert_eq!(f.state_hash_differs[0]["rebuilt"], at_720.as_str());
+        assert_eq!(kept_file(&dir).hashes, f.state_hash_rows());
+
+        // rollback below a checkpoint block: its hash is dropped, the earlier one stays, the state is the one at the fork
+        let r = f.roll_back(&p, 1000, 1441).unwrap();
+        assert_eq!(r["removedBlocks"], 441);
+        assert_eq!(f.state_hashes, BTreeMap::from([(720, at_720.clone())]));
+        assert_eq!(tip_hash(&f), after_721);
+        assert_eq!(kept_file(&dir).hashes.len(), 1);
+        assert!(f.checkpoint(1440).is_err());
+        // the other branch carries another record: block 1440 now ends in another state
+        for h in 1001..=1440 {
+            push_block(&mut f, &p, h, "y", &if h == 1200 { vec![credit(b, 77, 5)] } else { vec![] });
+        }
+        let branch = f.state_hashes.clone();
+        assert_eq!(branch[&720], at_720);
+        assert_ne!(branch[&1440], live[&1440]);
+        assert_eq!(branch[&1440], tip_hash(&f));
+        assert_eq!(kept_file(&dir).hashes[1].block_hash, hex::encode(core::hash(b"block 1440 y")));
+        drop(f);
+        let mut f = Follower::open(&dir, &p).unwrap();
+        assert_eq!(f.state_hashes, branch);
+        assert!(f.state_hash_differs.is_empty());
+        // rollback to a checkpoint block itself keeps its hash; below the first one nothing is held
+        f.roll_back(&p, 720, 1440).unwrap();
+        assert_eq!(f.state_hashes, BTreeMap::from([(720, at_720.clone())]));
+        assert_eq!(tip_hash(&f), at_720);
+        f.roll_back(&p, 719, 720).unwrap();
+        assert!(f.state_hashes.is_empty());
+        assert_eq!(tip_hash(&f), before_720);
+        assert!(kept_file(&dir).hashes.is_empty());
+        drop(f);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// The rebuild takes each hash after the records of that block and before any later record, for every height asked,
+    /// and is the plain rebuild when none is asked.
+    #[test]
+    fn rebuild_takes_state_hashes_at_block_ends() {
+        let (p, issuer) = test_params();
+        let asset = core::asset_for_mint("TestMint1111111111111111111111111111111111").unwrap();
+        let owner = core::keys::owner_key(&core::keys::owner_signing_key(&[5; 32], 0));
+        let row = |height: u64, n: u8| RecordRow { height, txid: hex::encode([n; 32]), wire: hex::encode(core::public::Credit::build(core::public::KIND_DEPOSIT, asset, 10, owner, [n; 32], &issuer, &p.domain).unwrap().encode()), anchors: vec![] };
+        let records = vec![row(10, 1), row(720, 2), row(720, 3), row(721, 4), row(2000, 5)];
+        let none = BTreeMap::new();
+        let upto = |h: u64| {
+            let part: Vec<RecordRow> = records.iter().filter(|r| r.height <= h).cloned().collect();
+            hex::encode(State::rebuild(&p, &part, &none).pool.state_hash())
+        };
+        let (st, hashes) = State::rebuild_at(&p, &records, &none, &[0, 720, 1440, 2160, 2880]);
+        assert_eq!(hashes, BTreeMap::from([(0, upto(0)), (720, upto(720)), (1440, upto(1440)), (2160, upto(2160)), (2880, upto(2880))]));
+        assert_eq!(hashes[&0], hex::encode(State::new(&p).pool.state_hash()));
+        assert_ne!(hashes[&720], upto(719));
+        assert_eq!(hashes[&1440], upto(721));
+        assert_eq!(hashes[&2160], hashes[&2880]);
+        assert_eq!(hex::encode(st.pool.state_hash()), upto(2000));
+        assert_eq!(st.pool.accepted, 5);
+        let plain = State::rebuild(&p, &records, &none);
+        assert_eq!(plain.pool.state_sections(), st.pool.state_sections());
+        assert_eq!(serde_json::to_value(&plain.index).unwrap(), serde_json::to_value(&st.index).unwrap());
     }
 }

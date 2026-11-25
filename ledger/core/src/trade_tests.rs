@@ -365,3 +365,173 @@ fn records_fit_one_carrier() {
         assert_eq!(Trade::decode(&wire).unwrap().encode(), wire);
     }
 }
+
+// ---------------------------------------------------------------- state hash over trade records
+/// One record in its own block with the payments its reader fetched.
+struct Step {
+    wire: Vec<u8>,
+    txid: String,
+    height: u64,
+    native: [u8; 32],
+    payments: Vec<PaymentFacts>,
+}
+/// The block as a reader applies it: the record, then the end of the block (claims settle).
+fn run(pool: &mut Pool, vks: &Vks, s: &Step) {
+    pool.apply_carrier(Some(&s.wire), &s.txid, s.height, &[s.native], vks);
+    let map: BTreeMap<[u8; 32], PaymentFacts> = s.payments.iter().map(|p| (p.txid, p.clone())).collect();
+    pool.resolve_claims(s.height, &map);
+}
+fn changed(a: &[pool::StateSection], b: &[pool::StateSection]) -> Vec<&'static str> {
+    a.iter().zip(b).filter(|(x, y)| x != y).map(|(x, _)| x.name).collect()
+}
+
+/// A lot listed, reserved, paid and claimed: every block moves exactly the sections it touches, a claim is part of the state
+/// only between its record and the end of its block, and a pool built again from the same blocks (all of them, or only the
+/// first few, as after a restart or a reorganisation) has the same state hash at every block.
+#[test]
+fn state_hash_follows_trades_and_every_replay_agrees() {
+    let mut w = W::new(Some(0));
+    let (s, b) = (signer(), signer());
+    let fresh = |w: &W| {
+        let mut p = Pool::new(w.domain);
+        p.market_from = w.pool.market_from;
+        p.address_moves = w.pool.address_moves;
+        p.trades = w.pool.trades;
+        p
+    };
+    let mut log: Vec<Step> = vec![];
+    let mut seen = vec![w.pool.state_sections()];
+    let mut block = |w: &mut W, wire: Vec<u8>, payments: Vec<PaymentFacts>, expect: &[&str]| {
+        w.height += 1;
+        let st = Step { wire, txid: hex::encode(rnd()), height: w.height, native: rnd(), payments };
+        run(&mut w.pool, &w.vks, &st);
+        log.push(st);
+        let now = w.pool.state_sections();
+        assert_eq!(changed(seen.last().unwrap(), &now), expect, "block {}", w.height);
+        seen.push(now);
+    };
+    let credit = public::Credit::build(public::KIND_DEPOSIT, w.asset, 5_000_000_000, s.addr.owner(), [1; 32], &w.issuer, &w.domain).unwrap().encode();
+    block(&mut w, credit.clone(), vec![], &["notes", "minted", "credits"]);
+    let list = w.list(&s, 1_000_000_000, 300_000_000_000, 1000);
+    let lot = public::record_id(&list);
+    block(&mut w, list, vec![], &["notes", "spent-notes", "lots"]);
+    let (res, pay) = w.reserve(&b, lot, w.height + 10);
+    block(&mut w, res, vec![], &["lots"]);
+    // a refused record (the credit again) leaves the state hash as it was
+    block(&mut w, credit, vec![], &[]);
+    let (f, key) = payment(&s.addr, pay, w.height);
+    let claim_wire = claim(lot, &f, key);
+    // inside the block the claim waits; the hash a reader publishes is taken after the block's end
+    let mut inside = w.pool.clone();
+    inside.apply_carrier(Some(&claim_wire), &hex::encode(rnd()), w.height + 1, &[rnd()], &w.vks);
+    assert_eq!(changed(&w.pool.state_sections(), &inside.state_sections()), ["pending-claims"]);
+    block(&mut w, claim_wire, vec![f], &["notes", "spent-notes", "lots", "used-payments"]);
+    assert_eq!(w.pool.lots[&lot].status, LotStatus::Sold);
+    assert_eq!(w.balance(&b.addr.owner()), 1_000_000_000);
+    // every prefix of the blocks, replayed into a new pool, gives the hash the first pool had at that block
+    for n in 0..=log.len() {
+        let mut p = fresh(&w);
+        for st in &log[..n] {
+            run(&mut p, &w.vks, st);
+        }
+        assert_eq!(p.state_sections(), seen[n], "after {n} blocks");
+        assert_eq!(hex::encode(p.state_hash()), hex::encode(pool::state_total(&seen[n])));
+    }
+    // without the payment the claim is refused and the state is the one before it
+    let mut p = fresh(&w);
+    for st in &log[..4] {
+        run(&mut p, &w.vks, st);
+    }
+    run(&mut p, &w.vks, &Step { wire: log[4].wire.clone(), txid: log[4].txid.clone(), height: log[4].height, native: log[4].native, payments: vec![] });
+    assert_eq!(p.state_sections(), seen[4]);
+}
+
+// ---------------------------------------------------------------- a trade for the reader's tests
+/// trade_claim_fixture.json: one lot listed, reserved and paid on the offline test ledger (params/test-v2) whose issuer key
+/// is the scalar 7, with the block of each record. The reader's tests need signed trade records and a payment and cannot
+/// make them (the signing helpers are in this file), so they read this file. Signatures are made with fresh randomness: the
+/// file is written once, with XMR20_WRITE_TRADE_FIXTURE=1, and this test checks that the kept one still settles.
+const CLAIM_FIXTURE: &str = include_str!("trade_claim_fixture.json");
+fn fixture_ledger() -> (Pool, Vks, [u8; 32], SigningKey<SpendAuth>) {
+    let p = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../params/test-v2/manifest.json");
+    let m: J = serde_json::from_slice(&std::fs::read(p).expect("test-v2 manifest")).unwrap();
+    let mut cfg: Config = serde_json::from_value(m["config"].clone()).unwrap();
+    let issuer = SigningKey::<SpendAuth>::from(decaf377::Fr::from(7u64));
+    cfg.issuer_vk = hex::encode(VerificationKey::from(&issuer).to_bytes());
+    cfg.domain = hex::encode(cfg.computed_domain().unwrap());
+    let domain = cfg.domain().unwrap();
+    let vks = Vks { spend: pz::read_vk(Circuit::Spend, &cfg.spend_vk).unwrap(), output: pz::read_vk(Circuit::Output, &cfg.output_vk).unwrap(), issuer: VerificationKey::from(&issuer) };
+    let mut pool = Pool::new(domain);
+    pool.market_from = market::activation("offline-fakechain");
+    pool.address_moves = address::activation("offline-fakechain");
+    pool.trades = trade::activation("offline-fakechain");
+    (pool, vks, domain, issuer)
+}
+/// Apply the fixture as a reader does and return the result of its claim.
+fn settle_fixture(f: &J) -> J {
+    let (mut pool, vks, domain, _) = fixture_ledger();
+    assert_eq!(f["domain"], hex::encode(domain));
+    for k in ["credit", "list", "reserve"] {
+        let r = pool.apply_carrier(Some(&hex::decode(f[k]["wire"].as_str().unwrap()).unwrap()), &hex::encode([f[k]["height"].as_u64().unwrap() as u8; 32]), f[k]["height"].as_u64().unwrap(), &[], &vks);
+        assert_eq!(r["record"], "accepted", "{k}: {r}");
+    }
+    let facts = trade::facts_from_json(&f["payment"]).unwrap();
+    let keys: Vec<[u8; 32]> = f["claimKeys"].as_array().unwrap().iter().map(|k| h32(k.as_str().unwrap())).collect();
+    let lot = h32(f["lot"].as_str().unwrap());
+    assert_eq!(pool.lots[&lot].reservations[0].pay.to_string(), f["pay"].as_str().unwrap());
+    let wire = Body::Claim { lot, txid: facts.txid, keys }.bytes();
+    let h = f["claimHeight"].as_u64().unwrap();
+    assert_eq!(pool.apply_carrier(Some(&wire), &hex::encode([9u8; 32]), h, &[], &vks)["record"], "pending");
+    let r = pool.resolve_claims(h, &BTreeMap::from([(facts.txid, facts)])).remove(0);
+    if r["record"] == "accepted" {
+        assert_eq!(pool.lots[&lot].status, LotStatus::Sold);
+        assert_eq!(pool.public_balances(&h32(f["buyerOwner"].as_str().unwrap())).values().sum::<u128>().to_string(), f["amount"].as_str().unwrap());
+    }
+    r
+}
+#[test]
+fn the_trade_fixture_of_the_reader_tests_settles() {
+    if std::env::var("XMR20_WRITE_TRADE_FIXTURE").as_deref() == Ok("1") {
+        let (mut pool, vks, domain, issuer) = fixture_ledger();
+        let (s, b) = (signer(), signer());
+        let asset = asset_for_mint("TestMint1111111111111111111111111111111111").unwrap();
+        let (amount, price) = (1_000_000_000u64, 300_000_000_000u64);
+        let credit = public::Credit::build(public::KIND_DEPOSIT, asset, 5_000_000_000, s.addr.owner(), [1; 32], &issuer, &domain).unwrap().encode();
+        assert_eq!(pool.apply_carrier(Some(&credit), &hex::encode([1u8; 32]), 718, &[], &vks)["record"], "accepted");
+        let inputs: Vec<[u8; 32]> = pool.notes.keys().copied().collect();
+        let body = Body::List { asset, until: 5000, inputs, amount, price, ticker: "XMR20".into(), seller: s.addr };
+        let (c, r) = sign(&body.text(&domain, MAINNET, None).unwrap(), &s, 0);
+        let list = Trade { body, variant: 0, c, r }.encode();
+        let lot = public::record_id(&list);
+        let body = Body::Reserve { lot, pay_by: 745, buyer: b.addr };
+        let terms = Terms { amount, price, ticker: "XMR20".into(), seller: s.addr };
+        let pay = body.pay_amount(price, &domain).unwrap();
+        let (c, r) = sign(&body.text(&domain, MAINNET, Some(&terms)).unwrap(), &b, 0);
+        let reserve = Trade { body, variant: 0, c, r }.encode();
+        let (facts, key) = payment(&s.addr, pay, 720);
+        let made = serde_json::json!({
+            "about": "A lot listed, reserved and paid on the offline test ledger (params/test-v2 with the issuer key of scalar 7), for the reader's tests. Written by core/src/trade_tests.rs.",
+            "domain": hex::encode(domain),
+            "credit": {"height": 718, "wire": hex::encode(&credit)},
+            "list": {"height": 719, "wire": hex::encode(&list)},
+            "reserve": {"height": 719, "wire": hex::encode(&reserve)},
+            "lot": hex::encode(lot),
+            "pay": pay.to_string(),
+            "amount": amount.to_string(),
+            "buyerOwner": hex::encode(b.addr.owner()),
+            "claimKeys": [hex::encode(key)],
+            "claimHeight": 720,
+            "payment": trade::facts_to_json(&facts),
+        });
+        assert_eq!(settle_fixture(&made)["record"], "accepted");
+        std::fs::write(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/trade_claim_fixture.json"), serde_json::to_string_pretty(&made).unwrap() + "\n").unwrap();
+        return;
+    }
+    let f: J = serde_json::from_str(CLAIM_FIXTURE).unwrap();
+    let r = settle_fixture(&f);
+    assert_eq!(r["record"], "accepted", "{r}");
+    // the same claim without its payment is refused
+    let mut none = f.clone();
+    none["payment"]["outputs"] = serde_json::json!([]);
+    assert_eq!(settle_fixture(&none)["record"], "rejected");
+}

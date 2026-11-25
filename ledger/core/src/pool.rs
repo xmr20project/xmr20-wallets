@@ -22,6 +22,9 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{address, keys::owner_vk, ledger::Ledger, market, open, private2, public, shield, trade, transport, PublicOutput};
 
+mod state_hash;
+pub use state_hash::{state_total, StateSection, SECTIONS as STATE_SECTIONS, SECTION_TAG as STATE_SECTION_TAG, STATE_TAG};
+
 pub struct Vks {
     pub spend: PreparedVerifyingKey<Bls12_377>,
     pub output: PreparedVerifyingKey<Bls12_377>,
