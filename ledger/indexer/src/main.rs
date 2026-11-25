@@ -36,9 +36,25 @@
 //! taken again during that rebuild at the same points, so they are held for every such block the directory holds, whichever
 //! build read it, and the hashes of blocks a reorganisation removed are gone with them. `state-hashes.json` {every, hashes:
 //! [{height, blockHash, stateHash}]} keeps what was computed, for comparison only: on a start, a kept hash for a block still
-//! held that differs from the rebuilt one is reported (event `state-hash-differs`, `status`), then the file is written again
-//! from the rebuilt hashes. A missing or unreadable file changes nothing (a directory written by a build without it loads as
+//! held that differs from the rebuilt one is reported (event `state-hash-differs`, `status`) and appended to
+//! `state-hash-differences.jsonl` {height, blockHash, kept, rebuilt, found}, which is never rewritten; then state-hashes.json
+//! is written again from the rebuilt hashes (not when the difference could not be written down). A missing or unreadable file changes nothing (a directory written by a build without it loads as
 //! before). The file is not part of the commit log: nothing reads the ledger from it.
+//!
+//! Claim payments: a trade claim names a Monero payment, which the reader fetches from its node when it reads the claim's block.
+//! What the node says is bound to the reader's own chain before it is used or kept (`fact_plan`, `fact_verified`):
+//!   - a payment the node places above the block being read is not on this chain at that block: it is neither used nor kept
+//!     (a later claim asks the node again);
+//!   - a payment at or below it must be listed in the node's block of that height, and that block must be on the chain this
+//!     reader holds: its hash equals the held block's (the block being read for a payment in it; for a payment below the first
+//!     held block, the node's block at the first held height must be the held one, so the payment's block is an ancestor of it).
+//!     If the node does not show that, the pass fails and is tried again; nothing of the block is kept.
+//! Each kept fact (claim-payments.jsonl) carries `at`, the block at which this reader first learned it. A rebuild settles a
+//! block only with the facts of `at` at or below it, so it settles every claim with exactly what was known when the block was
+//! read. A reorganisation removes the facts learned above the fork. A row without `at` was written by a build before this
+//! rule and is available at every block, as it was then; such rows were not bound to the reader's chain when they were
+//! fetched, and only reading the chain again into a new state directory replaces them. A build before this rule reads the
+//! new rows (it ignores `at`).
 //!
 //! Market rules: lot records (XA1/XL1) apply from the activation height built into the core
 //! (`market::activation`; mainnet: block 3,796,100). A lot moves only in a transaction that
@@ -83,6 +99,70 @@ struct StateHashFile {
     every: u64,
     #[serde(default)]
     hashes: Vec<StateHashRow>,
+}
+
+const STATE_HASH_DIFFERENCES: &str = "state-hash-differences.jsonl";
+/// A payment fact with the block at which this reader first learned it. None: a row written by a build that did not record
+/// it; such a fact is available at every block, as it was for that build.
+#[derive(Clone, Debug, PartialEq)]
+struct KeptFact {
+    fact: core::trade::PaymentFacts,
+    at: Option<u64>,
+}
+type KeptFacts = BTreeMap<[u8; 32], KeptFact>;
+/// A row of claim-payments.jsonl: the core's fact (`trade::facts_to_json`) with `at` beside it when known. A build that
+/// does not know `at` reads the row as the fact alone.
+fn fact_row(k: &KeptFact) -> J {
+    let mut v = core::trade::facts_to_json(&k.fact);
+    if let Some(at) = k.at {
+        v["at"] = json!(at);
+    }
+    v
+}
+fn fact_from_row(v: &J) -> Result<KeptFact> {
+    Ok(KeptFact { fact: core::trade::facts_from_json(v)?, at: v["at"].as_u64() })
+}
+fn facts_from_rows(rows: &[J]) -> Result<KeptFacts> {
+    rows.iter().map(|v| fact_from_row(v).map(|k| (k.fact.txid, k))).collect()
+}
+/// The facts the claims of block `height` are settled with: those learned at or below it.
+fn facts_at(kept: &KeptFacts, height: u64) -> BTreeMap<[u8; 32], core::trade::PaymentFacts> {
+    kept.values().filter(|k| k.at.is_none_or(|at| at <= height)).map(|k| (k.fact.txid, k.fact.clone())).collect()
+}
+/// The kept facts that remain when the chain is cut back to `fork`: a payment above it is gone, and so is what was learned
+/// above it (the blocks read again learn it again, at their own heights).
+fn facts_upto(kept: &KeptFacts, fork: u64) -> KeptFacts {
+    kept.iter().filter(|(_, k)| k.fact.height <= fork && k.at.is_none_or(|at| at <= fork)).map(|(t, k)| (*t, k.clone())).collect()
+}
+/// What to do with a payment the node reports at `height` while block `next` is read (see the module note).
+#[derive(Debug, PartialEq, Eq)]
+enum FactPlan {
+    /// Above the block being read: not on this chain at this block. Not used, not kept.
+    Later,
+    /// In the block being read: that block must list it.
+    InBlock,
+    /// Below it: the node's block at `height` must list it, and the node's block at `anchor` must be the reader's own.
+    /// `anchor` is the payment's height when the reader holds that block, else the first held height (the payment's block
+    /// is then an ancestor of a held block), else, with no block held yet, the block being read.
+    Check { anchor: u64 },
+}
+fn fact_plan(height: u64, next: u64, first_held: Option<u64>) -> FactPlan {
+    if height > next {
+        FactPlan::Later
+    } else if height == next {
+        FactPlan::InBlock
+    } else {
+        FactPlan::Check { anchor: first_held.map_or(next, |first| height.max(first)) }
+    }
+}
+/// Whether the node's answers bind the payment to the reader's chain. `listed`: the node's block at the payment's height
+/// lists the transaction. `node`: the hash of the node's block at `anchor`. `own`: the hash the reader holds for `anchor`.
+/// An error fails the pass (it is tried again); it never refuses or accepts a claim.
+fn fact_verified(txid: &[u8; 32], height: u64, anchor: u64, listed: bool, node: [u8; 32], own: Option<[u8; 32]>) -> Result<()> {
+    ensure!(listed, "The node reports payment {} in block {height}, but its block {height} does not list it (the chain moved while it was asked, or the node is inconsistent); trying again", hex::encode(txid));
+    let own = own.with_context(|| format!("Payment {} is in block {height}, and the reader holds no block {anchor} to check it against", hex::encode(txid)))?;
+    ensure!(node == own, "The node's block {anchor} ({}…) is not the block this reader holds ({}…): payment {} cannot be placed on this chain yet; trying again", &hex::encode(node)[..16], &hex::encode(own)[..16], hex::encode(txid));
+    Ok(())
 }
 
 fn txt<'a>(v: &'a J, k: &str) -> Result<&'a str> {
@@ -229,12 +309,12 @@ impl State {
         Self { pool: new_pool(p), index: BTreeMap::new(), by_tx: BTreeMap::new() }
     }
     /// Rebuild from the record log (every record re-verified; results recomputed).
-    fn rebuild(p: &Params, records: &[RecordRow], claim_payments: &BTreeMap<[u8; 32], core::trade::PaymentFacts>) -> Self {
+    fn rebuild(p: &Params, records: &[RecordRow], claim_payments: &KeptFacts) -> Self {
         Self::rebuild_at(p, records, claim_payments, &[]).0
     }
     /// The same rebuild, which also takes the state hash at the end of each block of `heights` (ascending): after every
     /// record at or below that height is applied and that block's claims are settled, before any later record.
-    fn rebuild_at(p: &Params, records: &[RecordRow], claim_payments: &BTreeMap<[u8; 32], core::trade::PaymentFacts>, heights: &[u64]) -> (Self, BTreeMap<u64, String>) {
+    fn rebuild_at(p: &Params, records: &[RecordRow], claim_payments: &KeptFacts, heights: &[u64]) -> (Self, BTreeMap<u64, String>) {
         let mut st = Self::new(p);
         let mut hashes = BTreeMap::new();
         let mut todo = heights.iter().copied().peekable();
@@ -259,13 +339,14 @@ impl State {
         take(&st, None);
         (st, hashes)
     }
-    /// Settle the pool's pending claims of block `height` with the kept payment facts; record results follow.
-    fn settle(&mut self, height: u64, claim_payments: &BTreeMap<[u8; 32], core::trade::PaymentFacts>) -> Vec<J> {
+    /// Settle the pool's pending claims of block `height` with the payment facts known at that block (`facts_at`); record
+    /// results follow.
+    fn settle(&mut self, height: u64, claim_payments: &KeptFacts) -> Vec<J> {
         if self.pool.pending_claims.is_empty() {
             return vec![];
         }
         let ids: Vec<String> = self.pool.pending_claims.iter().map(|c| hex::encode(core::hash(&c.wire))).collect();
-        let out = self.pool.resolve_claims(height, claim_payments);
+        let out = self.pool.resolve_claims(height, &facts_at(claim_payments, height));
         for (id, r) in ids.iter().zip(&out) {
             if let Some(x) = self.index.get_mut(id) {
                 x.record = r["record"].as_str().unwrap_or("?").into();
@@ -307,7 +388,7 @@ struct Staged {
     hash: [u8; 32],
     records: Vec<RecordRow>,
     payments: Vec<PaymentRow>,
-    facts: Vec<core::trade::PaymentFacts>,
+    facts: Vec<KeptFact>,
     /// The ledger view after this block; None when the block carries no record (the view is unchanged).
     state: Option<State>,
     applied: Vec<J>,
@@ -322,8 +403,9 @@ struct Follower {
     start: u64,
     payments: Vec<PaymentRow>,
     fees: Option<RelayFees>,
-    /// Payments trade claims were settled with (claim-payments.jsonl; rebuilds settle with these, no node call).
-    claim_payments: BTreeMap<[u8; 32], core::trade::PaymentFacts>,
+    /// Payments trade claims were settled with, each with the block it was learned at (claim-payments.jsonl; rebuilds
+    /// settle with these, no node call).
+    claim_payments: KeptFacts,
     /// Failure injection for the atomic-commit tests (offline test chain with XMR20_INDEXER_FAILPOINTS=1 only).
     fp: logs::Failpoints,
     failpoints_allowed: bool,
@@ -345,6 +427,17 @@ fn lines_of<T: Serialize>(rows: &[T]) -> Result<Vec<String>> {
 }
 fn report_json(r: &logs::Report) -> J {
     json!({"at":now(),"actions":r.actions,"warnings":r.warnings})
+}
+/// Append rows to a file of the state directory and make them durable (the file, and its directory entry).
+fn append_durable(dir: &Path, name: &str, lines: &[String]) -> Result<()> {
+    let mut f = fs::OpenOptions::new().create(true).append(true).open(dir.join(name))?;
+    for l in lines {
+        f.write_all(l.as_bytes())?;
+        f.write_all(b"\n")?;
+    }
+    f.sync_all()?;
+    fs::File::open(dir)?.sync_all()?;
+    Ok(())
 }
 /// Create the state directory and make every directory entry on its path durable.
 /// Whoever created the directories (this call, the service wrapper's mkdir, or an earlier start that was interrupted), each
@@ -430,7 +523,7 @@ impl Follower {
         self.records = parse_rows(logs::RECORDS, &loaded.records)?;
         self.payments = parse_rows(logs::PAYMENTS, &loaded.payments)?;
         let facts: Vec<J> = parse_rows(logs::CLAIMS, &loaded.claims)?;
-        self.claim_payments = facts.iter().map(|v| core::trade::facts_from_json(v).map(|f| (f.txid, f))).collect::<Result<BTreeMap<_, _>>>()?;
+        self.claim_payments = facts_from_rows(&facts)?;
         self.rebuild(p);
         if !loaded.report.actions.is_empty() || !loaded.report.warnings.is_empty() {
             self.events.push(json!({"at":now(),"event":"state-recovery","detail":report_json(&loaded.report)}));
@@ -455,6 +548,12 @@ impl Follower {
         let (st, hashes) = State::rebuild_at(p, &self.records, &self.claim_payments, &heights);
         self.st = st;
         self.state_hashes = hashes;
+    }
+    /// The hash this reader holds for the block at `height`, if it holds that block.
+    fn block_hash_at(&self, height: u64) -> Option<[u8; 32]> {
+        let first = self.blocks.first()?.height;
+        let b = self.blocks.get(usize::try_from(height.checked_sub(first)?).ok()?).filter(|b| b.height == height)?;
+        hex::decode(&b.hash).ok()?.try_into().ok()
     }
     fn state_hash_rows(&self) -> Vec<StateHashRow> {
         let hash_of: BTreeMap<u64, &String> = self.blocks.iter().filter(|b| b.height % STATE_HASH_EVERY == 0).map(|b| (b.height, &b.hash)).collect();
@@ -485,14 +584,25 @@ impl Follower {
             Err(_) => None,
         };
         let kept_rows = kept.filter(|f| f.every == STATE_HASH_EVERY).map(|f| f.hashes);
+        let mut differ = vec![];
         for k in kept_rows.iter().flatten() {
             if let Some(n) = now_rows.iter().find(|n| n.height == k.height && n.block_hash == k.block_hash) {
                 if n.state_hash != k.state_hash {
-                    let d = json!({"height":k.height,"blockHash":k.block_hash,"kept":k.state_hash,"rebuilt":n.state_hash});
-                    eprintln!("state hash differs from the one kept for this block: {d}");
-                    self.events.push(json!({"at":now(),"event":"state-hash-differs","detail":d}));
-                    self.state_hash_differs.push(d);
+                    differ.push(json!({"height":k.height,"blockHash":k.block_hash,"kept":k.state_hash,"rebuilt":n.state_hash,"found":now()}));
                 }
+            }
+        }
+        if !differ.is_empty() {
+            // Written down before the kept hashes are replaced; if that fails the kept file stays as it is.
+            let written = lines_of(&differ).and_then(|lines| append_durable(&self.dir, STATE_HASH_DIFFERENCES, &lines));
+            for d in differ {
+                eprintln!("state hash differs from the one kept for this block: {d}");
+                self.events.push(json!({"at":now(),"event":"state-hash-differs","detail":d}));
+                self.state_hash_differs.push(d);
+            }
+            if let Err(e) = written {
+                self.events.push(json!({"at":now(),"event":"state-hash-differences-not-saved","detail":format!("{e:#}")}));
+                return;
             }
         }
         if kept_rows.as_ref() != Some(&now_rows) {
@@ -521,9 +631,9 @@ impl Follower {
         let blocks: Vec<BlockRow> = self.blocks.iter().filter(|b| b.height <= fork_h).cloned().collect();
         let records: Vec<RecordRow> = self.records.iter().filter(|r| r.height <= fork_h).cloned().collect();
         let payments: Vec<PaymentRow> = self.payments.iter().filter(|r| r.height <= fork_h).cloned().collect();
-        let claims: BTreeMap<[u8; 32], core::trade::PaymentFacts> = self.claim_payments.iter().filter(|(_, f)| f.height <= fork_h).map(|(k, f)| (*k, f.clone())).collect();
+        let claims = facts_upto(&self.claim_payments, fork_h);
         let fork_hash = blocks.last().filter(|b| b.height == fork_h).map(|b| b.hash.clone());
-        let facts: Vec<J> = claims.values().map(core::trade::facts_to_json).collect();
+        let facts: Vec<J> = claims.values().map(fact_row).collect();
         self.logs.reorg(fork_h, fork_hash.as_deref(), &lines_of(&blocks)?, &lines_of(&records)?, &lines_of(&payments)?, &lines_of(&facts)?, &self.fp)?;
         let removed_blocks = self.blocks.len() - blocks.len();
         let removed_records = self.records.len() - records.len();
@@ -601,12 +711,27 @@ impl Follower {
         self.fp.hit("facts", next)?;
         if staged.as_ref().is_some_and(|s| !s.pool.pending_claims.is_empty()) || !self.st.pool.pending_claims.is_empty() {
             let st = staged.get_or_insert_with(|| self.st.clone());
-            let want: Vec<[u8; 32]> = st.pool.claim_payments().into_iter().filter(|t| !self.claim_payments.contains_key(t)).collect();
+            let want: Vec<[u8; 32]> = st.pool.claim_payments().into_iter().filter(|t| !self.claim_payments.contains_key(t)).collect::<std::collections::BTreeSet<_>>().into_iter().collect();
             let fetched = native::payment_facts(rpc, &want).await?;
             let mut all = self.claim_payments.clone();
+            let first_held = self.blocks.first().map(|x| x.height);
             for (txid, f) in fetched {
-                all.insert(txid, f.clone());
-                facts.push(f);
+                // What the node says is bound to this reader's chain before it is used or kept (module note).
+                match fact_plan(f.height, next, first_held) {
+                    FactPlan::Later => continue,
+                    FactPlan::InBlock => fact_verified(&txid, f.height, next, b.transactions.contains(&txid), b.hash(), Some(b.hash()))?,
+                    FactPlan::Check { anchor } => {
+                        let at_payment = rpc.block_by_number(f.height as usize).await?;
+                        ensure!(at_payment.number() == f.height as usize, "Daemon height mismatch");
+                        // the anchor is asked after the payment's block, so a chain that moved in between shows here
+                        let node = if anchor == f.height { at_payment.hash() } else { rpc.block_by_number(anchor as usize).await?.hash() };
+                        let own = if anchor == next { Some(b.hash()) } else { self.block_hash_at(anchor) };
+                        fact_verified(&txid, f.height, anchor, at_payment.transactions.contains(&txid), node, own)?;
+                    }
+                }
+                let kept = KeptFact { fact: f, at: Some(next) };
+                all.insert(txid, kept.clone());
+                facts.push(kept);
             }
             self.fp.hit("settle", next)?;
             for r in st.settle(next, &all) {
@@ -620,7 +745,7 @@ impl Follower {
     }
     /// Commit a staged block: its rows on disk (atomically, see `logs`), then the in-memory view. On error nothing of it stays.
     fn commit(&mut self, s: Staged) -> Result<Vec<J>> {
-        let facts: Vec<J> = s.facts.iter().map(core::trade::facts_to_json).collect();
+        let facts: Vec<J> = s.facts.iter().map(fact_row).collect();
         let note = self.logs.commit_block(s.block.height, &serde_json::to_string(&s.block)?, &lines_of(&s.records)?, &lines_of(&s.payments)?, &lines_of(&facts)?, &self.fp)?;
         if let Some(n) = note {
             self.events.push(json!({"at":now(),"event":"commit-note","detail":n}));
@@ -630,7 +755,7 @@ impl Follower {
         self.records.extend(s.records);
         self.payments.extend(s.payments);
         for f in s.facts {
-            self.claim_payments.insert(f.txid, f);
+            self.claim_payments.insert(f.fact.txid, f);
         }
         if let Some(st) = s.state {
             self.st = st;
@@ -738,7 +863,7 @@ struct View {
     blocks: Vec<BlockRow>,
     records: Vec<RecordRow>,
     payments: Vec<PaymentRow>,
-    facts: BTreeMap<[u8; 32], core::trade::PaymentFacts>,
+    facts: KeptFacts,
     report: J,
 }
 fn view_of(dir: &Path) -> Result<View> {
@@ -750,7 +875,7 @@ fn view_of(dir: &Path) -> Result<View> {
         tip: blocks.last().map(|b| b.height),
         records: parse_rows(logs::RECORDS, &l.records)?,
         payments: parse_rows(logs::PAYMENTS, &l.payments)?,
-        facts: facts.iter().map(|v| core::trade::facts_from_json(v).map(|f| (f.txid, f))).collect::<Result<BTreeMap<_, _>>>()?,
+        facts: facts_from_rows(&facts)?,
         report: json!({"dir":dir.display().to_string(),"journals":journals,"recoveryWouldChange":l.report.actions,"warnings":l.report.warnings}),
         blocks,
     })
@@ -793,7 +918,8 @@ fn compare_state(a: &Path, b: &Path, height: Option<u64>, params: Option<&Params
         return Ok(false);
     }
     let rows = |v: &View| -> Result<[Vec<String>; 4]> {
-        let facts: Vec<J> = v.facts.values().filter(|f| f.height <= h).map(core::trade::facts_to_json).collect();
+        // the payments themselves are compared; the block each was learned at shows in the ledger state rebuilt below
+        let facts: Vec<J> = facts_upto(&v.facts, h).values().map(|k| core::trade::facts_to_json(&k.fact)).collect();
         Ok([
             lines_of(&v.blocks.iter().filter(|x| x.height <= h).collect::<Vec<_>>())?,
             lines_of(&v.records.iter().filter(|x| x.height <= h).collect::<Vec<_>>())?,
@@ -812,8 +938,7 @@ fn compare_state(a: &Path, b: &Path, height: Option<u64>, params: Option<&Params
     if let Some(p) = params {
         let state = |v: &View| {
             let recs: Vec<RecordRow> = v.records.iter().filter(|x| x.height <= h).cloned().collect();
-            let facts: BTreeMap<[u8; 32], core::trade::PaymentFacts> = v.facts.iter().filter(|(_, f)| f.height <= h).map(|(k, f)| (*k, f.clone())).collect();
-            State::rebuild(p, &recs, &facts)
+            State::rebuild(p, &recs, &facts_upto(&v.facts, h))
         };
         let (sa, sb) = (state(&va), state(&vb));
         let (pa, pb) = (sa.pool.summary(), sb.pool.summary());
@@ -1097,21 +1222,34 @@ mod tests {
         let vks = core::pool::Vks { spend: core::penumbra::read_vk(core::penumbra::Circuit::Spend, &config.spend_vk).unwrap(), output: core::penumbra::read_vk(core::penumbra::Circuit::Output, &config.output_vk).unwrap(), issuer: VerificationKey::from(&issuer) };
         (Params { manifest, manifest_sha256, config, domain, spend_pk: None, output_pk: None, vks }, issuer)
     }
-    /// One block, applied and committed the way `stage_block` and `commit` do it for a block without claims: its records go
-    /// to a copy of the view, then rows and view are committed. `salt` makes the block hash (another salt = another chain).
-    fn push_block(f: &mut Follower, p: &Params, height: u64, salt: &str, wires: &[Vec<u8>]) {
+    /// One block, applied and committed the way `stage_block` and `commit` do it: its records go to a copy of the view, its
+    /// claims are settled with the kept facts and the ones `learned` at this block (what the node gave and the reader
+    /// bound to its chain), then rows and view are committed. `salt` makes the block hash (another salt = another chain).
+    /// Returns the results of the settled claims.
+    fn push_block_with(f: &mut Follower, p: &Params, height: u64, salt: &str, wires: &[Vec<u8>], learned: &[core::trade::PaymentFacts]) -> Vec<J> {
         let mut state: Option<State> = None;
         let (mut records, mut applied) = (vec![], vec![]);
         for (i, w) in wires.iter().enumerate() {
             let row = RecordRow { height, txid: hex::encode(core::hash(format!("tx {height} {i} {salt}").as_bytes())), wire: hex::encode(w), anchors: vec![] };
             let st = state.get_or_insert_with(|| f.st.clone());
             let r = st.apply_row(&row, p);
-            assert_eq!(r["result"]["record"], "accepted", "{r}");
+            assert!(r["result"]["record"] == "accepted" || r["result"]["record"] == "pending", "{r}");
             applied.push(r);
             records.push(row);
         }
+        let facts: Vec<KeptFact> = learned.iter().map(|x| KeptFact { fact: x.clone(), at: Some(height) }).collect();
+        let mut settled = vec![];
+        if let Some(st) = state.as_mut() {
+            let mut all = f.claim_payments.clone();
+            all.extend(facts.iter().map(|k| (k.fact.txid, k.clone())));
+            settled = st.settle(height, &all);
+        }
         let hash = core::hash(format!("block {height} {salt}").as_bytes());
-        f.commit(Staged { block: BlockRow { height, hash: hex::encode(hash) }, hash, records, payments: vec![], facts: vec![], state, applied }).unwrap();
+        f.commit(Staged { block: BlockRow { height, hash: hex::encode(hash) }, hash, records, payments: vec![], facts, state, applied }).unwrap();
+        settled
+    }
+    fn push_block(f: &mut Follower, p: &Params, height: u64, salt: &str, wires: &[Vec<u8>]) {
+        push_block_with(f, p, height, salt, wires, &[]);
     }
     fn kept_file(dir: &Path) -> StateHashFile {
         serde_json::from_slice(&fs::read(dir.join(STATE_HASHES)).unwrap()).unwrap()
@@ -1197,12 +1335,22 @@ mod tests {
         wrong.hashes[0].state_hash = "00".repeat(32);
         wrong.hashes.push(StateHashRow { height: 2160, block_hash: "11".repeat(32), state_hash: "22".repeat(32) });
         fs::write(dir.join(STATE_HASHES), serde_json::to_vec(&wrong).unwrap()).unwrap();
-        let mut f = Follower::open(&dir, &p).unwrap();
+        let f = Follower::open(&dir, &p).unwrap();
         assert_eq!(f.state_hashes, live);
         assert_eq!(f.state_hash_differs.len(), 1, "the row of a block that is not held is dropped without a report");
         assert_eq!(f.state_hash_differs[0]["height"], 720);
         assert_eq!(f.state_hash_differs[0]["rebuilt"], at_720.as_str());
         assert_eq!(kept_file(&dir).hashes, f.state_hash_rows());
+        // and written down where a later start does not replace it
+        let noted = fs::read_to_string(dir.join(STATE_HASH_DIFFERENCES)).unwrap();
+        let rows: Vec<J> = noted.lines().map(|l| serde_json::from_str(l).unwrap()).collect();
+        assert_eq!(rows.len(), 1);
+        assert_eq!((rows[0]["height"].as_u64(), rows[0]["kept"].as_str(), rows[0]["rebuilt"].as_str()), (Some(720), Some("00".repeat(32).as_str()), Some(at_720.as_str())));
+        assert_eq!(rows[0]["blockHash"], hex::encode(core::hash(b"block 720 x")));
+        drop(f);
+        let mut f = Follower::open(&dir, &p).unwrap();
+        assert!(f.state_hash_differs.is_empty());
+        assert_eq!(fs::read_to_string(dir.join(STATE_HASH_DIFFERENCES)).unwrap(), noted, "a start without a difference adds nothing");
 
         // rollback below a checkpoint block: its hash is dropped, the earlier one stays, the state is the one at the fork
         let r = f.roll_back(&p, 1000, 1441).unwrap();
@@ -1261,5 +1409,157 @@ mod tests {
         let plain = State::rebuild(&p, &records, &none);
         assert_eq!(plain.pool.state_sections(), st.pool.state_sections());
         assert_eq!(serde_json::to_value(&plain.index).unwrap(), serde_json::to_value(&st.index).unwrap());
+    }
+
+    // ---------------------------------------------------------------- claim payments
+    /// A payment the node places above the block being read is not used; one at or below it is used only when the node's
+    /// blocks tie it to the chain the reader holds.
+    #[test]
+    fn a_fetched_payment_is_bound_to_the_readers_chain() {
+        // where the node's answer has to be checked
+        assert_eq!(fact_plan(721, 720, Some(700)), FactPlan::Later);
+        assert_eq!(fact_plan(720, 720, Some(700)), FactPlan::InBlock);
+        assert_eq!(fact_plan(720, 720, None), FactPlan::InBlock);
+        assert_eq!(fact_plan(719, 720, Some(700)), FactPlan::Check { anchor: 719 });
+        assert_eq!(fact_plan(700, 720, Some(700)), FactPlan::Check { anchor: 700 });
+        // below the first held block: the first held block stands for its ancestors
+        assert_eq!(fact_plan(650, 720, Some(700)), FactPlan::Check { anchor: 700 });
+        assert_eq!(fact_plan(1, 720, Some(700)), FactPlan::Check { anchor: 700 });
+        // nothing held yet (the first block is being read): the block being read does
+        assert_eq!(fact_plan(650, 720, None), FactPlan::Check { anchor: 720 });
+        // the check itself
+        let (t, ours, other) = ([1u8; 32], [2u8; 32], [3u8; 32]);
+        fact_verified(&t, 710, 710, true, ours, Some(ours)).unwrap();
+        let e = fact_verified(&t, 710, 710, false, ours, Some(ours)).unwrap_err().to_string();
+        assert!(e.contains("does not list it"), "{e}");
+        let e = fact_verified(&t, 710, 710, true, other, Some(ours)).unwrap_err().to_string();
+        assert!(e.contains("is not the block this reader holds"), "{e}");
+        let e = fact_verified(&t, 650, 700, true, ours, None).unwrap_err().to_string();
+        assert!(e.contains("holds no block 700"), "{e}");
+        // The case of a payment that leaves the chain: a claim in block 720 names a payment the node has in 721. It is not
+        // kept, so when the node's block 721 is replaced and a claim in the new 722 names it again, the node is asked again
+        // and whatever it says then is checked against the blocks read by then.
+        assert_eq!(fact_plan(721, 720, Some(700)), FactPlan::Later);
+        assert_eq!(fact_plan(723, 722, Some(700)), FactPlan::Later);
+        assert_eq!(fact_plan(721, 722, Some(700)), FactPlan::Check { anchor: 721 });
+        assert!(fact_verified(&t, 721, 721, true, other, Some(ours)).is_err(), "the node's 721 is not the 721 this reader read");
+    }
+
+    fn fact(n: u8, height: u64) -> core::trade::PaymentFacts {
+        core::trade::PaymentFacts { txid: [n; 32], height, outputs: vec![core::trade::PaymentOutput { key: [n; 32], ecdh: [n; 8], commitment: [n; 32] }] }
+    }
+    /// A kept fact is available from the block it was learned at; a row without that block (an earlier build's) at every
+    /// block; a build that does not know the field reads the row as the fact.
+    #[test]
+    fn kept_facts_carry_the_block_they_were_learned_at() {
+        let kept: KeptFacts = [KeptFact { fact: fact(1, 700), at: Some(720) }, KeptFact { fact: fact(2, 710), at: None }, KeptFact { fact: fact(3, 730), at: Some(730) }].into_iter().map(|k| (k.fact.txid, k)).collect();
+        let known = |h: u64| facts_at(&kept, h).keys().map(|t| t[0]).collect::<Vec<_>>();
+        assert_eq!(known(719), [2]);
+        assert_eq!(known(720), [1, 2]);
+        assert_eq!(known(730), [1, 2, 3]);
+        let left = |fork: u64| facts_upto(&kept, fork).keys().map(|t| t[0]).collect::<Vec<_>>();
+        assert_eq!(left(705), Vec::<u8>::new());
+        assert_eq!(left(719), [2], "a payment below the fork that was learned above it is learned again");
+        assert_eq!(left(720), [1, 2]);
+        assert_eq!(left(1000), [1, 2, 3]);
+        for k in kept.values() {
+            let row = fact_row(k);
+            assert_eq!(row["at"].as_u64(), k.at);
+            assert_eq!(row.as_object().unwrap().contains_key("at"), k.at.is_some());
+            assert_eq!(&fact_from_row(&row).unwrap(), k);
+            assert_eq!(core::trade::facts_from_json(&row).unwrap(), k.fact, "the core's reader, which an earlier build uses, takes the row");
+            assert_eq!(fact_from_row(&core::trade::facts_to_json(&k.fact)).unwrap().at, None);
+        }
+    }
+
+    /// Claims in the reader: one settled inside a 720th block is part of that block's state hash; a claim refused because
+    /// its payment was not known yet stays refused when the view is rebuilt after the payment became known; a rollback drops
+    /// what was learned above the fork.
+    #[test]
+    fn claims_settle_with_what_was_known_at_their_block() {
+        let (p, _) = test_params();
+        let fx: J = serde_json::from_slice(&fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join("../core/src/trade_claim_fixture.json")).unwrap()).unwrap();
+        assert_eq!(fx["domain"], p.config.domain, "the fixture is of this test ledger");
+        let wire = |k: &str| hex::decode(fx[k]["wire"].as_str().unwrap()).unwrap();
+        let h32 = |v: &J| -> [u8; 32] { hex::decode(v.as_str().unwrap()).unwrap().try_into().unwrap() };
+        let payment = core::trade::facts_from_json(&fx["payment"]).unwrap();
+        assert_eq!(payment.height, 720);
+        let lot = h32(&fx["lot"]);
+        let claim = core::trade::Body::Claim { lot, txid: payment.txid, keys: fx["claimKeys"].as_array().unwrap().iter().map(h32).collect() }.bytes();
+        let start = |f: &mut Follower| {
+            push_block(f, &p, 718, "x", &[wire("credit")]);
+            push_block(f, &p, 719, "x", &[wire("list"), wire("reserve")]);
+        };
+        let sold = |f: &Follower| f.st.pool.lots[&lot].claim.is_some();
+
+        // the payment is known when the claim's block is read: the sale is in the state hash of block 720
+        let dir = tmpdir("claim-known");
+        let mut f = Follower::open(&dir, &p).unwrap();
+        start(&mut f);
+        let before = tip_hash(&f);
+        let r = push_block_with(&mut f, &p, 720, "x", &[claim.clone()], &[payment.clone()]);
+        assert_eq!(r[0]["record"], "accepted", "{r:?}");
+        assert!(sold(&f) && f.st.pool.pending_claims.is_empty());
+        let sold_at_720 = tip_hash(&f);
+        assert_ne!(sold_at_720, before);
+        assert_eq!(f.state_hashes, BTreeMap::from([(720, sold_at_720.clone())]));
+        assert_eq!(f.claim_payments[&payment.txid].at, Some(720));
+        let row: J = serde_json::from_str(fs::read_to_string(dir.join(logs::CLAIMS)).unwrap().trim()).unwrap();
+        assert_eq!(row["at"], 720);
+        assert_eq!(core::trade::facts_from_json(&row).unwrap(), payment);
+        drop(f);
+        let mut f = Follower::open(&dir, &p).unwrap();
+        assert_eq!(f.state_hashes, BTreeMap::from([(720, sold_at_720.clone())]));
+        assert!(sold(&f) && f.state_hash_differs.is_empty());
+        f.roll_back(&p, 719, 720).unwrap();
+        assert!(f.claim_payments.is_empty() && !sold(&f) && f.state_hashes.is_empty());
+        assert_eq!(tip_hash(&f), before);
+        drop(f);
+        fs::remove_dir_all(dir).unwrap();
+
+        // the payment is not known at block 720 (the node did not give it): the claim is refused there, and the same claim
+        // in block 721, when the node gives it, is accepted
+        let dir = tmpdir("claim-later");
+        let mut f = Follower::open(&dir, &p).unwrap();
+        start(&mut f);
+        assert_eq!(tip_hash(&f), before);
+        let r = push_block_with(&mut f, &p, 720, "x", &[claim.clone()], &[]);
+        assert_eq!(r[0]["record"], "rejected", "{r:?}");
+        assert!(r[0]["error"].as_str().unwrap().contains("not on this chain"));
+        assert_eq!(f.state_hashes, BTreeMap::from([(720, before.clone())]), "a refused claim leaves the state as it was");
+        let r = push_block_with(&mut f, &p, 721, "x", &[claim.clone()], &[payment.clone()]);
+        assert_eq!(r[0]["record"], "accepted", "{r:?}");
+        let sold_at_721 = tip_hash(&f);
+        assert_ne!(sold_at_721, sold_at_720, "sold in another block");
+        assert_eq!(f.claim_payments[&payment.txid].at, Some(721));
+        drop(f);
+        // rebuilt: block 720 is settled without the fact learned at 721, as it was when it was read
+        let mut f = Follower::open(&dir, &p).unwrap();
+        assert_eq!(f.state_hashes, BTreeMap::from([(720, before.clone())]));
+        assert_eq!(tip_hash(&f), sold_at_721);
+        assert!(f.state_hash_differs.is_empty());
+        assert_eq!(f.st.pool.lots[&lot].claim.as_ref().unwrap().height, 721);
+        // a rollback to block 720 drops the fact (learned above the fork, though the payment is in block 720)
+        f.roll_back(&p, 720, 721).unwrap();
+        assert!(f.claim_payments.is_empty() && !sold(&f));
+        assert_eq!(fs::read_to_string(dir.join(logs::CLAIMS)).unwrap(), "");
+        assert_eq!(tip_hash(&f), before);
+        let r = push_block_with(&mut f, &p, 721, "x", &[claim.clone()], &[payment.clone()]);
+        assert_eq!(r[0]["record"], "accepted");
+        assert_eq!(tip_hash(&f), sold_at_721);
+        drop(f);
+        // A row without the block it was learned at, as an earlier build wrote it, is available at every block: a rebuild
+        // then settles the claim of block 720 with it. The kept state hash of block 720 shows the difference, and it is noted.
+        let legacy = core::trade::facts_to_json(&payment).to_string() + "\n";
+        fs::write(dir.join(logs::CLAIMS), legacy).unwrap();
+        let f = Follower::open(&dir, &p).unwrap();
+        assert_eq!(f.claim_payments[&payment.txid].at, None);
+        assert_eq!(f.st.pool.lots[&lot].claim.as_ref().unwrap().height, 720);
+        assert_eq!(f.state_hashes[&720], sold_at_720);
+        assert_eq!(f.state_hash_differs.len(), 1);
+        let noted: J = serde_json::from_str(fs::read_to_string(dir.join(STATE_HASH_DIFFERENCES)).unwrap().trim()).unwrap();
+        assert_eq!((noted["height"].as_u64(), noted["kept"].as_str(), noted["rebuilt"].as_str()), (Some(720), Some(before.as_str()), Some(sold_at_720.as_str())));
+        drop(f);
+        fs::remove_dir_all(dir).unwrap();
     }
 }
