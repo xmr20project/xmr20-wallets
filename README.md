@@ -10,7 +10,7 @@ This repository holds every XMR20 wallet in one place, plus the engine they all 
 | Folder | What it is | Who it is for |
 |---|---|---|
 | [`engine/`](engine/) | **The shared engine.** XMR20 tokens on Monero (Open and Private balances), the private bridge to and from Solana, `xmr20p1…` private addresses, "Enable private transfers", and the Monero (XMR) wallet worker. | Developers. All three wallets below use it, so they behave the same. |
-| [`ledger/`](ledger/) | **The token ledger itself.** The rules every XMR20 balance on Monero is worked out by, as code (`core/`) and as text (`spec/`), and a reader anyone can run against their own Monero node to compute the ledger and compare its checkpoints with anyone else's. See [`ledger/README.md`](ledger/README.md) |
+| [`ledger/`](ledger/) | **The token ledger itself.** The rules every XMR20 balance on Monero is worked out by, as code (`core/`) and as text (`spec/`), and a reader anyone can run against their own Monero node to compute the ledger and compare its checkpoints with anyone else's. See [`ledger/README.md`](ledger/README.md). | Anyone who wants to check the ledger themselves, and anyone writing another implementation. |
 | [`extension/`](extension/) | **XMR20 Wallet for Chrome** (also Brave and Edge). | Most people. It is the most complete wallet. |
 | [`web-wallet/`](web-wallet/) | **The wallet on xmr20.org.** It connects to Phantom or Solflare. | People who don't want to install anything. Just open https://xmr20.org. |
 | [`cli/`](cli/) | **The terminal wallet.** You type commands like `xmr20 balance`. | People who like the command line, and scripts. |
