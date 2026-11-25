@@ -1,3 +1,4 @@
+import {approveRecord as approveXmr721Record} from './mordinals/xmr721-records.js';
 import {openMordinals} from './mordinals/mordinals.js';
 import {createJointCreditPreview} from '../../engine/shared/joint-credit-preview.js';
 import {fastSendEnabled} from '../../engine/shared/joint-deployment.js';
@@ -832,6 +833,7 @@ async function openWebsiteBridge(){
  const requestId=new URLSearchParams(location.search).get('request');
  async function request(action,data={}){const response=await chrome.runtime.sendMessage({channel:'xmr20-site-approval',requestId,action,...data});if(response?.error)throw Error(response.error);return response.value;}
  try{const v=await request('view');if(!vault)throw Error('Unlock and reconnect from the website before bridging.');
+  if(v.xmr721)return xmr721Request(v,request);
   show('Bridge from website',`<p class="notice">${esc(v.origin)} wants to open a token bridge. No transaction has been approved.</p><label>Connected account</label><div class="address">${esc(v.account.name)}<br>${esc(v.account.solana)}</div><button class="primary wide" id="website-bridge-open">Use this account and review bridge</button><button class="text-btn wide" id="website-bridge-cancel">Cancel</button>`);
   on('website-bridge-cancel',()=>void request('reject').finally(()=>window.close()));
   on('website-bridge-open',async()=>{const button=$('#website-bridge-open');button.disabled=true;try{await request('opened',{accountId:v.account.id});epoch++;endWorkers();activeId=v.account.id;if(cache.displayScope!==account()?.sol+':'+account()?.xmr)cache={sol:null,xmr:sessionSnapshots[account()?.xmr]||null,rows:[],complete:false,loading:false,note:''};rememberSession();render();void refresh();await bridgeUI.open({mint:v.bridge.mint,amountRaw:v.bridge.amountRaw,direction:v.bridge.direction,from:v.origin});}catch(e){if($('#error'))$('#error').textContent=e.message;button.disabled=false;}});
@@ -850,3 +852,17 @@ async function checkReceipts(){
  same(e);await persist();render();toast('Transaction status updated');
  }catch{toast('Status unavailable. Keep your receipts and retry.');}
 }
+
+// xmr20.org asked for this account's Mordinals screens or for the approval of one XMR721 record. The background binds the
+// request to one tab, one account and one unlocked session; the page gets back only that the screens opened, or the
+// record's code and state. Closing the window refuses.
+async function xmr721Request(v,request){
+ if(account()?.id!==v.account.id){show('Mordinals',`<p class="notice">${esc(v.origin)} asked for ${esc(v.account.name)}. Select that account in XMR20 Wallet, then try again on the website.</p>`);await request('reject').catch(()=>{});return;}
+ const host={show,on,run,same,toast,esc,account,$,workerClient,short,store,payXmr:{prepare:async destinations=>{const e=epoch;const client=await nativeOpen(e);await nativeSync(e,client);same(e);return client.call('preparePayments',{destinations,node:nodeFor(),carrierLookup:'local'},150000);},relay:async review=>{const a=account(),client=native;if(!client?.alive||nativeId!==a?.id)throw Error('The Monero wallet was closed before approval. Review again; nothing was sent.');const sent=await client.call('relay',{reviewId:review.id},180000);cache.xmr=null;delete sessionSnapshots[a.xmr];void autoCatchUp();return sent;}}};
+ if(v.xmr721==='openMordinals'){await request('done',{accountId:v.account.id});openMordinals(host);return;}
+ let out;
+ try{out=await approveXmr721Record(host,v.record,{origin:v.origin});}catch{await request('reject').catch(()=>{});window.close();return;}
+ // From here the record is with the relay. If the website stopped waiting (it left, disconnected or the request ran out),
+ // say so here instead of reporting a refusal.
+ try{await request('done',{accountId:v.account.id,result:out});window.close();}
+ catch{show('XMR721',`<p class="notice">The record was sent (code ${esc(String(out.id).slice(0,32))}). The website stopped waiting for this window; the record shows there once it is in a block.</p>`);}}

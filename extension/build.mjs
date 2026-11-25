@@ -1,6 +1,6 @@
 // Builds the Chrome extension into extension/dist/ (load that folder in chrome://extensions → Load unpacked).
 //   node extension/build.mjs        (or: npm run build:extension, from the repository folder)
-// Same recipe as the wallet releases 0.1.103–0.1.144: start from the previous release's files (prebuilt/), then rebuild
+// Same recipe as the wallet releases 0.1.103–0.1.145: start from the previous release's files (prebuilt/), then rebuild
 //   app.js                  from extension/src/app.js (with engine/token, engine/shared and src/mordinals)
 //   vendor/                 the engine files (engine/build.mjs: token workers, holder.wasm, Monero worker)
 //   vendor/mordinals.*      the Mordinals worker (src/mordinals/mordinals.worker.js) and its engine (engine/holder-wasm/mordinals.wasm)
@@ -19,7 +19,7 @@ const sha=b=>createHash('sha256').update(b).digest('hex');
 // anything else.
 export const mordinals={endpoint:'https://api.xmr20.org/xmr721',network:'mainnet',domain:'ec7f7d26dba6725124df69417d43335c52e34557fc61c1d8d6b4736370e6ba1d',
  feeAddress:'45J4QMTbVoi61ZQoUzLVh7VkvjuRbqaaHW1AophY1Jbi9KzTzk8qoh43fT6JWYvkk6j6X1Stog7Xb9ZabzBrMr7tGzANudW',owners:'e71d340d84538c229f9e190d221271873cde6b1daab8366d9b282ff016e639ee'};
-// Build flags of the installed releases (release recipe 0.1.95 → 0.1.144): operator-native bridge on, Monero Market off by
+// Build flags of the installed releases (release recipe 0.1.95 → 0.1.145): operator-native bridge on, Monero Market off by
 // the server, the real private bridge at api.xmr20.org with lazy registration and the XMR20 bridge mint, and the Mordinals settings.
 export const define={__XMR20_NATIVE_COIN_SWAPS__:'true',__XMR20_OPERATOR_NATIVE__:'true',__XMR20_NATIVE_MARKET__:'true',__XMR20_NATIVE_SPEND_PROTECTION__:'true',__XMR20_FAST_SEND__:'true',
  __XMR20_UNIVERSAL_LINK__:'true',__XMR20_JOINT_PREVIEW__:'false',__XMR20_JOINT_MAINNET_REVIEW__:'true',__XMR20_JOINT_TRANSFERABLE_REVIEW__:'true',__XMR20_JOINT_PRIVATE_TEST__:'true',__XMR20_JOINT_WALLET_TEST__:'true',
